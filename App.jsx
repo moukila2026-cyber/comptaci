@@ -1,6 +1,8 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut } from "lucide-react";
+import { supabase } from "./supabaseClient.js";
+import AuthScreen from "./AuthScreen.jsx";
 
 const CATEGORIES_DEPENSE = [
   { id: "boissons", label: "Boissons" },
@@ -38,58 +40,105 @@ function useIsMobile() {
 }
 
 export default function ComptaCi() {
+  const isMobile = useIsMobile();
+  const [session, setSession] = useState(null);
+  const [verifSession, setVerifSession] = useState(true);
   const [vue, setVue] = useState("dashboard");
   const [transactions, setTransactions] = useState([]);
-  const [etablissement, setEtablissement] = useState(ESTABLISSEMENT_DEFAUT);
+  const [etablissement, setEtablissement] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState(null);
 
   useEffect(() => {
-    try {
-      const tx = localStorage.getItem(STORAGE_KEY);
-      const est = localStorage.getItem(ESTAB_KEY);
-      if (tx) setTransactions(JSON.parse(tx));
-      if (est) setEtablissement(est);
-    } catch (e) {
-      setErreur("Impossible de charger les données enregistrées.");
-    } finally {
-      setChargement(false);
-    }
+    supabase.auth.getSession().then(({ data }) => {
+      setSession(data.session);
+      setVerifSession(false);
+    });
+    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+    });
+    return () => listener.subscription.unsubscribe();
   }, []);
 
-  const persist = (next) => {
-    setTransactions(next);
-    try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(next));
-    } catch (e) {
-      setErreur("La sauvegarde a échoué. Tes données restent visibles dans cette session.");
+  useEffect(() => {
+    if (!session) return;
+    (async () => {
+      setChargement(true);
+      try {
+        const { data: etabs, error: errEtab } = await supabase
+          .from("etablissements")
+          .select("*")
+          .eq("proprietaire_id", session.user.id)
+          .limit(1);
+        if (errEtab) throw errEtab;
+        const etab = etabs?.[0];
+        setEtablissement(etab || null);
+
+        if (etab) {
+          const { data: tx, error: errTx } = await supabase
+            .from("transactions")
+            .select("*")
+            .eq("etablissement_id", etab.id)
+            .order("date", { ascending: false });
+          if (errTx) throw errTx;
+          setTransactions(tx || []);
+        }
+      } catch (e) {
+        setErreur("Impossible de charger vos données. Vérifiez votre connexion.");
+      } finally {
+        setChargement(false);
+      }
+    })();
+  }, [session]);
+
+  const addTransaction = async (t) => {
+    if (!etablissement) return;
+    const { data, error } = await supabase
+      .from("transactions")
+      .insert({ ...t, etablissement_id: etablissement.id })
+      .select();
+    if (error) {
+      setErreur("L'enregistrement a échoué. Réessayez.");
+      return;
     }
+    setTransactions([data[0], ...transactions]);
   };
 
-  const persistEtablissement = (nom) => {
-    setEtablissement(nom);
-    try {
-      localStorage.setItem(ESTAB_KEY, nom);
-    } catch (e) {}
+  const deleteTransaction = async (id) => {
+    const { error } = await supabase.from("transactions").delete().eq("id", id);
+    if (error) {
+      setErreur("La suppression a échoué.");
+      return;
+    }
+    setTransactions(transactions.filter((t) => t.id !== id));
   };
 
-  const addTransaction = (t) => {
-    const next = [{ ...t, id: `${Date.now()}-${Math.random().toString(36).slice(2, 7)}` }, ...transactions];
-    persist(next);
+  const renameEtablissement = async (nom) => {
+    if (!etablissement) return;
+    const { error } = await supabase.from("etablissements").update({ nom }).eq("id", etablissement.id);
+    if (!error) setEtablissement({ ...etablissement, nom });
   };
 
-  const deleteTransaction = (id) => {
-    persist(transactions.filter((t) => t.id !== id));
+  const seDeconnecter = async () => {
+    await supabase.auth.signOut();
+    setTransactions([]);
+    setEtablissement(null);
   };
 
-  const isMobile = useIsMobile();
+  if (verifSession) {
+    return <div style={styles.loading}>Chargement…</div>;
+  }
+
+  if (!session) {
+    return <AuthScreen onAuthenticated={() => {}} />;
+  }
 
   return (
     <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
-      <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} />
+      <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} />
       <div style={styles.main}>
-        <TopBar etablissement={etablissement} onRename={persistEtablissement} />
+        <TopBar etablissement={etablissement?.nom || "Mon établissement"} onRename={renameEtablissement} />
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {chargement ? (
           <div style={styles.loading}>Chargement…</div>
@@ -105,7 +154,8 @@ export default function ComptaCi() {
   );
 }
 
-function Sidebar({ vue, setVue, isMobile }) {
+
+function Sidebar({ vue, setVue, isMobile, onLogout }) {
   const items = [
     { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { id: "saisie", label: "Saisie du jour", icon: PenLine },
@@ -174,9 +224,9 @@ function Sidebar({ vue, setVue, isMobile }) {
       </nav>
       <div style={styles.sidebarFooter}>
         <div style={styles.sidebarFooterPattern} />
-        <div style={styles.sidebarFooterText}>
-          Restaurants · Bars<br />Maquis · Hôtels
-        </div>
+        <button onClick={onLogout} style={styles.logoutBtn}>
+          <LogOut size={14} /> Déconnexion
+        </button>
       </div>
     </aside>
   );
@@ -649,6 +699,10 @@ const styles = {
     height: 2, background: "linear-gradient(90deg, #E8B65A 0%, transparent 100%)", marginBottom: 12, opacity: 0.5,
   },
   sidebarFooterText: { fontSize: 11, color: "#7C87AC", lineHeight: 1.5 },
+  logoutBtn: {
+    display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
+    color: "#9AA4C4", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
+  },
   main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%" },
   topbar: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6,
