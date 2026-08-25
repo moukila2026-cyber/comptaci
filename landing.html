@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>ComptaCi — Pilotage financier pour restaurants, bars et hôtels</title>
+<meta name="description" content="Suivez vos ventes, dépenses et résultat net en temps réel. Conçu pour les maquis, bars, restaurants et hôtels de Côte d'Ivoire." />
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  :root {
+    --ink: #16213E;
+    --paper: #FBF7F0;
+    --paper2: #FFFEFB;
+    --gold: #D4A24C;
+    --gold-deep: #B4801F;
+    --teal: #186B4E;
+    --teal-bg: #E4F2EC;
+    --clay: #B4432A;
+    --line: #EDE7DA;
+    --muted: #8A8578;
+  }
+  body { font-family: 'Inter', sans-serif; background: var(--paper); color: var(--ink); line-height: 1.5; }
+  h1, h2, h3 { font-family: 'Fraunces', serif; letter-spacing: -0.01em; }
+  a { color: inherit; text-decoration: none; }
+  .wrap { max-width: 1080px; margin: 0 auto; padding: 0 24px; }
+  header { display: flex; align-items: center; justify-content: space-between; padding: 20px 0; border-bottom: 1px solid var(--line); }
+  .logo { display: flex; align-items: center; gap: 8px; font-family: 'Fraunces', serif; font-weight: 600; font-size: 18px; }
+  .logo svg { flex-shrink: 0; }
+  nav { display: flex; align-items: center; gap: 28px; font-size: 14px; }
+  nav a.muted { color: var(--muted); }
+  .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
+  .btn-primary { background: var(--ink); color: #F3D9A0; }
+  .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
+
+  .hero { padding: 72px 0 56px; }
+  .eyebrow { display: inline-block; font-size: 12.5px; font-weight: 600; color: var(--gold-deep); background: #FBF3E2; padding: 5px 12px; border-radius: 20px; margin-bottom: 18px; }
+  .hero h1 { font-size: 46px; font-weight: 600; line-height: 1.12; max-width: 720px; }
+  .hero h1 .accent { color: var(--gold-deep); }
+  .hero p.lead { font-size: 17px; color: var(--muted); max-width: 560px; margin-top: 18px; }
+  .hero-cta { display: flex; gap: 12px; margin-top: 28px; }
+  .hero-cta .btn { padding: 13px 22px; font-size: 14.5px; }
+
+  .mock { margin-top: 48px; background: var(--ink); border-radius: 18px; padding: 22px; box-shadow: 0 20px 60px rgba(22,33,62,0.18); }
+  .mock-topline { display: flex; justify-content: space-between; font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: #9AA4C4; margin-bottom: 14px; }
+  .mock-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; }
+  .mock-card { background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.08); border-radius: 10px; padding: 14px; }
+  .mock-card .lbl { font-size: 11px; color: #9AA4C4; margin-bottom: 6px; }
+  .mock-card .val { font-family: 'Fraunces', serif; font-size: 19px; color: #F3D9A0; font-weight: 600; }
+  .mock-card.pos .val { color: #7FD4AC; }
+  .mock-card.neg .val { color: #E29886; }
+
+  section { padding: 64px 0; }
+  .kicker { font-size: 12.5px; font-weight: 600; color: var(--gold-deep); text-transform: uppercase; letter-spacing: 0.04em; margin-bottom: 8px; }
+  .section-title { font-size: 30px; font-weight: 600; max-width: 560px; }
+
+  .steps { display: grid; grid-template-columns: repeat(4, 1fr); gap: 20px; margin-top: 36px; }
+  .step .num { font-family: 'Fraunces', serif; font-size: 13px; color: var(--gold-deep); font-weight: 600; margin-bottom: 10px; }
+  .step h3 { font-size: 16px; font-weight: 600; margin-bottom: 6px; }
+  .step p { font-size: 13.5px; color: var(--muted); }
+
+  .features { display: grid; grid-template-columns: repeat(3, 1fr); gap: 18px; margin-top: 36px; }
+  .feature { background: var(--paper2); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .feature h3 { font-size: 15.5px; font-weight: 600; margin-bottom: 6px; }
+  .feature p { font-size: 13.5px; color: var(--muted); }
+
+  .testimonials { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin-top: 36px; }
+  .testi { background: var(--paper2); border: 1px solid var(--line); border-radius: 14px; padding: 20px; font-size: 13.5px; }
+  .testi p { color: #3A3628; margin-bottom: 14px; }
+  .testi .who { display: flex; align-items: center; gap: 10px; }
+  .testi .avatar { width: 30px; height: 30px; border-radius: 50%; background: var(--teal-bg); color: var(--teal); display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
+  .testi .name { font-weight: 600; font-size: 13px; }
+  .testi .role { color: var(--muted); font-size: 12px; }
+
+  .pricing-wrap { display: flex; justify-content: center; margin-top: 36px; }
+  .price-card { background: var(--ink); color: #FBF7F0; border-radius: 18px; padding: 36px; max-width: 380px; width: 100%; text-align: center; }
+  .price-card .amount { font-family: 'Fraunces', serif; font-size: 44px; font-weight: 600; color: #F3D9A0; margin: 14px 0 4px; }
+  .price-card .per { font-size: 13px; color: #9AA4C4; }
+  .price-list { list-style: none; margin: 24px 0; text-align: left; display: flex; flex-direction: column; gap: 10px; font-size: 13.5px; }
+  .price-list li { display: flex; align-items: center; gap: 8px; }
+  .price-list li::before { content: "✓"; color: #7FD4AC; font-weight: 700; }
+  .price-card .btn { width: 100%; justify-content: center; background: #F3D9A0; color: var(--ink); padding: 13px 0; margin-top: 6px; }
+  .price-note { text-align: center; font-size: 12.5px; color: var(--muted); margin-top: 14px; }
+
+  .faq-item { border-bottom: 1px solid var(--line); padding: 18px 0; }
+  .faq-item h3 { font-size: 15px; font-weight: 600; margin-bottom: 6px; }
+  .faq-item p { font-size: 13.5px; color: var(--muted); }
+
+  .cta-final { text-align: center; padding: 64px 0; }
+  .cta-final h2 { font-size: 28px; margin-bottom: 10px; }
+  .cta-final p { color: var(--muted); font-size: 14.5px; margin-bottom: 24px; }
+
+  footer { border-top: 1px solid var(--line); padding: 32px 0; font-size: 12.5px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 860px) {
+    .hero h1 { font-size: 32px; }
+    .mock-grid { grid-template-columns: repeat(2, 1fr); }
+    .steps { grid-template-columns: repeat(2, 1fr); }
+    .features { grid-template-columns: 1fr; }
+    .testimonials { grid-template-columns: 1fr; }
+    nav a.muted { display: none; }
+  }
+</style>
+</head>
+<body>
+
+<div class="wrap">
+  <header>
+    <div class="logo">
+      <svg width="20" height="20" viewBox="0 0 20 20" fill="none"><path d="M2 14L7 6L12 11L18 3" stroke="#D4A24C" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      ComptaCi
+    </div>
+    <nav>
+      <a class="muted" href="#comment-ca-marche">Fonctionnalités</a>
+      <a class="muted" href="#tarifs">Tarifs</a>
+      <a class="muted" href="#faq">FAQ</a>
+      <a class="btn btn-ghost" href="#">Se connecter</a>
+      <a class="btn btn-primary" href="#tarifs">Essayer</a>
+    </nav>
+  </header>
+</div>
+
+<div class="wrap">
+  <section class="hero">
+    <span class="eyebrow">Pilotage financier simplifié</span>
+    <h1>Votre caisse. <span class="accent">Votre résultat.</span> En un coup d'œil.</h1>
+    <p class="lead">Enregistrez vos ventes et dépenses en quelques secondes. ComptaCi calcule votre résultat net, votre marge et votre TVA à provisionner — automatiquement.</p>
+    <div class="hero-cta">
+      <a class="btn btn-primary" href="#tarifs">Commencer maintenant</a>
+      <a class="btn btn-ghost" href="#comment-ca-marche">Voir comment ça marche</a>
+    </div>
+
+    <div class="mock">
+      <div class="mock-topline"><span>Le Bon Coin — Tableau de bord</span><span>Août 2026</span></div>
+      <div class="mock-grid">
+        <div class="mock-card"><div class="lbl">Chiffre d'affaires</div><div class="val">842k</div></div>
+        <div class="mock-card"><div class="lbl">Dépenses</div><div class="val">513k</div></div>
+        <div class="mock-card pos"><div class="lbl">Résultat net</div><div class="val">+329k</div></div>
+        <div class="mock-card"><div class="lbl">TVA à provisionner</div><div class="val">151k</div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap" id="comment-ca-marche">
+  <section>
+    <div class="kicker">Comment ça marche</div>
+    <h2 class="section-title">De la caisse au bilan, en quatre étapes</h2>
+    <div class="steps">
+      <div class="step"><div class="num">01</div><h3>Saisissez</h3><p>Chaque vente et chaque dépense du jour, en quelques secondes depuis un téléphone.</p></div>
+      <div class="step"><div class="num">02</div><h3>Catégorisez</h3><p>Boissons, nourriture, personnel, charges fixes — ComptaCi range tout automatiquement.</p></div>
+      <div class="step"><div class="num">03</div><h3>Visualisez</h3><p>Tableau de bord clair : recettes, dépenses, marge, évolution mois par mois.</p></div>
+      <div class="step"><div class="num">04</div><h3>Décidez</h3><p>Voyez immédiatement si votre établissement est rentable, et où part l'argent.</p></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section>
+    <div class="kicker">Conçu pour vous</div>
+    <h2 class="section-title">Pensé pour les maquis, bars, restaurants et hôtels</h2>
+    <div class="features">
+      <div class="feature"><h3>Montants en FCFA</h3><p>Aucune conversion, aucune confusion. Tous les chiffres dans votre devise.</p></div>
+      <div class="feature"><h3>Paiement Mobile Money</h3><p>Réglez votre abonnement par Wave, simplement, sans compte bancaire.</p></div>
+      <div class="feature"><h3>Aucune notion comptable requise</h3><p>Vous saisissez ce que vous avez vendu et payé. ComptaCi fait le reste.</p></div>
+      <div class="feature"><h3>Multi-établissements</h3><p>Gérez plusieurs points de vente depuis un seul compte, un accès par établissement.</p></div>
+      <div class="feature"><h3>Gérant et propriétaire</h3><p>Le gérant saisit au quotidien, le propriétaire suit à distance en temps réel.</p></div>
+      <div class="feature"><h3>Accès depuis un téléphone</h3><p>Aucune installation. Ouvrez simplement le lien depuis votre navigateur.</p></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section>
+    <div class="kicker">Témoignages</div>
+    <h2 class="section-title">Ils suivent déjà leur activité avec ComptaCi</h2>
+    <div class="testimonials">
+      <div class="testi">
+        <p>"Avant je notais tout sur un cahier. Maintenant je sais en temps réel si le mois est bon ou pas."</p>
+        <div class="who"><div class="avatar">AK</div><div><div class="name">Aya K.</div><div class="role">Gérante de maquis · Daloa</div></div></div>
+      </div>
+      <div class="testi">
+        <p>"Je vois enfin où part l'argent chaque mois. Les achats de boissons, c'était plus que je pensais."</p>
+        <div class="who"><div class="avatar">SD</div><div><div class="name">Serge D.</div><div class="role">Propriétaire de bar</div></div></div>
+      </div>
+      <div class="testi">
+        <p>"Simple à utiliser pour mon personnel, et moi je consulte le tableau de bord depuis mon téléphone."</p>
+        <div class="who"><div class="avatar">MT</div><div><div class="name">Mariam T.</div><div class="role">Propriétaire d'hôtel</div></div></div>
+      </div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap" id="tarifs">
+  <section>
+    <div class="kicker" style="text-align:center">Tarifs</div>
+    <h2 class="section-title" style="text-align:center;margin:0 auto;max-width:420px">Un prix simple, pour tout l'établissement</h2>
+    <div class="pricing-wrap">
+      <div class="price-card">
+        <div style="font-size:13px;color:#9AA4C4">Accès complet</div>
+        <div class="amount">5 000 FCFA</div>
+        <div class="per">par mois, par établissement</div>
+        <ul class="price-list">
+          <li>Saisie illimitée des ventes et dépenses</li>
+          <li>Tableau de bord et graphiques</li>
+          <li>Historique complet</li>
+          <li>Estimation TVA automatique</li>
+          <li>Accès gérant + propriétaire</li>
+          <li>Paiement par Wave</li>
+        </ul>
+        <a class="btn" href="#">Commencer</a>
+      </div>
+    </div>
+    <div class="price-note">Sans engagement · Paiement mensuel par Mobile Money</div>
+  </section>
+</div>
+
+<div class="wrap" id="faq">
+  <section>
+    <div class="kicker">FAQ</div>
+    <h2 class="section-title">Questions fréquentes</h2>
+    <div style="margin-top:24px">
+      <div class="faq-item"><h3>Dois-je connaître la comptabilité pour utiliser ComptaCi ?</h3><p>Non. Vous saisissez simplement vos ventes et dépenses du jour ; ComptaCi calcule le reste.</p></div>
+      <div class="faq-item"><h3>Comment fonctionne le paiement ?</h3><p>Le règlement mensuel se fait par Wave, directement depuis votre téléphone.</p></div>
+      <div class="faq-item"><h3>Puis-je gérer plusieurs établissements ?</h3><p>Oui, chaque établissement dispose de son propre espace, accessible depuis un seul compte.</p></div>
+      <div class="faq-item"><h3>Les chiffres de TVA sont-ils valables pour une déclaration officielle ?</h3><p>Non, ComptaCi est un outil de pilotage interne. Pour une déclaration fiscale, rapprochez-vous d'un comptable agréé.</p></div>
+    </div>
+  </section>
+</div>
+
+<div class="wrap">
+  <section class="cta-final">
+    <h2>Prêt à voir clair sur votre rentabilité ?</h2>
+    <p>Rejoignez les gérants qui pilotent leur établissement au quotidien avec ComptaCi.</p>
+    <a class="btn btn-primary" href="#tarifs">Créer mon compte</a>
+  </section>
+</div>
+
+<footer>
+  <div class="wrap">© 2026 ComptaCi — Pilotage financier pour restaurants, bars, maquis et hôtels en Côte d'Ivoire.</div>
+</footer>
+
+</body>
+</html>
