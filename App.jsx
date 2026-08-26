@@ -117,6 +117,7 @@ function ComptaCiApp() {
           setTransactions(tx || []);
         }
       } catch (e) {
+        console.error("Erreur chargement données:", e);
         setErreur("Impossible de charger vos données. Vérifiez votre connexion.");
       } finally {
         setChargement(false);
@@ -125,16 +126,18 @@ function ComptaCiApp() {
   }, [session]);
 
   const addTransaction = async (t) => {
-    if (!etablissement) return;
+    if (!etablissement) return false;
     const { data, error } = await supabase
       .from("transactions")
       .insert({ ...t, etablissement_id: etablissement.id })
       .select();
     if (error) {
-      setErreur("L'enregistrement a échoué. Réessayez.");
-      return;
+      console.error("Erreur insertion transaction:", error);
+      setErreur(`L'enregistrement a échoué : ${error.message}`);
+      return false;
     }
     setTransactions([data[0], ...transactions]);
+    return true;
   };
 
   const deleteTransaction = async (id) => {
@@ -520,22 +523,31 @@ function Saisie({ onAdd }) {
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayISO());
   const [confirme, setConfirme] = useState(false);
+  const [erreurLocale, setErreurLocale] = useState("");
+  const [enCours, setEnCours] = useState(false);
 
-  const submit = (e) => {
+  const submit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
     const m = parseFloat(montant);
     if (!m || m <= 0) return;
-    onAdd({
+    setErreurLocale("");
+    setEnCours(true);
+    const succes = await onAdd({
       type,
       montant: m,
       categorie: type === "depense" ? categorie : "vente",
       note: note.trim(),
       date,
     });
-    setMontant("");
-    setNote("");
-    setConfirme(true);
-    setTimeout(() => setConfirme(false), 1800);
+    setEnCours(false);
+    if (succes) {
+      setMontant("");
+      setNote("");
+      setConfirme(true);
+      setTimeout(() => setConfirme(false), 1800);
+    } else {
+      setErreurLocale("L'enregistrement a échoué. Vérifiez votre connexion et réessayez.");
+    }
   };
 
   return (
@@ -608,10 +620,11 @@ function Saisie({ onAdd }) {
             />
           </label>
 
-          <button type="button" onClick={submit} style={styles.submitBtn}>
-            <Plus size={16} /> Enregistrer
+          <button type="button" onClick={submit} disabled={enCours} style={styles.submitBtn}>
+            <Plus size={16} /> {enCours ? "Enregistrement…" : "Enregistrer"}
           </button>
           {confirme && <div style={styles.confirmMsg}>Mouvement enregistré.</div>}
+          {erreurLocale && <div style={styles.erreurLocale}>{erreurLocale}</div>}
         </div>
       </div>
     </div>
@@ -927,6 +940,7 @@ const styles = {
     fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   confirmMsg: { fontSize: 12.5, color: "#186B4E", textAlign: "center" },
+  erreurLocale: { fontSize: 12.5, color: "#B4432A", textAlign: "center", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
   dateHeader: { fontSize: 12.5, fontWeight: 600, color: "#8A8578", textTransform: "capitalize", marginBottom: 8 },
   txRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9,
