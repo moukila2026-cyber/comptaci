@@ -5,13 +5,53 @@ import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 
-const CATEGORIES_DEPENSE = [
-  { id: "boissons", label: "Boissons" },
-  { id: "nourriture", label: "Nourriture" },
-  { id: "personnel", label: "Personnel" },
-  { id: "charges_fixes", label: "Charges fixes" },
-  { id: "autre", label: "Autre" },
+const CATEGORIES_PAR_SECTEUR = {
+  restauration: [
+    { id: "boissons", label: "Boissons" },
+    { id: "nourriture", label: "Nourriture" },
+    { id: "personnel", label: "Personnel" },
+    { id: "charges_fixes", label: "Charges fixes" },
+    { id: "autre", label: "Autre" },
+  ],
+  quincaillerie: [
+    { id: "materiaux", label: "Matériaux de construction" },
+    { id: "outillage", label: "Outillage" },
+    { id: "plomberie", label: "Plomberie" },
+    { id: "electricite", label: "Électricité" },
+    { id: "peinture", label: "Peinture & finitions" },
+    { id: "personnel", label: "Personnel" },
+    { id: "charges_fixes", label: "Charges fixes" },
+    { id: "autre", label: "Autre" },
+  ],
+  boutique: [
+    { id: "alimentaire", label: "Produits alimentaires" },
+    { id: "hygiene", label: "Produits d'hygiène" },
+    { id: "boissons", label: "Boissons" },
+    { id: "emballages", label: "Emballages" },
+    { id: "personnel", label: "Personnel" },
+    { id: "charges_fixes", label: "Charges fixes" },
+    { id: "autre", label: "Autre" },
+  ],
+  pharmacie: [
+    { id: "medicaments", label: "Médicaments" },
+    { id: "parapharmacie", label: "Parapharmacie" },
+    { id: "materiel_medical", label: "Matériel médical" },
+    { id: "personnel", label: "Personnel" },
+    { id: "charges_fixes", label: "Charges fixes" },
+    { id: "autre", label: "Autre" },
+  ],
+};
+
+const SECTEURS = [
+  { id: "restauration", label: "Restauration / Bar / Maquis / Hôtel" },
+  { id: "quincaillerie", label: "Quincaillerie" },
+  { id: "boutique", label: "Boutique" },
+  { id: "pharmacie", label: "Pharmacie" },
 ];
+
+function categoriesDuSecteur(secteur) {
+  return CATEGORIES_PAR_SECTEUR[secteur] || CATEGORIES_PAR_SECTEUR.restauration;
+}
 
 const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
@@ -205,11 +245,11 @@ function ComptaCiApp() {
         {chargement ? (
           <div style={styles.loading}>Chargement…</div>
         ) : vue === "dashboard" ? (
-          <Dashboard transactions={transactions} isMobile={isMobile} />
+          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} />
         ) : vue === "saisie" ? (
-          <Saisie onAdd={addTransaction} />
+          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} plan={etablissement?.plan} />
+          <Historique transactions={transactions} onDelete={deleteTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
         )}
       </div>
     </div>
@@ -381,12 +421,12 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan }) {
   );
 }
 
-function Dashboard({ transactions, isMobile }) {
+function Dashboard({ transactions, isMobile, secteur }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
 
   const trend = useMemo(() => buildTrend(transactions, periode), [transactions, periode]);
-  const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, periode), [transactions, periode]);
+  const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, secteur), [transactions, secteur]);
 
   return (
     <div style={styles.page}>
@@ -516,10 +556,11 @@ function KpiCard({ label, value, accent, icon, sub, hero }) {
   );
 }
 
-function Saisie({ onAdd }) {
+function Saisie({ onAdd, secteur }) {
+  const categories = categoriesDuSecteur(secteur);
   const [type, setType] = useState("vente");
   const [montant, setMontant] = useState("");
-  const [categorie, setCategorie] = useState(CATEGORIES_DEPENSE[0].id);
+  const [categorie, setCategorie] = useState(categories[0].id);
   const [note, setNote] = useState("");
   const [date, setDate] = useState(todayISO());
   const [confirme, setConfirme] = useState(false);
@@ -597,7 +638,7 @@ function Saisie({ onAdd }) {
             <label style={styles.field}>
               <span style={styles.fieldLabel}>Catégorie</span>
               <select value={categorie} onChange={(e) => setCategorie(e.target.value)} style={styles.select}>
-                {CATEGORIES_DEPENSE.map((c) => (
+                {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
               </select>
@@ -631,7 +672,8 @@ function Saisie({ onAdd }) {
   );
 }
 
-function Historique({ transactions, onDelete, plan }) {
+function Historique({ transactions, onDelete, plan, secteur }) {
+  const categories = categoriesDuSecteur(secteur);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const transactionsVisibles = limite30j
@@ -685,7 +727,7 @@ function Historique({ transactions, onDelete, plan }) {
                       <div style={{ ...styles.txDot, background: t.type === "vente" ? "#186B4E" : "#B4432A" }} />
                       <div style={styles.txInfo}>
                         <div style={styles.txLabel}>
-                          {t.type === "vente" ? "Vente" : CATEGORIES_DEPENSE.find((c) => c.id === t.categorie)?.label || "Dépense"}
+                          {t.type === "vente" ? "Vente" : categories.find((c) => c.id === t.categorie)?.label || "Dépense"}
                         </div>
                         {t.note && <div style={styles.txNote}>{t.note}</div>}
                       </div>
@@ -754,10 +796,10 @@ function buildTrend(transactions) {
   });
 }
 
-function buildCategorieBreakdown(transactions) {
+function buildCategorieBreakdown(transactions, secteur) {
   const now = new Date();
   const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return CATEGORIES_DEPENSE.map((c) => ({
+  return categoriesDuSecteur(secteur).map((c) => ({
     label: c.label,
     value: transactions
       .filter((t) => monthKey(t.date) === curKey && t.type === "depense" && t.categorie === c.id)

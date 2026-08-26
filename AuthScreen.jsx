@@ -6,6 +6,7 @@ export default function AuthScreen({ onAuthenticated }) {
   const [telephone, setTelephone] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [nomEtablissement, setNomEtablissement] = useState("");
+  const [secteur, setSecteur] = useState("restauration");
   const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
@@ -36,7 +37,7 @@ export default function AuthScreen({ onAuthenticated }) {
         if (userId) {
           const { data: etab, error: errEtab } = await supabase
             .from("etablissements")
-            .insert({ proprietaire_id: userId, nom: nomEtablissement, telephone })
+            .insert({ proprietaire_id: userId, nom: nomEtablissement, telephone, secteur })
             .select()
             .single();
           if (errEtab) throw errEtab;
@@ -124,6 +125,18 @@ export default function AuthScreen({ onAuthenticated }) {
                 placeholder="Ex : Maquis Le Bon Coin"
                 style={styles.input}
               />
+            </label>
+          )}
+
+          {mode === "inscription" && (
+            <label style={styles.field}>
+              <span style={styles.label}>Secteur d'activité</span>
+              <select value={secteur} onChange={(e) => setSecteur(e.target.value)} style={styles.input}>
+                <option value="restauration">Restauration / Bar / Maquis / Hôtel</option>
+                <option value="quincaillerie">Quincaillerie</option>
+                <option value="boutique">Boutique</option>
+                <option value="pharmacie">Pharmacie</option>
+              </select>
             </label>
           )}
 
