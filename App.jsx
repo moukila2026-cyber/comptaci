@@ -559,31 +559,34 @@ function KpiCard({ label, value, accent, icon, sub, hero }) {
 function Saisie({ onAdd, secteur }) {
   const categories = categoriesDuSecteur(secteur);
   const [type, setType] = useState("vente");
-  const [montant, setMontant] = useState("");
+  const [designation, setDesignation] = useState("");
+  const [quantite, setQuantite] = useState("1");
+  const [prixUnitaire, setPrixUnitaire] = useState("");
   const [categorie, setCategorie] = useState(categories[0].id);
-  const [note, setNote] = useState("");
   const [date, setDate] = useState(todayISO());
   const [confirme, setConfirme] = useState(false);
   const [erreurLocale, setErreurLocale] = useState("");
   const [enCours, setEnCours] = useState(false);
 
+  const totalCalcule = (parseFloat(quantite) || 0) * (parseFloat(prixUnitaire) || 0);
+
   const submit = async (e) => {
     if (e && e.preventDefault) e.preventDefault();
-    const m = parseFloat(montant);
-    if (!m || m <= 0) return;
+    if (!totalCalcule || totalCalcule <= 0) return;
     setErreurLocale("");
     setEnCours(true);
     const succes = await onAdd({
       type,
-      montant: m,
+      montant: totalCalcule,
       categorie: type === "depense" ? categorie : "vente",
-      note: note.trim(),
+      note: [designation.trim(), `Qté: ${quantite || 0}`, `PU: ${fmt(parseFloat(prixUnitaire) || 0)} FCFA`].filter(Boolean).join(" — "),
       date,
     });
     setEnCours(false);
     if (succes) {
-      setMontant("");
-      setNote("");
+      setDesignation("");
+      setQuantite("1");
+      setPrixUnitaire("");
       setConfirme(true);
       setTimeout(() => setConfirme(false), 1800);
     } else {
@@ -608,29 +611,27 @@ function Saisie({ onAdd, secteur }) {
               onClick={() => setType("vente")}
               style={{ ...styles.toggleBtn, ...(type === "vente" ? styles.toggleBtnActiveVente : {}) }}
             >
-              Vente
+              Vente (entrée)
             </button>
             <button
               type="button"
               onClick={() => setType("depense")}
               style={{ ...styles.toggleBtn, ...(type === "depense" ? styles.toggleBtnActiveDepense : {}) }}
             >
-              Dépense
+              Dépense (sortie)
             </button>
           </div>
 
           <label style={styles.field}>
-            <span style={styles.fieldLabel}>Montant (FCFA)</span>
+            <span style={styles.fieldLabel}>
+              {type === "vente" ? "Désignation du produit vendu" : "Désignation de l'achat / de la dépense"}
+            </span>
             <input
-              type="number"
-              inputMode="numeric"
-              min="0"
-              placeholder="0"
-              value={montant}
-              onChange={(e) => setMontant(e.target.value)}
-              onKeyDown={(e) => { if (e.key === "Enter") submit(e); }}
-              style={styles.inputBig}
-              required
+              type="text"
+              placeholder={type === "vente" ? "Ex : Riz KC 50 kg" : "Ex : Sac de ciment 50 kg"}
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              style={styles.input}
             />
           </label>
 
@@ -645,20 +646,43 @@ function Saisie({ onAdd, secteur }) {
             </label>
           )}
 
+          <div style={styles.qtyRow}>
+            <label style={styles.field}>
+              <span style={styles.fieldLabel}>Quantité</span>
+              <input
+                type="number"
+                inputMode="decimal"
+                min="0"
+                step="any"
+                placeholder="1"
+                value={quantite}
+                onChange={(e) => setQuantite(e.target.value)}
+                style={styles.input}
+              />
+            </label>
+            <label style={styles.field}>
+              <span style={styles.fieldLabel}>Prix unitaire (FCFA)</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder="0"
+                value={prixUnitaire}
+                onChange={(e) => setPrixUnitaire(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter") submit(e); }}
+                style={styles.input}
+              />
+            </label>
+          </div>
+
+          <div style={styles.totalBox}>
+            <span style={styles.totalLabel}>Total</span>
+            <span style={styles.totalValue}>{fmt(totalCalcule)} FCFA</span>
+          </div>
+
           <label style={styles.field}>
             <span style={styles.fieldLabel}>Date</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.input} />
-          </label>
-
-          <label style={styles.field}>
-            <span style={styles.fieldLabel}>Note (facultatif)</span>
-            <input
-              type="text"
-              placeholder="Ex : livraison boissons, salaire serveur…"
-              value={note}
-              onChange={(e) => setNote(e.target.value)}
-              style={styles.input}
-            />
           </label>
 
           <button type="button" onClick={submit} disabled={enCours} style={styles.submitBtn}>
@@ -983,6 +1007,13 @@ const styles = {
   },
   confirmMsg: { fontSize: 12.5, color: "#186B4E", textAlign: "center" },
   erreurLocale: { fontSize: 12.5, color: "#B4432A", textAlign: "center", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
+  qtyRow: { display: "flex", gap: 12 },
+  totalBox: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FBF3E2",
+    borderRadius: 9, padding: "12px 14px",
+  },
+  totalLabel: { fontSize: 12.5, fontWeight: 600, color: "#8A6420" },
+  totalValue: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },
   dateHeader: { fontSize: 12.5, fontWeight: 600, color: "#8A8578", textTransform: "capitalize", marginBottom: 8 },
   txRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9,
