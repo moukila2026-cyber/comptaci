@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut } from "lucide-react";
-import { supabase } from "./supabaseClient.js";
+import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
+import PaiementEnAttente from "./PaiementEnAttente.jsx";
 
 const CATEGORIES_DEPENSE = [
   { id: "boissons", label: "Boissons" },
@@ -40,12 +41,42 @@ function useIsMobile() {
 }
 
 export default function ComptaCi() {
+  if (configManquante || clientEnErreur) {
+    return (
+      <div style={styles.configError}>
+        <div style={styles.configErrorCard}>
+          <div style={styles.configErrorTitle}>Configuration Supabase invalide</div>
+          <p style={styles.configErrorText}>
+            {clientEnErreur
+              ? "La connexion à Supabase a échoué. Vérifie que le Project URL et la clé sont correctement collés, sans espace ni guillemet en trop."
+              : (
+                <>
+                  Les variables <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code> sont
+                  absentes ou mal formées (l'URL doit ressembler à https://xxxxx.supabase.co). Vérifie-les dans
+                  Vercel → Settings → Environment Variables, puis redéploie.
+                </>
+              )}
+          </p>
+        </div>
+      </div>
+    );
+  }
+  return <ComptaCiApp />;
+}
+
+function ComptaCiApp() {
   const isMobile = useIsMobile();
+  const [maintenant, setMaintenant] = useState(Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setMaintenant(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, []);
   const [session, setSession] = useState(null);
   const [verifSession, setVerifSession] = useState(true);
   const [vue, setVue] = useState("dashboard");
   const [transactions, setTransactions] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
+  const [role, setRole] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState(null);
 
@@ -65,14 +96,16 @@ export default function ComptaCi() {
     (async () => {
       setChargement(true);
       try {
-        const { data: etabs, error: errEtab } = await supabase
-          .from("etablissements")
-          .select("*")
-          .eq("proprietaire_id", session.user.id)
+        const { data: membreRows, error: errMembre } = await supabase
+          .from("membres")
+          .select("role, etablissement_id, etablissements(*)")
+          .eq("user_id", session.user.id)
           .limit(1);
-        if (errEtab) throw errEtab;
-        const etab = etabs?.[0];
-        setEtablissement(etab || null);
+        if (errMembre) throw errMembre;
+        const membre = membreRows?.[0];
+        const etab = membre?.etablissements || null;
+        setEtablissement(etab);
+        setRole(membre?.role || null);
 
         if (etab) {
           const { data: tx, error: errTx } = await supabase
@@ -133,12 +166,38 @@ export default function ComptaCi() {
     return <AuthScreen onAuthenticated={() => {}} />;
   }
 
+  const essaiExpireLe = etablissement
+    ? new Date(new Date(etablissement.date_creation).getTime() + 3 * 24 * 60 * 60 * 1000)
+    : null;
+  const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
+  const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
+
+  if (!chargement && etablissement && !accesAutorise) {
+    return (
+      <PaiementEnAttente
+        etablissement={etablissement}
+        essaiTermine={!essaiEnCours}
+        onDeconnexion={() => { setSession(null); setEtablissement(null); }}
+      />
+    );
+  }
+
+  const msRestantEssai = essaiExpireLe ? essaiExpireLe.getTime() - maintenant : 0;
+  const enEssai = !etablissement?.abonnement_actif && essaiEnCours;
+
   return (
     <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
       <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} />
       <div style={styles.main}>
-        <TopBar etablissement={etablissement?.nom || "Mon établissement"} onRename={renameEtablissement} />
+        <TopBar
+          etablissement={etablissement?.nom || "Mon établissement"}
+          onRename={renameEtablissement}
+          role={role}
+          codeInvitation={etablissement?.code_invitation}
+          plan={etablissement?.plan}
+        />
+        {enEssai && <EssaiBanner msRestant={msRestantEssai} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {chargement ? (
           <div style={styles.loading}>Chargement…</div>
@@ -147,7 +206,7 @@ export default function ComptaCi() {
         ) : vue === "saisie" ? (
           <Saisie onAdd={addTransaction} />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} />
+          <Historique transactions={transactions} onDelete={deleteTransaction} plan={etablissement?.plan} />
         )}
       </div>
     </div>
@@ -232,9 +291,25 @@ function Sidebar({ vue, setVue, isMobile, onLogout }) {
   );
 }
 
-function TopBar({ etablissement, onRename }) {
+function EssaiBanner({ msRestant }) {
+  const heures = Math.max(0, Math.floor(msRestant / (1000 * 60 * 60)));
+  const jours = Math.floor(heures / 24);
+  const heuresRestantes = heures % 24;
+  return (
+    <div style={styles.essaiBanner}>
+      Essai gratuit — il vous reste {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} avant
+      de devoir vous abonner (5 000 FCFA / mois).
+    </div>
+  );
+}
+
+function TopBar({ etablissement, onRename, role, codeInvitation, plan }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(etablissement);
+  const [inviteOuvert, setInviteOuvert] = useState(false);
+  const [copie, setCopie] = useState(false);
+  const estProprietaire = role === "proprietaire";
+  const estPro = plan === "pro";
 
   useEffect(() => setVal(etablissement), [etablissement]);
 
@@ -242,7 +317,7 @@ function TopBar({ etablissement, onRename }) {
     <header style={styles.topbar}>
       <div style={styles.topbarLeft}>
         <Building2 size={16} color="#8A8578" />
-        {editing ? (
+        {editing && estProprietaire ? (
           <input
             autoFocus
             value={val}
@@ -256,15 +331,48 @@ function TopBar({ etablissement, onRename }) {
             }}
             style={styles.topbarInput}
           />
-        ) : (
+        ) : estProprietaire ? (
           <button style={styles.topbarNameBtn} onClick={() => setEditing(true)}>
             {etablissement}
             <ChevronDown size={14} color="#B5AF9E" />
           </button>
+        ) : (
+          <span style={styles.topbarNameBtn}>{etablissement} · Gérant</span>
         )}
       </div>
-      <div style={styles.topbarDate}>
-        {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+      <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        {estProprietaire && codeInvitation && estPro && (
+          <div style={{ position: "relative" }}>
+            <button style={styles.inviteBtn} onClick={() => setInviteOuvert((v) => !v)}>
+              Inviter un gérant
+            </button>
+            {inviteOuvert && (
+              <div style={styles.invitePopover}>
+                <div style={styles.invitePopoverLabel}>Code d'invitation à partager</div>
+                <div style={styles.inviteCode}>{codeInvitation}</div>
+                <p style={styles.invitePopoverText}>
+                  Le gérant crée son propre compte via "Rejoindre comme gérant" en utilisant ce code.
+                </p>
+                <button
+                  style={styles.inviteCopyBtn}
+                  onClick={() => {
+                    navigator.clipboard?.writeText(codeInvitation);
+                    setCopie(true);
+                    setTimeout(() => setCopie(false), 1500);
+                  }}
+                >
+                  {copie ? "Copié !" : "Copier le code"}
+                </button>
+              </div>
+            )}
+          </div>
+        )}
+        {estProprietaire && !estPro && (
+          <div style={styles.upgradeHint}>Plan Pro requis pour inviter un gérant</div>
+        )}
+        <div style={styles.topbarDate}>
+          {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+        </div>
       </div>
     </header>
   );
@@ -510,14 +618,21 @@ function Saisie({ onAdd }) {
   );
 }
 
-function Historique({ transactions, onDelete }) {
+function Historique({ transactions, onDelete, plan }) {
+  const limite30j = plan !== "pro";
+  const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const transactionsVisibles = limite30j
+    ? transactions.filter((t) => new Date(t.date).getTime() >= seuil)
+    : transactions;
+  const masquees = transactions.length - transactionsVisibles.length;
+
   const groups = useMemo(() => {
     const byDate = {};
-    for (const t of transactions) {
+    for (const t of transactionsVisibles) {
       (byDate[t.date] ||= []).push(t);
     }
     return Object.entries(byDate).sort((a, b) => (a[0] < b[0] ? 1 : -1));
-  }, [transactions]);
+  }, [transactionsVisibles]);
 
   return (
     <div style={styles.page}>
@@ -525,9 +640,19 @@ function Historique({ transactions, onDelete }) {
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>Historique des mouvements</div>
-            <div style={styles.cardCaption}>{transactions.length} enregistrement{transactions.length > 1 ? "s" : ""}</div>
+            <div style={styles.cardCaption}>
+              {transactionsVisibles.length} enregistrement{transactionsVisibles.length > 1 ? "s" : ""}
+              {limite30j ? " (30 derniers jours)" : ""}
+            </div>
           </div>
         </div>
+
+        {limite30j && masquees > 0 && (
+          <div style={styles.upgradeNotice}>
+            {masquees} enregistrement{masquees > 1 ? "s" : ""} plus ancien{masquees > 1 ? "s" : ""} masqué
+            {masquees > 1 ? "s" : ""} — passez au plan Pro pour l'historique complet.
+          </div>
+        )}
 
         {groups.length === 0 ? (
           <div style={styles.emptyState}>
@@ -718,8 +843,38 @@ const styles = {
     border: "none", borderBottom: "1px solid #D4A24C", outline: "none", background: "transparent",
   },
   topbarDate: { fontSize: 12.5, color: "#8A8578", textTransform: "capitalize" },
+  inviteBtn: {
+    padding: "7px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
+    fontSize: 12, fontWeight: 600, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  upgradeHint: { fontSize: 11.5, color: "#B4801F", background: "#FBF3E2", padding: "6px 10px", borderRadius: 8 },
+  invitePopover: {
+    position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#FFFEFB",
+    border: "1px solid #EDE7DA", borderRadius: 12, padding: 16, width: 260,
+    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 10,
+  },
+  invitePopoverLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", marginBottom: 8 },
+  inviteCode: {
+    fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: "#16213E",
+    letterSpacing: "0.08em", textAlign: "center", background: "#FBF3E2", borderRadius: 8, padding: "10px 0", marginBottom: 10,
+  },
+  invitePopoverText: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginBottom: 10 },
+  inviteCopyBtn: {
+    width: "100%", padding: "8px 0", borderRadius: 8, border: "none", background: "#16213E",
+    color: "#F3D9A0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
   errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBEBE4", color: "#8A3420", borderRadius: 8, fontSize: 13 },
+  essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBF3E2", color: "#8A6420", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
   loading: { padding: 40, color: "#8A8578", fontSize: 14 },
+  configError: {
+    minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+    background: "#FBF7F0", padding: 20,
+  },
+  configErrorCard: {
+    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 26, maxWidth: 440,
+  },
+  configErrorTitle: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
+  configErrorText: { fontSize: 13.5, color: "#5C5748", lineHeight: 1.6 },
   page: { padding: "20px 20px 40px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 },
   kpiRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 },
   kpiCard: {
@@ -741,6 +896,10 @@ const styles = {
   emptyState: { padding: "36px 20px", textAlign: "center", border: "1px dashed #E4DDD0", borderRadius: 12 },
   emptyTitle: { fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, marginBottom: 4 },
   emptyText: { fontSize: 12.5, color: "#8A8578" },
+  upgradeNotice: {
+    fontSize: 12, color: "#B4801F", background: "#FBF3E2", padding: "10px 12px",
+    borderRadius: 9, marginBottom: 16,
+  },
   toggleRow: { display: "flex", gap: 8 },
   toggleBtn: {
     flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",

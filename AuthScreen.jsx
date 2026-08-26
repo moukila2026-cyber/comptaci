@@ -2,18 +2,27 @@ import React, { useState } from "react";
 import { supabase, telephoneVersEmail } from "./supabaseClient.js";
 
 export default function AuthScreen({ onAuthenticated }) {
-  const [mode, setMode] = useState("connexion"); // connexion | inscription
+  const [mode, setMode] = useState("connexion"); // connexion | inscription | rejoindre
   const [telephone, setTelephone] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [nomEtablissement, setNomEtablissement] = useState("");
+  const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
     setErreur("");
-    if (!telephone || !motDePasse || (mode === "inscription" && !nomEtablissement)) {
+    if (!telephone || !motDePasse) {
       setErreur("Merci de remplir tous les champs.");
+      return;
+    }
+    if (mode === "inscription" && !nomEtablissement) {
+      setErreur("Merci d'indiquer le nom de l'établissement.");
+      return;
+    }
+    if (mode === "rejoindre" && !codeInvitation) {
+      setErreur("Merci d'indiquer le code d'invitation reçu du propriétaire.");
       return;
     }
     setChargement(true);
@@ -23,16 +32,39 @@ export default function AuthScreen({ onAuthenticated }) {
       if (mode === "inscription") {
         const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
         if (error) throw error;
-
-        // Créer l'établissement lié à ce nouvel utilisateur
         const userId = data.user?.id;
         if (userId) {
-          const { error: errEtab } = await supabase.from("etablissements").insert({
-            proprietaire_id: userId,
-            nom: nomEtablissement,
-            telephone,
-          });
+          const { data: etab, error: errEtab } = await supabase
+            .from("etablissements")
+            .insert({ proprietaire_id: userId, nom: nomEtablissement, telephone })
+            .select()
+            .single();
           if (errEtab) throw errEtab;
+          const { error: errMembre } = await supabase
+            .from("membres")
+            .insert({ etablissement_id: etab.id, user_id: userId, role: "proprietaire" });
+          if (errMembre) throw errMembre;
+        }
+        onAuthenticated();
+      } else if (mode === "rejoindre") {
+        const { data: etab, error: errRecherche } = await supabase
+          .from("etablissements")
+          .select("id")
+          .eq("code_invitation", codeInvitation.trim().toUpperCase())
+          .maybeSingle();
+        if (errRecherche || !etab) {
+          setErreur("Code d'invitation introuvable. Vérifiez-le auprès du propriétaire.");
+          setChargement(false);
+          return;
+        }
+        const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
+        if (error) throw error;
+        const userId = data.user?.id;
+        if (userId) {
+          const { error: errMembre } = await supabase
+            .from("membres")
+            .insert({ etablissement_id: etab.id, user_id: userId, role: "gerant" });
+          if (errMembre) throw errMembre;
         }
         onAuthenticated();
       } else {
@@ -70,7 +102,14 @@ export default function AuthScreen({ onAuthenticated }) {
             onClick={() => setMode("inscription")}
             style={{ ...styles.toggleBtn, ...(mode === "inscription" ? styles.toggleActive : {}) }}
           >
-            Créer un compte
+            Créer un établissement
+          </button>
+          <button
+            type="button"
+            onClick={() => setMode("rejoindre")}
+            style={{ ...styles.toggleBtn, ...(mode === "rejoindre" ? styles.toggleActive : {}) }}
+          >
+            Rejoindre comme gérant
           </button>
         </div>
 
@@ -83,6 +122,19 @@ export default function AuthScreen({ onAuthenticated }) {
                 value={nomEtablissement}
                 onChange={(e) => setNomEtablissement(e.target.value)}
                 placeholder="Ex : Maquis Le Bon Coin"
+                style={styles.input}
+              />
+            </label>
+          )}
+
+          {mode === "rejoindre" && (
+            <label style={styles.field}>
+              <span style={styles.label}>Code d'invitation</span>
+              <input
+                type="text"
+                value={codeInvitation}
+                onChange={(e) => setCodeInvitation(e.target.value)}
+                placeholder="Reçu du propriétaire de l'établissement"
                 style={styles.input}
               />
             </label>
@@ -114,7 +166,7 @@ export default function AuthScreen({ onAuthenticated }) {
           {erreur && <div style={styles.error}>{erreur}</div>}
 
           <button type="button" onClick={submit} disabled={chargement} style={styles.submitBtn}>
-            {chargement ? "Un instant…" : mode === "connexion" ? "Se connecter" : "Créer mon compte"}
+            {chargement ? "Un instant…" : mode === "connexion" ? "Se connecter" : mode === "rejoindre" ? "Rejoindre l'établissement" : "Créer mon compte"}
           </button>
         </div>
       </div>
@@ -146,10 +198,10 @@ const styles = {
   },
   brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 24 },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "#16213E" },
-  toggleRow: { display: "flex", gap: 8, marginBottom: 20 },
+  toggleRow: { display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" },
   toggleBtn: {
-    flex: 1, padding: "9px 0", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 13, fontWeight: 600, color: "#8A8578", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    flex: "1 1 30%", padding: "9px 4px", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",
+    fontSize: 11.5, fontWeight: 600, color: "#8A8578", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   toggleActive: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
   field: { display: "flex", flexDirection: "column", gap: 6 },
