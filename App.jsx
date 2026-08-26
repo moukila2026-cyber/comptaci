@@ -301,7 +301,7 @@ function EssaiBanner({ msRestant }) {
   return (
     <div style={styles.essaiBanner}>
       Essai gratuit — il vous reste {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} avant
-      de devoir vous abonner (5 000 FCFA / mois).
+      de devoir vous abonner (à partir de 7 000 FCFA / mois).
     </div>
   );
 }
