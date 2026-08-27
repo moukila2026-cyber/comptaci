@@ -65,11 +65,13 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
           Se déconnecter
         </button>
       </div>
+      <div style={styles.footer}>SHOPIN30 · 05 01 30 33 43</div>
     </div>
   );
 }
 
 const styles = {
+  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
   fondateurBadge: {
     background: "#16213E", color: "#F3D9A0", fontSize: 11.5, fontWeight: 700, padding: "6px 12px",
     borderRadius: 20, marginBottom: 14, display: "inline-block",

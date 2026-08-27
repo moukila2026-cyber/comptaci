@@ -180,6 +180,7 @@ export default function AuthScreen({ onAuthenticated }) {
           </button>
         </div>
       </div>
+      <div style={styles.footer}>SHOPIN30 · 05 01 30 33 43</div>
     </div>
   );
 }
@@ -198,6 +199,7 @@ function traduireErreur(msg) {
 }
 
 const styles = {
+  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
   wrap: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
     background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,

@@ -120,6 +120,9 @@ function ComptaCiApp() {
   const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
   const [role, setRole] = useState(null);
+  const [mesEtablissements, setMesEtablissements] = useState([]);
+  const [listeChargee, setListeChargee] = useState(false);
+  const [etablissementActifId, setEtablissementActifId] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState(null);
 
@@ -134,6 +137,7 @@ function ComptaCiApp() {
     return () => listener.subscription.unsubscribe();
   }, []);
 
+  // Charge la liste de tous les établissements accessibles à ce compte
   useEffect(() => {
     if (!session) return;
     (async () => {
@@ -142,14 +146,38 @@ function ComptaCiApp() {
         const { data: membreRows, error: errMembre } = await supabase
           .from("membres")
           .select("role, etablissement_id, etablissements(*)")
-          .eq("user_id", session.user.id)
-          .limit(1);
+          .eq("user_id", session.user.id);
         if (errMembre) throw errMembre;
-        const membre = membreRows?.[0];
-        const etab = membre?.etablissements || null;
-        setEtablissement(etab);
-        setRole(membre?.role || null);
+        const liste = (membreRows || []).filter((m) => m.etablissements);
+        setMesEtablissements(liste);
+        setEtablissementActifId((prev) => prev && liste.some((m) => m.etablissement_id === prev)
+          ? prev
+          : liste[0]?.etablissement_id || null);
+        setListeChargee(true);
+      } catch (e) {
+        console.error("Erreur chargement établissements:", e);
+        setErreur("Impossible de charger vos établissements. Vérifiez votre connexion.");
+        setListeChargee(true);
+        setChargement(false);
+      }
+    })();
+  }, [session]);
 
+  // Charge les données de l'établissement actuellement sélectionné
+  useEffect(() => {
+    if (!listeChargee) return;
+    if (!etablissementActifId) {
+      setChargement(false);
+      return;
+    }
+    const membreActif = mesEtablissements.find((m) => m.etablissement_id === etablissementActifId);
+    setEtablissement(membreActif?.etablissements || null);
+    setRole(membreActif?.role || null);
+
+    (async () => {
+      setChargement(true);
+      try {
+        const etab = membreActif?.etablissements;
         if (etab) {
           const { data: tx, error: errTx } = await supabase
             .from("transactions")
@@ -185,7 +213,38 @@ function ComptaCiApp() {
         setChargement(false);
       }
     })();
-  }, [session]);
+  }, [etablissementActifId, mesEtablissements]);
+
+  const changerEtablissement = (id) => {
+    setEtablissementActifId(id);
+  };
+
+  const ajouterEtablissement = async (nom, secteur) => {
+    if (!session) return false;
+    try {
+      const { data: etab, error: errEtab } = await supabase
+        .from("etablissements")
+        .insert({ proprietaire_id: session.user.id, nom, telephone: "", secteur })
+        .select()
+        .single();
+      if (errEtab) throw errEtab;
+      const { error: errMembre } = await supabase
+        .from("membres")
+        .insert({ etablissement_id: etab.id, user_id: session.user.id, role: "proprietaire" });
+      if (errMembre) throw errMembre;
+
+      const { data: membreRows } = await supabase
+        .from("membres")
+        .select("role, etablissement_id, etablissements(*)")
+        .eq("user_id", session.user.id);
+      setMesEtablissements((membreRows || []).filter((m) => m.etablissements));
+      setEtablissementActifId(etab.id);
+      return true;
+    } catch (e) {
+      setErreur("Impossible de créer ce nouvel établissement.");
+      return false;
+    }
+  };
 
   const addTransaction = async (t) => {
     if (!etablissement) return false;
@@ -381,6 +440,10 @@ function ComptaCiApp() {
           role={role}
           codeInvitation={etablissement?.code_invitation}
           plan={etablissement?.plan}
+          mesEtablissements={mesEtablissements}
+          etablissementActifId={etablissementActifId}
+          onChangerEtablissement={changerEtablissement}
+          onAjouterEtablissement={ajouterEtablissement}
         />
         {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
@@ -408,11 +471,16 @@ function ComptaCiApp() {
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
         )}
+        <AppFooter />
       </div>
     </div>
   );
 }
 
+
+function AppFooter() {
+  return <div style={styles.appFooter}>SHOPIN30 · 05 01 30 33 43</div>;
+}
 
 function Sidebar({ vue, setVue, isMobile, onLogout }) {
   const items = [
@@ -507,21 +575,88 @@ function EssaiBanner({ msRestant, estFondateur, essaiJours }) {
   );
 }
 
-function TopBar({ etablissement, onRename, role, codeInvitation, plan }) {
+function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtablissements, etablissementActifId, onChangerEtablissement, onAjouterEtablissement }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(etablissement);
   const [inviteOuvert, setInviteOuvert] = useState(false);
+  const [selecteurOuvert, setSelecteurOuvert] = useState(false);
+  const [ajoutOuvert, setAjoutOuvert] = useState(false);
+  const [nouveauNom, setNouveauNom] = useState("");
+  const [nouveauSecteur, setNouveauSecteur] = useState("restauration");
+  const [ajoutEnCours, setAjoutEnCours] = useState(false);
   const [copie, setCopie] = useState(false);
   const estProprietaire = role === "proprietaire";
   const estPro = plan === "pro";
+  const plusieursEtablissements = mesEtablissements && mesEtablissements.length > 1;
 
   useEffect(() => setVal(etablissement), [etablissement]);
+
+  const creerEtablissement = async () => {
+    if (!nouveauNom.trim()) return;
+    setAjoutEnCours(true);
+    const succes = await onAjouterEtablissement(nouveauNom.trim(), nouveauSecteur);
+    setAjoutEnCours(false);
+    if (succes) {
+      setNouveauNom("");
+      setNouveauSecteur("restauration");
+      setAjoutOuvert(false);
+      setSelecteurOuvert(false);
+    }
+  };
 
   return (
     <header style={styles.topbar}>
       <div style={styles.topbarLeft}>
         <Building2 size={16} color="#8A8578" />
-        {editing && estProprietaire ? (
+        {mesEtablissements && mesEtablissements.length > 0 ? (
+          <div style={{ position: "relative" }}>
+            <button style={styles.topbarNameBtn} onClick={() => setSelecteurOuvert((v) => !v)}>
+              {etablissement}{role === "gerant" ? " · Gérant" : ""}
+              <ChevronDown size={14} color="#B5AF9E" />
+            </button>
+            {selecteurOuvert && (
+              <div style={styles.etabPopover}>
+                {mesEtablissements.map((m) => (
+                  <button
+                    key={m.etablissement_id}
+                    onClick={() => { onChangerEtablissement(m.etablissement_id); setSelecteurOuvert(false); }}
+                    style={{
+                      ...styles.etabPopoverItem,
+                      ...(m.etablissement_id === etablissementActifId ? styles.etabPopoverItemActive : {}),
+                    }}
+                  >
+                    <span>{m.etablissements.nom}</span>
+                    <span style={styles.etabPopoverRole}>{m.role === "proprietaire" ? "Propriétaire" : "Gérant"}</span>
+                  </button>
+                ))}
+                <div style={styles.etabPopoverDivider} />
+                {!ajoutOuvert ? (
+                  <button style={styles.etabPopoverAdd} onClick={() => setAjoutOuvert(true)}>
+                    + Ajouter un établissement
+                  </button>
+                ) : (
+                  <div style={{ padding: "8px 4px", display: "flex", flexDirection: "column", gap: 8 }}>
+                    <input
+                      type="text"
+                      placeholder="Nom de l'établissement"
+                      value={nouveauNom}
+                      onChange={(e) => setNouveauNom(e.target.value)}
+                      style={styles.etabPopoverInput}
+                    />
+                    <select value={nouveauSecteur} onChange={(e) => setNouveauSecteur(e.target.value)} style={styles.etabPopoverInput}>
+                      {SECTEURS.map((s) => (
+                        <option key={s.id} value={s.id}>{s.label}</option>
+                      ))}
+                    </select>
+                    <button onClick={creerEtablissement} disabled={ajoutEnCours} style={styles.inviteCopyBtn}>
+                      {ajoutEnCours ? "Création…" : "Créer"}
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+        ) : editing && estProprietaire ? (
           <input
             autoFocus
             value={val}
@@ -1476,6 +1611,27 @@ const styles = {
     fontSize: 12, fontWeight: 600, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   upgradeHint: { fontSize: 11.5, color: "#B4801F", background: "#FBF3E2", padding: "6px 10px", borderRadius: 8 },
+  etabPopover: {
+    position: "absolute", top: "calc(100% + 8px)", left: 0, background: "#FFFEFB",
+    border: "1px solid #EDE7DA", borderRadius: 12, padding: 8, width: 260,
+    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 20,
+  },
+  etabPopoverItem: {
+    display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
+    padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
+    fontSize: 13, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+  },
+  etabPopoverItemActive: { background: "#FBF3E2", fontWeight: 600 },
+  etabPopoverRole: { fontSize: 10.5, color: "#8A8578" },
+  etabPopoverDivider: { height: 1, background: "#EDE7DA", margin: "6px 4px" },
+  etabPopoverAdd: {
+    width: "100%", padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
+    fontSize: 13, color: "#B4801F", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+  },
+  etabPopoverInput: {
+    padding: "8px 10px", borderRadius: 8, border: "1px solid #E4DDD0", fontSize: 12.5,
+    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+  },
   invitePopover: {
     position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#FFFEFB",
     border: "1px solid #EDE7DA", borderRadius: 12, padding: 16, width: 260,
@@ -1499,6 +1655,7 @@ const styles = {
     padding: "2px 8px", borderRadius: 20, marginRight: 8, letterSpacing: "0.02em",
   },
   loading: { padding: 40, color: "#8A8578", fontSize: 14 },
+  appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "#B5AF9E" },
   configError: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
     background: "#FBF7F0", padding: 20,
