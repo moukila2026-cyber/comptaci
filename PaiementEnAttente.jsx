@@ -1,6 +1,8 @@
 import React from "react";
 import { supabase } from "./supabaseClient.js";
 
+const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
+
 export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion }) {
   return (
     <div style={styles.wrap}>
@@ -13,8 +15,15 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
         </div>
 
         <div style={styles.title}>
-          {essaiTermine ? "Votre essai gratuit de 3 jours est terminé" : "Un dernier pas avant d'accéder à votre tableau de bord"}
+          {essaiTermine
+            ? `Votre essai gratuit de ${etablissement?.essai_jours || 3} jours est terminé`
+            : "Un dernier pas avant d'accéder à votre tableau de bord"}
         </div>
+        {etablissement?.est_fondateur && (
+          <div style={styles.fondateurBadge}>
+            ★ Établissement fondateur — tarif garanti à {fmt(etablissement.tarif_verrouille || 7000)} FCFA/mois, à vie
+          </div>
+        )}
         <p style={styles.text}>
           {essaiTermine ? (
             <>Pour continuer à utiliser ComptaCi pour <strong>{etablissement?.nom}</strong>, réglez l'abonnement de votre choix
@@ -61,6 +70,10 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 }
 
 const styles = {
+  fondateurBadge: {
+    background: "#16213E", color: "#F3D9A0", fontSize: 11.5, fontWeight: 700, padding: "6px 12px",
+    borderRadius: 20, marginBottom: 14, display: "inline-block",
+  },
   wrap: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
     background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,

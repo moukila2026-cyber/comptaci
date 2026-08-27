@@ -235,7 +235,7 @@ function ComptaCiApp() {
     }
   };
 
-  const addProduit = async (designation, quantite, prixUnitaire) => {
+  const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
     const { data, error } = await supabase
       .from("produits")
       .insert({
@@ -243,6 +243,7 @@ function ComptaCiApp() {
         designation,
         quantite_stock: quantite,
         prix_unitaire: prixUnitaire || null,
+        seuil_alerte: seuilAlerte || 5,
       })
       .select();
     if (error) {
@@ -311,6 +312,16 @@ function ComptaCiApp() {
     return true;
   };
 
+  const updateTransaction = async (id, champs) => {
+    const { data, error } = await supabase.from("transactions").update(champs).eq("id", id).select();
+    if (error) {
+      setErreur("La modification a échoué.");
+      return false;
+    }
+    setTransactions(transactions.map((t) => (t.id === id ? data[0] : t)));
+    return true;
+  };
+
   const deleteTransaction = async (id) => {
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) {
@@ -341,7 +352,7 @@ function ComptaCiApp() {
   }
 
   const essaiExpireLe = etablissement
-    ? new Date(new Date(etablissement.date_creation).getTime() + 3 * 24 * 60 * 60 * 1000)
+    ? new Date(new Date(etablissement.date_creation).getTime() + (etablissement.essai_jours || 3) * 24 * 60 * 60 * 1000)
     : null;
   const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
   const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
@@ -371,14 +382,14 @@ function ComptaCiApp() {
           codeInvitation={etablissement?.code_invitation}
           plan={etablissement?.plan}
         />
-        {enEssai && <EssaiBanner msRestant={msRestantEssai} />}
+        {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {chargement ? (
           <div style={styles.loading}>Chargement…</div>
         ) : vue === "dashboard" ? (
           <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} />
         ) : vue === "saisie" ? (
-          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} />
+          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} />
         ) : vue === "stock" ? (
           <Stock
             produits={produits}
@@ -395,7 +406,7 @@ function ComptaCiApp() {
             onFermer={fermerCaisse}
           />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
+          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
         )}
       </div>
     </div>
@@ -482,14 +493,16 @@ function Sidebar({ vue, setVue, isMobile, onLogout }) {
   );
 }
 
-function EssaiBanner({ msRestant }) {
+function EssaiBanner({ msRestant, estFondateur, essaiJours }) {
   const heures = Math.max(0, Math.floor(msRestant / (1000 * 60 * 60)));
   const jours = Math.floor(heures / 24);
   const heuresRestantes = heures % 24;
+  const urgent = heures < 24;
   return (
-    <div style={styles.essaiBanner}>
-      Essai gratuit — il vous reste {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} avant
-      de devoir vous abonner (à partir de 7 000 FCFA / mois).
+    <div style={{ ...styles.essaiBanner, ...(urgent ? styles.essaiBannerUrgent : {}) }}>
+      {estFondateur && <span style={styles.fondateurTag}>★ Fondateur</span>}
+      {urgent ? "⏰ " : ""}Essai gratuit ({essaiJours || 3} jours) — il vous reste {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} avant
+      de devoir vous abonner {estFondateur ? "(tarif fondateur garanti à 7 000 FCFA/mois)" : "(à partir de 7 000 FCFA / mois)"}.
     </div>
   );
 }
@@ -728,7 +741,7 @@ function KpiCard({ label, value, accent, icon, sub, hero }) {
   );
 }
 
-function Saisie({ onAdd, secteur }) {
+function Saisie({ onAdd, secteur, etablissement }) {
   const categories = categoriesDuSecteur(secteur);
   const [type, setType] = useState("vente");
   const [designation, setDesignation] = useState("");
@@ -739,6 +752,7 @@ function Saisie({ onAdd, secteur }) {
   const [confirme, setConfirme] = useState(false);
   const [erreurLocale, setErreurLocale] = useState("");
   const [enCours, setEnCours] = useState(false);
+  const [dernierRecu, setDernierRecu] = useState(null);
 
   const totalCalcule = (parseFloat(quantite) || 0) * (parseFloat(prixUnitaire) || 0);
 
@@ -747,6 +761,7 @@ function Saisie({ onAdd, secteur }) {
     if (!totalCalcule || totalCalcule <= 0) return;
     setErreurLocale("");
     setEnCours(true);
+    const infosRecu = { type, designation: designation.trim(), quantite, prixUnitaire, total: totalCalcule, date };
     const succes = await onAdd({
       type,
       montant: totalCalcule,
@@ -758,6 +773,7 @@ function Saisie({ onAdd, secteur }) {
     });
     setEnCours(false);
     if (succes) {
+      if (type === "vente") setDernierRecu(infosRecu);
       setDesignation("");
       setQuantite("1");
       setPrixUnitaire("");
@@ -768,8 +784,43 @@ function Saisie({ onAdd, secteur }) {
     }
   };
 
+  const texteRecu = (r) => [
+    `Reçu — ${etablissement?.nom || "Reçu de vente"}`,
+    `${new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`,
+    ``,
+    r.designation || "Vente",
+    `Quantité : ${r.quantite}`,
+    `Prix unitaire : ${fmt(parseFloat(r.prixUnitaire) || 0)} FCFA`,
+    `Total : ${fmt(r.total)} FCFA`,
+    ``,
+    `Merci de votre confiance !`,
+  ].join("\n");
+
+  const partagerRecuWhatsapp = (r) => {
+    const texte = encodeURIComponent(texteRecu(r));
+    window.open(`https://wa.me/?text=${texte}`, "_blank");
+  };
+
+  const copierRecu = (r) => {
+    navigator.clipboard?.writeText(texteRecu(r));
+  };
+
   return (
     <div style={styles.page}>
+      {dernierRecu && (
+        <div style={styles.recuBox}>
+          <div style={styles.recuBoxText}>Vente enregistrée — partager le reçu ?</div>
+          <div style={{ display: "flex", gap: 8 }}>
+            <button onClick={() => partagerRecuWhatsapp(dernierRecu)} style={styles.recuBtn}>
+              Partager via WhatsApp
+            </button>
+            <button onClick={() => copierRecu(dernierRecu)} style={styles.recuBtnGhost}>
+              <Copy size={13} /> Copier
+            </button>
+            <button onClick={() => setDernierRecu(null)} style={styles.recuBtnGhost}>Fermer</button>
+          </div>
+        </div>
+      )}
       <div style={{ ...styles.card, maxWidth: 520, width: "100%" }}>
         <div style={styles.cardHeader}>
           <div>
@@ -1024,28 +1075,38 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   );
 }
 
-function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
+function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
   const [designation, setDesignation] = useState("");
   const [quantite, setQuantite] = useState("");
   const [prixUnitaire, setPrixUnitaire] = useState("");
+  const [seuilAlerte, setSeuilAlerte] = useState("5");
   const [ouvert, setOuvert] = useState(false);
   const [enCours, setEnCours] = useState(false);
 
   const submit = async () => {
     if (!designation.trim() || !quantite) return;
     setEnCours(true);
-    const succes = await onAdd(designation.trim(), parseFloat(quantite) || 0, parseFloat(prixUnitaire) || null);
+    const succes = await onAdd(designation.trim(), parseFloat(quantite) || 0, parseFloat(prixUnitaire) || null, parseFloat(seuilAlerte) || 5);
     setEnCours(false);
     if (succes) {
       setDesignation("");
       setQuantite("");
       setPrixUnitaire("");
+      setSeuilAlerte("5");
       setOuvert(false);
     }
   };
 
+  const produitsEnAlerte = produits.filter((p) => (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5));
+
   return (
     <div style={styles.page}>
+      {produitsEnAlerte.length > 0 && (
+        <div style={styles.upgradeNotice}>
+          ⚠️ {produitsEnAlerte.length} produit{produitsEnAlerte.length > 1 ? "s" : ""} sous le seuil d'alerte :{" "}
+          {produitsEnAlerte.map((p) => p.designation).join(", ")}
+        </div>
+      )}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -1083,6 +1144,13 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
               onChange={(e) => setPrixUnitaire(e.target.value)}
               style={{ ...styles.input, flex: "1 1 150px" }}
             />
+            <input
+              type="number"
+              placeholder="Seuil d'alerte (défaut 5)"
+              value={seuilAlerte}
+              onChange={(e) => setSeuilAlerte(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 150px" }}
+            />
             <button onClick={submit} disabled={enCours} style={{ ...styles.submitBtn, flex: "1 1 100%" }}>
               {enCours ? "Ajout…" : "Ajouter au stock"}
             </button>
@@ -1099,12 +1167,14 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {produits.map((p) => (
+            {produits.map((p) => {
+              const enAlerte = (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5);
+              return (
               <div key={p.id} style={styles.stockRow}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.stockLabel}>{p.designation}</div>
                   {p.prix_unitaire && (
-                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} FCFA / unité</div>
+                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} FCFA / unité — seuil d'alerte : {fmt(p.seuil_alerte || 5)}</div>
                   )}
                 </div>
                 <button
@@ -1113,7 +1183,7 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
                 >
                   <Minus size={13} />
                 </button>
-                <div style={{ ...styles.stockQty, ...(p.quantite_stock <= 0 ? styles.stockQtyLow : {}) }}>
+                <div style={{ ...styles.stockQty, ...(enAlerte ? styles.stockQtyLow : {}) }}>
                   {fmt(p.quantite_stock)}
                 </div>
                 <button
@@ -1126,7 +1196,8 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
                   <Trash2 size={14} />
                 </button>
               </div>
-            ))}
+              );
+            })}
           </div>
         )}
       </div>
@@ -1134,7 +1205,7 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
   );
 }
 
-function Historique({ transactions, onDelete, plan, secteur }) {
+function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
   const categories = categoriesDuSecteur(secteur);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
@@ -1142,6 +1213,22 @@ function Historique({ transactions, onDelete, plan, secteur }) {
     ? transactions.filter((t) => new Date(t.date).getTime() >= seuil)
     : transactions;
   const masquees = transactions.length - transactionsVisibles.length;
+  const [enEdition, setEnEdition] = useState(null);
+  const [montantEdit, setMontantEdit] = useState("");
+  const [noteEdit, setNoteEdit] = useState("");
+
+  const commencerEdition = (t) => {
+    setEnEdition(t.id);
+    setMontantEdit(String(t.montant));
+    setNoteEdit(t.note || "");
+  };
+
+  const validerEdition = async (id) => {
+    const m = parseFloat(montantEdit);
+    if (!m || m <= 0) return;
+    await onUpdate(id, { montant: m, note: noteEdit.trim() });
+    setEnEdition(null);
+  };
 
   const groups = useMemo(() => {
     const byDate = {};
@@ -1159,7 +1246,7 @@ function Historique({ transactions, onDelete, plan, secteur }) {
             <div style={styles.cardTitle}>Historique des mouvements</div>
             <div style={styles.cardCaption}>
               {transactionsVisibles.length} enregistrement{transactionsVisibles.length > 1 ? "s" : ""}
-              {limite30j ? " (30 derniers jours)" : ""}
+              {limite30j ? " (30 derniers jours)" : ""} — cliquez un montant pour le corriger
             </div>
           </div>
         </div>
@@ -1184,23 +1271,47 @@ function Historique({ transactions, onDelete, plan, secteur }) {
                   {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {items.map((t) => (
-                    <div key={t.id} style={styles.txRow}>
-                      <div style={{ ...styles.txDot, background: t.type === "vente" ? "#186B4E" : "#B4432A" }} />
-                      <div style={styles.txInfo}>
-                        <div style={styles.txLabel}>
-                          {t.type === "vente" ? "Vente" : categories.find((c) => c.id === t.categorie)?.label || "Dépense"}
+                  {items.map((t) =>
+                    enEdition === t.id ? (
+                      <div key={t.id} style={styles.txRowEdit}>
+                        <input
+                          type="number"
+                          value={montantEdit}
+                          onChange={(e) => setMontantEdit(e.target.value)}
+                          style={styles.txEditInput}
+                          autoFocus
+                        />
+                        <input
+                          type="text"
+                          value={noteEdit}
+                          onChange={(e) => setNoteEdit(e.target.value)}
+                          placeholder="Note"
+                          style={{ ...styles.txEditInput, flex: 1 }}
+                        />
+                        <button onClick={() => validerEdition(t.id)} style={styles.txSaveBtn}>Valider</button>
+                        <button onClick={() => setEnEdition(null)} style={styles.txCancelBtn}>Annuler</button>
+                      </div>
+                    ) : (
+                      <div key={t.id} style={styles.txRow}>
+                        <div style={{ ...styles.txDot, background: t.type === "vente" ? "#186B4E" : "#B4432A" }} />
+                        <div style={styles.txInfo}>
+                          <div style={styles.txLabel}>
+                            {t.type === "vente" ? "Vente" : categories.find((c) => c.id === t.categorie)?.label || "Dépense"}
+                          </div>
+                          {t.note && <div style={styles.txNote}>{t.note}</div>}
                         </div>
-                        {t.note && <div style={styles.txNote}>{t.note}</div>}
+                        <button
+                          onClick={() => commencerEdition(t)}
+                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: t.type === "vente" ? "#186B4E" : "#B4432A" }}
+                        >
+                          {t.type === "vente" ? "+" : "-"}{fmt(t.montant)}
+                        </button>
+                        <button onClick={() => onDelete(t.id)} style={styles.txDelete} aria-label="Supprimer">
+                          <Trash2 size={14} />
+                        </button>
                       </div>
-                      <div style={{ ...styles.txAmount, color: t.type === "vente" ? "#186B4E" : "#B4432A" }}>
-                        {t.type === "vente" ? "+" : "-"}{fmt(t.montant)}
-                      </div>
-                      <button onClick={() => onDelete(t.id)} style={styles.txDelete} aria-label="Supprimer">
-                        <Trash2 size={14} />
-                      </button>
-                    </div>
-                  ))}
+                    )
+                  )}
                 </div>
               </div>
             ))}
@@ -1382,6 +1493,11 @@ const styles = {
   },
   errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBEBE4", color: "#8A3420", borderRadius: 8, fontSize: 13 },
   essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBF3E2", color: "#8A6420", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
+  essaiBannerUrgent: { background: "#FBEBE4", color: "#B4432A", fontWeight: 700 },
+  fondateurTag: {
+    display: "inline-block", background: "#16213E", color: "#F3D9A0", fontSize: 10.5, fontWeight: 700,
+    padding: "2px 8px", borderRadius: 20, marginRight: 8, letterSpacing: "0.02em",
+  },
   loading: { padding: 40, color: "#8A8578", fontSize: 14 },
   configError: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
@@ -1441,6 +1557,20 @@ const styles = {
   ecartOk: { background: "#E4F2EC", color: "#186B4E" },
   ecartPositif: { background: "#FBF3E2", color: "#B4801F" },
   ecartNegatif: { background: "#FBEBE4", color: "#B4432A" },
+  recuBox: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
+    background: "#E4F2EC", border: "1px solid #B7DBCA", borderRadius: 10, padding: "12px 16px",
+  },
+  recuBoxText: { fontSize: 13, fontWeight: 600, color: "#186B4E" },
+  recuBtn: {
+    padding: "8px 14px", borderRadius: 8, border: "none", background: "#186B4E", color: "#FFFEFB",
+    fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  recuBtnGhost: {
+    display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8,
+    border: "1px solid #B7DBCA", background: "transparent", color: "#186B4E", fontSize: 12.5,
+    fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
   dashboardHeader: { display: "flex", justifyContent: "flex-end" },
   copyBtn: {
     display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9,
@@ -1492,5 +1622,21 @@ const styles = {
   txLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
   txNote: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
   txAmount: { fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600 },
+  txAmountBtn: { background: "none", border: "none", cursor: "pointer", fontFamily: "'Fraunces', serif" },
   txDelete: { background: "none", border: "none", color: "#B5AF9E", cursor: "pointer", padding: 4 },
+  txRowEdit: {
+    display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: "#FBF3E2",
+  },
+  txEditInput: {
+    padding: "6px 8px", borderRadius: 7, border: "1px solid #E4DDD0", fontSize: 13,
+    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none", width: 100,
+  },
+  txSaveBtn: {
+    padding: "6px 12px", borderRadius: 7, border: "none", background: "#16213E", color: "#F3D9A0",
+    fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  txCancelBtn: {
+    padding: "6px 12px", borderRadius: 7, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
 };
