@@ -48,12 +48,9 @@ export default function AuthScreen({ onAuthenticated }) {
         }
         onAuthenticated();
       } else if (mode === "rejoindre") {
-        const { data: etab, error: errRecherche } = await supabase
-          .from("etablissements")
-          .select("id")
-          .eq("code_invitation", codeInvitation.trim().toUpperCase())
-          .maybeSingle();
-        if (errRecherche || !etab) {
+        const { data: etabId, error: errRecherche } = await supabase
+          .rpc("etablissement_par_code", { code: codeInvitation.trim() });
+        if (errRecherche || !etabId) {
           setErreur("Code d'invitation introuvable. Vérifiez-le auprès du propriétaire.");
           setChargement(false);
           return;
@@ -64,7 +61,7 @@ export default function AuthScreen({ onAuthenticated }) {
         if (userId) {
           const { error: errMembre } = await supabase
             .from("membres")
-            .insert({ etablissement_id: etab.id, user_id: userId, role: "gerant" });
+            .insert({ etablissement_id: etabId, user_id: userId, role: "gerant" });
           if (errMembre) throw errMembre;
         }
         onAuthenticated();

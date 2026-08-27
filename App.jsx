@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
@@ -115,6 +115,9 @@ function ComptaCiApp() {
   const [verifSession, setVerifSession] = useState(true);
   const [vue, setVue] = useState("dashboard");
   const [transactions, setTransactions] = useState([]);
+  const [produits, setProduits] = useState([]);
+  const [sessionCaisse, setSessionCaisse] = useState(null);
+  const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
   const [role, setRole] = useState(null);
   const [chargement, setChargement] = useState(true);
@@ -155,6 +158,25 @@ function ComptaCiApp() {
             .order("date", { ascending: false });
           if (errTx) throw errTx;
           setTransactions(tx || []);
+
+          const { data: prod, error: errProd } = await supabase
+            .from("produits")
+            .select("*")
+            .eq("etablissement_id", etab.id)
+            .order("designation", { ascending: true });
+          if (errProd) throw errProd;
+          setProduits(prod || []);
+
+          const { data: sessions, error: errSessions } = await supabase
+            .from("sessions_caisse")
+            .select("*")
+            .eq("etablissement_id", etab.id)
+            .order("date_ouverture", { ascending: false })
+            .limit(20);
+          if (errSessions) throw errSessions;
+          const ouverte = (sessions || []).find((s) => s.statut === "ouverte");
+          setSessionCaisse(ouverte || null);
+          setHistoriqueCaisse((sessions || []).filter((s) => s.statut === "fermee"));
         }
       } catch (e) {
         console.error("Erreur chargement données:", e);
@@ -167,9 +189,10 @@ function ComptaCiApp() {
 
   const addTransaction = async (t) => {
     if (!etablissement) return false;
+    const { designation, quantite, ...champsTransaction } = t;
     const { data, error } = await supabase
       .from("transactions")
-      .insert({ ...t, etablissement_id: etablissement.id })
+      .insert({ ...champsTransaction, etablissement_id: etablissement.id })
       .select();
     if (error) {
       console.error("Erreur insertion transaction:", error);
@@ -177,6 +200,114 @@ function ComptaCiApp() {
       return false;
     }
     setTransactions([data[0], ...transactions]);
+
+    if (designation && designation.trim() && quantite) {
+      await ajusterStock(designation.trim(), parseFloat(quantite) || 0, t.type);
+    }
+    return true;
+  };
+
+  const ajusterStock = async (designation, quantite, type) => {
+    const existant = produits.find(
+      (p) => p.designation.toLowerCase() === designation.toLowerCase()
+    );
+    const variation = type === "vente" ? -quantite : quantite;
+
+    if (existant) {
+      const nouvelleQuantite = (parseFloat(existant.quantite_stock) || 0) + variation;
+      const { data, error } = await supabase
+        .from("produits")
+        .update({ quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() })
+        .eq("id", existant.id)
+        .select();
+      if (!error && data?.[0]) {
+        setProduits(produits.map((p) => (p.id === existant.id ? data[0] : p)));
+      }
+    } else if (type === "depense") {
+      // Une dépense sur un produit inconnu : on le crée automatiquement en stock
+      const { data, error } = await supabase
+        .from("produits")
+        .insert({ etablissement_id: etablissement.id, designation, quantite_stock: quantite })
+        .select();
+      if (!error && data?.[0]) {
+        setProduits([...produits, data[0]]);
+      }
+    }
+  };
+
+  const addProduit = async (designation, quantite, prixUnitaire) => {
+    const { data, error } = await supabase
+      .from("produits")
+      .insert({
+        etablissement_id: etablissement.id,
+        designation,
+        quantite_stock: quantite,
+        prix_unitaire: prixUnitaire || null,
+      })
+      .select();
+    if (error) {
+      setErreur("Impossible d'ajouter ce produit au stock.");
+      return false;
+    }
+    setProduits([...produits, data[0]]);
+    return true;
+  };
+
+  const ajusterQuantiteManuelle = async (id, nouvelleQuantite) => {
+    const { data, error } = await supabase
+      .from("produits")
+      .update({ quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() })
+      .eq("id", id)
+      .select();
+    if (!error && data?.[0]) {
+      setProduits(produits.map((p) => (p.id === id ? data[0] : p)));
+    }
+  };
+
+  const supprimerProduit = async (id) => {
+    const { error } = await supabase.from("produits").delete().eq("id", id);
+    if (!error) setProduits(produits.filter((p) => p.id !== id));
+  };
+
+  const ouvrirCaisse = async (fondOuverture) => {
+    if (!etablissement || !session) return false;
+    const { data, error } = await supabase
+      .from("sessions_caisse")
+      .insert({
+        etablissement_id: etablissement.id,
+        ouverte_par: session.user.id,
+        fond_ouverture: fondOuverture,
+      })
+      .select()
+      .single();
+    if (error) {
+      setErreur("Impossible d'ouvrir la caisse.");
+      return false;
+    }
+    setSessionCaisse(data);
+    return true;
+  };
+
+  const fermerCaisse = async (fondFermetureReel, soldeAttendu) => {
+    if (!sessionCaisse) return false;
+    const ecart = fondFermetureReel - soldeAttendu;
+    const { data, error } = await supabase
+      .from("sessions_caisse")
+      .update({
+        fond_fermeture_reel: fondFermetureReel,
+        ecart,
+        date_fermeture: new Date().toISOString(),
+        statut: "fermee",
+      })
+      .eq("id", sessionCaisse.id)
+      .select()
+      .single();
+    if (error) {
+      setErreur("Impossible de fermer la caisse.");
+      return false;
+    }
+    setHistoriqueCaisse([data, ...historiqueCaisse]);
+    setSessionCaisse(null);
     return true;
   };
 
@@ -245,9 +376,24 @@ function ComptaCiApp() {
         {chargement ? (
           <div style={styles.loading}>Chargement…</div>
         ) : vue === "dashboard" ? (
-          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} />
+          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} />
         ) : vue === "saisie" ? (
           <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} />
+        ) : vue === "stock" ? (
+          <Stock
+            produits={produits}
+            onAdd={addProduit}
+            onAjuster={ajusterQuantiteManuelle}
+            onSupprimer={supprimerProduit}
+          />
+        ) : vue === "caisse" ? (
+          <Caisse
+            sessionCaisse={sessionCaisse}
+            historiqueCaisse={historiqueCaisse}
+            transactions={transactions}
+            onOuvrir={ouvrirCaisse}
+            onFermer={fermerCaisse}
+          />
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
         )}
@@ -261,6 +407,8 @@ function Sidebar({ vue, setVue, isMobile, onLogout }) {
   const items = [
     { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
     { id: "saisie", label: "Saisie du jour", icon: PenLine },
+    { id: "caisse", label: "Caisse", icon: Lock },
+    { id: "stock", label: "Stock", icon: Package },
     { id: "historique", label: "Historique", icon: History },
   ];
 
@@ -421,15 +569,39 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan }) {
   );
 }
 
-function Dashboard({ transactions, isMobile, secteur }) {
+function Dashboard({ transactions, isMobile, secteur, etablissement }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
+  const [copie, setCopie] = useState(false);
 
   const trend = useMemo(() => buildTrend(transactions, periode), [transactions, periode]);
   const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, secteur), [transactions, secteur]);
 
+  const copierBilan = () => {
+    const moisLabel = new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
+    const texte = [
+      `Bilan ${moisLabel} — ${etablissement?.nom || "Mon établissement"}`,
+      ``,
+      `Chiffre d'affaires : ${fmt(stats.caMois)} FCFA`,
+      `Dépenses : ${fmt(stats.depMois)} FCFA`,
+      `Résultat net : ${stats.resultatMois >= 0 ? "+" : ""}${fmt(stats.resultatMois)} FCFA`,
+      `Marge : ${stats.margeMois.toFixed(0)}%`,
+      `TVA à provisionner (estimation) : ${fmt(stats.tvaMois)} FCFA`,
+      ``,
+      `Généré via ComptaCi`,
+    ].join("\n");
+    navigator.clipboard?.writeText(texte);
+    setCopie(true);
+    setTimeout(() => setCopie(false), 2000);
+  };
+
   return (
     <div style={styles.page}>
+      <div style={styles.dashboardHeader}>
+        <button onClick={copierBilan} style={styles.copyBtn}>
+          <Copy size={14} /> {copie ? "Bilan copié !" : "Copier le bilan mensuel"}
+        </button>
+      </div>
       <div className="kpi-row">
         <KpiCard
           label="Chiffre d'affaires"
@@ -581,6 +753,8 @@ function Saisie({ onAdd, secteur }) {
       categorie: type === "depense" ? categorie : "vente",
       note: [designation.trim(), `Qté: ${quantite || 0}`, `PU: ${fmt(parseFloat(prixUnitaire) || 0)} FCFA`].filter(Boolean).join(" — "),
       date,
+      designation: designation.trim(),
+      quantite,
     });
     setEnCours(false);
     if (succes) {
@@ -691,6 +865,270 @@ function Saisie({ onAdd, secteur }) {
           {confirme && <div style={styles.confirmMsg}>Mouvement enregistré.</div>}
           {erreurLocale && <div style={styles.erreurLocale}>{erreurLocale}</div>}
         </div>
+      </div>
+    </div>
+  );
+}
+
+function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer }) {
+  const [fondOuverture, setFondOuverture] = useState("");
+  const [fondCompte, setFondCompte] = useState("");
+  const [modeFermeture, setModeFermeture] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  const mouvementsDepuisOuverture = sessionCaisse
+    ? transactions.filter((t) => new Date(t.date + "T00:00:00") >= new Date(new Date(sessionCaisse.date_ouverture).toDateString()))
+    : [];
+  const ventesSession = mouvementsDepuisOuverture.filter((t) => t.type === "vente").reduce((a, t) => a + t.montant, 0);
+  const depensesSession = mouvementsDepuisOuverture.filter((t) => t.type === "depense").reduce((a, t) => a + t.montant, 0);
+  const soldeAttendu = sessionCaisse ? (parseFloat(sessionCaisse.fond_ouverture) || 0) + ventesSession - depensesSession : 0;
+
+  const ouvrir = async () => {
+    if (!fondOuverture) return;
+    setEnCours(true);
+    await onOuvrir(parseFloat(fondOuverture) || 0);
+    setEnCours(false);
+    setFondOuverture("");
+  };
+
+  const fermer = async () => {
+    if (!fondCompte) return;
+    setEnCours(true);
+    const succes = await onFermer(parseFloat(fondCompte) || 0, soldeAttendu);
+    setEnCours(false);
+    if (succes) {
+      setFondCompte("");
+      setModeFermeture(false);
+    }
+  };
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>Caisse</div>
+            <div style={styles.cardCaption}>
+              {sessionCaisse ? "Caisse actuellement ouverte" : "Aucune session de caisse en cours"}
+            </div>
+          </div>
+        </div>
+
+        {!sessionCaisse ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 360 }}>
+            <label style={styles.field}>
+              <span style={styles.fieldLabel}>Fond de caisse de départ (FCFA)</span>
+              <input
+                type="number"
+                inputMode="numeric"
+                min="0"
+                placeholder="0"
+                value={fondOuverture}
+                onChange={(e) => setFondOuverture(e.target.value)}
+                style={styles.inputBig}
+              />
+            </label>
+            <button onClick={ouvrir} disabled={enCours} style={styles.submitBtn}>
+              <Unlock size={16} /> {enCours ? "Ouverture…" : "Ouvrir la caisse"}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div style={styles.caisseSummary}>
+              <div style={styles.caisseSummaryRow}>
+                <span>Fond de départ</span>
+                <strong>{fmt(sessionCaisse.fond_ouverture)} FCFA</strong>
+              </div>
+              <div style={styles.caisseSummaryRow}>
+                <span>+ Ventes depuis l'ouverture</span>
+                <strong style={{ color: "#186B4E" }}>{fmt(ventesSession)} FCFA</strong>
+              </div>
+              <div style={styles.caisseSummaryRow}>
+                <span>− Dépenses depuis l'ouverture</span>
+                <strong style={{ color: "#B4432A" }}>{fmt(depensesSession)} FCFA</strong>
+              </div>
+              <div style={{ ...styles.caisseSummaryRow, ...styles.caisseSummaryTotal }}>
+                <span>Solde attendu en caisse</span>
+                <strong>{fmt(soldeAttendu)} FCFA</strong>
+              </div>
+            </div>
+
+            {!modeFermeture ? (
+              <button onClick={() => setModeFermeture(true)} style={{ ...styles.submitBtn, marginTop: 16 }}>
+                <Lock size={16} /> Fermer la caisse
+              </button>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16, maxWidth: 360 }}>
+                <label style={styles.field}>
+                  <span style={styles.fieldLabel}>Montant réellement compté en caisse (FCFA)</span>
+                  <input
+                    type="number"
+                    inputMode="numeric"
+                    min="0"
+                    placeholder="0"
+                    value={fondCompte}
+                    onChange={(e) => setFondCompte(e.target.value)}
+                    style={styles.inputBig}
+                  />
+                </label>
+                {fondCompte && (
+                  <div
+                    style={{
+                      ...styles.ecartBox,
+                      ...((parseFloat(fondCompte) - soldeAttendu) === 0
+                        ? styles.ecartOk
+                        : (parseFloat(fondCompte) - soldeAttendu) > 0
+                        ? styles.ecartPositif
+                        : styles.ecartNegatif),
+                    }}
+                  >
+                    Écart : {(parseFloat(fondCompte) - soldeAttendu) >= 0 ? "+" : ""}
+                    {fmt(parseFloat(fondCompte) - soldeAttendu)} FCFA
+                  </div>
+                )}
+                <button onClick={fermer} disabled={enCours} style={styles.submitBtn}>
+                  {enCours ? "Fermeture…" : "Confirmer la fermeture"}
+                </button>
+              </div>
+            )}
+          </>
+        )}
+      </div>
+
+      {historiqueCaisse.length > 0 && (
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <div style={styles.cardTitle}>Historique des clôtures</div>
+              <div style={styles.cardCaption}>{historiqueCaisse.length} session{historiqueCaisse.length > 1 ? "s" : ""} fermée{historiqueCaisse.length > 1 ? "s" : ""}</div>
+            </div>
+          </div>
+          <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
+            {historiqueCaisse.map((s) => (
+              <div key={s.id} style={styles.txRow}>
+                <div style={styles.txInfo}>
+                  <div style={styles.txLabel}>
+                    {new Date(s.date_ouverture).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
+                  </div>
+                  <div style={styles.txNote}>Fond départ : {fmt(s.fond_ouverture)} FCFA · Compté : {fmt(s.fond_fermeture_reel)} FCFA</div>
+                </div>
+                <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "#186B4E" : Math.abs(s.ecart) > 0 ? "#B4432A" : "#16213E" }}>
+                  {s.ecart >= 0 ? "+" : ""}{fmt(s.ecart)}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Stock({ produits, onAdd, onAjuster, onSupprimer }) {
+  const [designation, setDesignation] = useState("");
+  const [quantite, setQuantite] = useState("");
+  const [prixUnitaire, setPrixUnitaire] = useState("");
+  const [ouvert, setOuvert] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  const submit = async () => {
+    if (!designation.trim() || !quantite) return;
+    setEnCours(true);
+    const succes = await onAdd(designation.trim(), parseFloat(quantite) || 0, parseFloat(prixUnitaire) || null);
+    setEnCours(false);
+    if (succes) {
+      setDesignation("");
+      setQuantite("");
+      setPrixUnitaire("");
+      setOuvert(false);
+    }
+  };
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>Stock</div>
+            <div style={styles.cardCaption}>
+              {produits.length} produit{produits.length > 1 ? "s" : ""} suivi{produits.length > 1 ? "s" : ""} — se
+              met à jour automatiquement avec vos ventes et dépenses
+            </div>
+          </div>
+          <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
+            {ouvert ? "Annuler" : "+ Ajouter un produit"}
+          </button>
+        </div>
+
+        {ouvert && (
+          <div style={styles.stockForm}>
+            <input
+              type="text"
+              placeholder="Désignation (ex : Riz KC 50 kg)"
+              value={designation}
+              onChange={(e) => setDesignation(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 200px" }}
+            />
+            <input
+              type="number"
+              placeholder="Quantité en stock"
+              value={quantite}
+              onChange={(e) => setQuantite(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 130px" }}
+            />
+            <input
+              type="number"
+              placeholder="Prix unitaire (facultatif)"
+              value={prixUnitaire}
+              onChange={(e) => setPrixUnitaire(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 150px" }}
+            />
+            <button onClick={submit} disabled={enCours} style={{ ...styles.submitBtn, flex: "1 1 100%" }}>
+              {enCours ? "Ajout…" : "Ajouter au stock"}
+            </button>
+          </div>
+        )}
+
+        {produits.length === 0 ? (
+          <div style={styles.emptyState}>
+            <div style={styles.emptyTitle}>Aucun produit suivi</div>
+            <div style={styles.emptyText}>
+              Ajoutez vos produits ici pour suivre leur stock automatiquement à chaque vente ou dépense portant
+              le même nom.
+            </div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {produits.map((p) => (
+              <div key={p.id} style={styles.stockRow}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={styles.stockLabel}>{p.designation}</div>
+                  {p.prix_unitaire && (
+                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} FCFA / unité</div>
+                  )}
+                </div>
+                <button
+                  onClick={() => onAjuster(p.id, (parseFloat(p.quantite_stock) || 0) - 1)}
+                  style={styles.stockAdjustBtn}
+                >
+                  <Minus size={13} />
+                </button>
+                <div style={{ ...styles.stockQty, ...(p.quantite_stock <= 0 ? styles.stockQtyLow : {}) }}>
+                  {fmt(p.quantite_stock)}
+                </div>
+                <button
+                  onClick={() => onAjuster(p.id, (parseFloat(p.quantite_stock) || 0) + 1)}
+                  style={styles.stockAdjustBtn}
+                >
+                  <Plus size={13} />
+                </button>
+                <button onClick={() => onSupprimer(p.id)} style={styles.txDelete} aria-label="Supprimer">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );
@@ -978,6 +1416,36 @@ const styles = {
   upgradeNotice: {
     fontSize: 12, color: "#B4801F", background: "#FBF3E2", padding: "10px 12px",
     borderRadius: 9, marginBottom: 16,
+  },
+  stockForm: {
+    display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18,
+    padding: 14, background: "#FBF9F4", borderRadius: 10,
+  },
+  stockRow: {
+    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9, background: "#FBF9F4",
+  },
+  stockLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
+  stockSub: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
+  stockAdjustBtn: {
+    width: 26, height: 26, borderRadius: 7, border: "1px solid #E4DDD0", background: "#FFFEFB",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#16213E",
+  },
+  stockQty: {
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
+  },
+  stockQtyLow: { color: "#B4432A" },
+  caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "#FBF9F4", borderRadius: 10, padding: 16, maxWidth: 360 },
+  caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "#5C5748" },
+  caisseSummaryTotal: { borderTop: "1px solid #EDE7DA", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "#16213E" },
+  ecartBox: { padding: "10px 14px", borderRadius: 9, fontSize: 13.5, fontWeight: 600, textAlign: "center" },
+  ecartOk: { background: "#E4F2EC", color: "#186B4E" },
+  ecartPositif: { background: "#FBF3E2", color: "#B4801F" },
+  ecartNegatif: { background: "#FBEBE4", color: "#B4432A" },
+  dashboardHeader: { display: "flex", justifyContent: "flex-end" },
+  copyBtn: {
+    display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9,
+    border: "1px solid #E4DDD0", background: "#FFFEFB", fontSize: 12.5, fontWeight: 600,
+    color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   toggleRow: { display: "flex", gap: 8 },
   toggleBtn: {
