@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
@@ -129,6 +129,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const [vue, setVue] = useState("dashboard");
   const [transactions, setTransactions] = useState([]);
   const [produits, setProduits] = useState([]);
+  const [fournisseurs, setFournisseurs] = useState([]);
   const [sessionCaisse, setSessionCaisse] = useState(null);
   const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
@@ -207,6 +208,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
             .order("designation", { ascending: true });
           if (errProd) throw errProd;
           setProduits(prod || []);
+
+          const { data: fours, error: errFours } = await supabase
+            .from("fournisseurs")
+            .select("*")
+            .eq("etablissement_id", etab.id)
+            .order("nom", { ascending: true });
+          if (errFours) throw errFours;
+          setFournisseurs(fours || []);
 
           const { data: sessions, error: errSessions } = await supabase
             .from("sessions_caisse")
@@ -340,6 +349,24 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const supprimerProduit = async (id) => {
     const { error } = await supabase.from("produits").delete().eq("id", id);
     if (!error) setProduits(produits.filter((p) => p.id !== id));
+  };
+
+  const ajouterFournisseur = async (nom, telephone, note) => {
+    const { data, error } = await supabase
+      .from("fournisseurs")
+      .insert({ etablissement_id: etablissement.id, nom, telephone, note: note || null })
+      .select();
+    if (error) {
+      setErreur("Impossible d'ajouter ce fournisseur.");
+      return false;
+    }
+    setFournisseurs([...fournisseurs, data[0]].sort((a, b) => a.nom.localeCompare(b.nom)));
+    return true;
+  };
+
+  const supprimerFournisseur = async (id) => {
+    const { error } = await supabase.from("fournisseurs").delete().eq("id", id);
+    if (!error) setFournisseurs(fournisseurs.filter((f) => f.id !== id));
   };
 
   const ouvrirCaisse = async (fondOuverture) => {
@@ -489,6 +516,13 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onFermer={fermerCaisse}
             t={t}
           />
+        ) : vue === "fournisseurs" ? (
+          <Fournisseurs
+            fournisseurs={fournisseurs}
+            onAdd={ajouterFournisseur}
+            onSupprimer={supprimerFournisseur}
+            t={t}
+          />
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} t={t} />
         )}
@@ -510,6 +544,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
     { id: "caisse", label: t("nav_caisse"), icon: Lock },
     { id: "stock", label: t("nav_stock"), icon: Package },
     { id: "historique", label: t("nav_historique"), icon: History },
+    { id: "fournisseurs", label: t("nav_fournisseurs"), icon: Phone },
   ];
 
   if (isMobile) {
@@ -1357,6 +1392,107 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
   );
 }
 
+function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
+  const [nom, setNom] = useState("");
+  const [telephone, setTelephone] = useState("");
+  const [note, setNote] = useState("");
+  const [ouvert, setOuvert] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+
+  const submit = async () => {
+    if (!nom.trim() || !telephone.trim()) return;
+    setEnCours(true);
+    const succes = await onAdd(nom.trim(), telephone.trim(), note.trim());
+    setEnCours(false);
+    if (succes) {
+      setNom("");
+      setTelephone("");
+      setNote("");
+      setOuvert(false);
+    }
+  };
+
+  const telephoneNettoye = (tel) => tel.replace(/\s|\+/g, "");
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("four_titre")}</div>
+            <div style={styles.cardCaption}>{t("four_sous")}</div>
+          </div>
+          <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
+            {ouvert ? t("stock_annuler") : t("four_ajouter")}
+          </button>
+        </div>
+
+        {ouvert && (
+          <div style={styles.stockForm}>
+            <input
+              type="text"
+              placeholder={t("four_nom_placeholder")}
+              value={nom}
+              onChange={(e) => setNom(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 200px" }}
+            />
+            <input
+              type="tel"
+              placeholder={t("four_telephone_placeholder")}
+              value={telephone}
+              onChange={(e) => setTelephone(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 160px" }}
+            />
+            <input
+              type="text"
+              placeholder={t("four_note_placeholder")}
+              value={note}
+              onChange={(e) => setNote(e.target.value)}
+              style={{ ...styles.input, flex: "1 1 160px" }}
+            />
+            <button onClick={submit} disabled={enCours} style={{ ...styles.submitBtn, flex: "1 1 100%" }}>
+              {t("four_ajout_btn")}
+            </button>
+          </div>
+        )}
+
+        {fournisseurs.length === 0 ? (
+          <div style={styles.emptyState}>
+            <div style={styles.emptyTitle}>{t("four_vide_titre")}</div>
+            <div style={styles.emptyText}>{t("four_vide_texte")}</div>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+            {fournisseurs.map((f) => (
+              <div key={f.id} style={styles.stockRow}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={styles.stockLabel}>{f.nom}</div>
+                  <div style={styles.stockSub}>{f.telephone}{f.note ? ` · ${f.note}` : ""}</div>
+                </div>
+                <a href={`tel:${telephoneNettoye(f.telephone)}`} style={styles.fourActionBtn} title={t("four_appeler")}>
+                  <Phone size={14} />
+                </a>
+                <a
+                  href={`https://wa.me/225${telephoneNettoye(f.telephone)}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  style={styles.fourActionBtn}
+                  title={t("four_whatsapp")}
+                >
+                  <MessageCircle size={14} />
+                </a>
+                <button onClick={() => onSupprimer(f.id)} style={styles.txDelete} aria-label="Supprimer">
+                  <Trash2 size={14} />
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   const categories = categoriesDuSecteur(secteur);
   const limite30j = plan !== "pro";
@@ -1718,6 +1854,11 @@ const styles = {
   stockAdjustBtn: {
     width: 26, height: 26, borderRadius: 7, border: "1px solid #E4DDD0", background: "#FFFEFB",
     display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#16213E",
+  },
+  fourActionBtn: {
+    width: 30, height: 30, borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#186B4E",
+    textDecoration: "none", flexShrink: 0,
   },
   stockQty: {
     fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",

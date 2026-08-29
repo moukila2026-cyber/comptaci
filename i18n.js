@@ -14,6 +14,7 @@ const dict = {
     nav_caisse: "Caisse",
     nav_stock: "Stock",
     nav_historique: "Historique",
+    nav_fournisseurs: "Fournisseurs",
     nav_logout: "Déconnexion",
     nav_gerant: "Gérant",
     nav_invite_gerant: "Inviter un gérant",
@@ -177,6 +178,19 @@ const dict = {
     // Générique
     chargement: "Chargement…",
     config_manquante_titre: "Configuration Supabase invalide",
+
+    // Fournisseurs
+    four_titre: "Fournisseurs",
+    four_sous: "vos contacts pour les commandes et livraisons",
+    four_ajouter: "+ Ajouter un fournisseur",
+    four_nom_placeholder: "Nom du fournisseur",
+    four_telephone_placeholder: "Numéro de téléphone",
+    four_note_placeholder: "Note (facultatif)",
+    four_ajout_btn: "Ajouter",
+    four_vide_titre: "Aucun fournisseur enregistré",
+    four_vide_texte: "Ajoutez vos fournisseurs pour retrouver rapidement leurs coordonnées.",
+    four_appeler: "Appeler",
+    four_whatsapp: "WhatsApp",
   },
 
   en: {
@@ -185,6 +199,7 @@ const dict = {
     nav_caisse: "Cash register",
     nav_stock: "Stock",
     nav_historique: "History",
+    nav_fournisseurs: "Suppliers",
     nav_logout: "Log out",
     nav_gerant: "Manager",
     nav_invite_gerant: "Invite a manager",
@@ -338,6 +353,19 @@ const dict = {
 
     chargement: "Loading…",
     config_manquante_titre: "Invalid Supabase configuration",
+
+    // Suppliers
+    four_titre: "Suppliers",
+    four_sous: "your contacts for orders and deliveries",
+    four_ajouter: "+ Add a supplier",
+    four_nom_placeholder: "Supplier name",
+    four_telephone_placeholder: "Phone number",
+    four_note_placeholder: "Note (optional)",
+    four_ajout_btn: "Add",
+    four_vide_titre: "No suppliers saved",
+    four_vide_texte: "Add your suppliers to quickly find their contact details.",
+    four_appeler: "Call",
+    four_whatsapp: "WhatsApp",
   },
 
   ar: {
@@ -346,6 +374,7 @@ const dict = {
     nav_caisse: "الصندوق",
     nav_stock: "المخزون",
     nav_historique: "السجل",
+    nav_fournisseurs: "الموردون",
     nav_logout: "تسجيل الخروج",
     nav_gerant: "مدير",
     nav_invite_gerant: "دعوة مدير",
@@ -499,6 +528,19 @@ const dict = {
 
     chargement: "جارٍ التحميل…",
     config_manquante_titre: "إعدادات Supabase غير صالحة",
+
+    // الموردون
+    four_titre: "الموردون",
+    four_sous: "جهات اتصالك للطلبات والتوصيل",
+    four_ajouter: "+ إضافة مورد",
+    four_nom_placeholder: "اسم المورد",
+    four_telephone_placeholder: "رقم الهاتف",
+    four_note_placeholder: "ملاحظة (اختياري)",
+    four_ajout_btn: "إضافة",
+    four_vide_titre: "لا يوجد موردون مسجلون",
+    four_vide_texte: "أضف مورديك للعثور بسرعة على بياناتهم.",
+    four_appeler: "اتصال",
+    four_whatsapp: "واتساب",
   },
 };
 
