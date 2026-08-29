@@ -32,6 +32,10 @@
   nav a.muted { color: var(--muted); }
   .btn { display: inline-flex; align-items: center; gap: 6px; padding: 10px 18px; border-radius: 9px; font-size: 14px; font-weight: 600; cursor: pointer; border: none; }
   .btn-primary { background: var(--ink); color: #F3D9A0; }
+  .lang-select {
+    padding: 6px 10px; border-radius: 8px; border: 1px solid var(--line); background: var(--paper2);
+    font-size: 12.5px; color: var(--ink); font-family: 'Inter', sans-serif; cursor: pointer; outline: none;
+  }
   .btn-ghost { background: transparent; border: 1px solid var(--line); color: var(--ink); }
 
   .hero { padding: 72px 0 56px; }
@@ -146,23 +150,28 @@
       ComptaCi
     </div>
     <nav>
-      <a class="muted" href="#comment-ca-marche">Fonctionnalités</a>
-      <a class="muted" href="#tarifs">Tarifs</a>
-      <a class="muted" href="#faq">FAQ</a>
-      <a class="btn btn-ghost" href="/app.html">Se connecter</a>
-      <a class="btn btn-primary" href="#tarifs">Essayer</a>
+      <a class="muted" href="#comment-ca-marche" data-i18n="nav_fonctionnalites">Fonctionnalités</a>
+      <a class="muted" href="#tarifs" data-i18n="nav_tarifs">Tarifs</a>
+      <a class="muted" href="#faq" data-i18n="nav_faq">FAQ</a>
+      <select id="lang-select" class="lang-select">
+        <option value="fr">Français</option>
+        <option value="en">English</option>
+        <option value="ar">العربية</option>
+      </select>
+      <a class="btn btn-ghost" href="/app.html" data-i18n="nav_connexion">Se connecter</a>
+      <a class="btn btn-primary" href="#tarifs" data-i18n="nav_essayer">Essayer</a>
     </nav>
   </header>
 </div>
 
 <div class="wrap">
   <section class="hero">
-    <span class="eyebrow">Pilotage financier simplifié</span>
-    <h1>Votre caisse. <span class="accent">Votre résultat.</span> En un coup d'œil.</h1>
-    <p class="lead">Enregistrez vos ventes et dépenses en quelques secondes. ComptaCi calcule votre résultat net, votre marge et votre TVA à provisionner — automatiquement.</p>
+    <span class="eyebrow" data-i18n="hero_eyebrow">Pilotage financier simplifié</span>
+    <h1 data-i18n-html="hero_titre">Votre caisse. <span class="accent">Votre résultat.</span> En un coup d'œil.</h1>
+    <p class="lead" data-i18n="hero_texte">Enregistrez vos ventes et dépenses en quelques secondes. ComptaCi calcule votre résultat net, votre marge et votre TVA à provisionner — automatiquement.</p>
     <div class="hero-cta">
-      <a class="btn btn-primary" href="#tarifs">Commencer maintenant</a>
-      <a class="btn btn-ghost" href="#comment-ca-marche">Voir comment ça marche</a>
+      <a class="btn btn-primary" href="#tarifs" data-i18n="hero_cta1">Commencer maintenant</a>
+      <a class="btn btn-ghost" href="#comment-ca-marche" data-i18n="hero_cta2">Voir comment ça marche</a>
     </div>
 
     <div class="mock">
@@ -179,21 +188,21 @@
 
 <div class="wrap" id="comment-ca-marche">
   <section>
-    <div class="kicker">Comment ça marche</div>
-    <h2 class="section-title">De la caisse au bilan, en quatre étapes</h2>
+    <div class="kicker" data-i18n="s_comment_kicker">Comment ça marche</div>
+    <h2 class="section-title" data-i18n="s_comment_titre">De la caisse au bilan, en quatre étapes</h2>
     <div class="steps">
-      <div class="step"><div class="num">01</div><h3>Saisissez</h3><p>Chaque vente et chaque dépense du jour, en quelques secondes depuis un téléphone.</p></div>
-      <div class="step"><div class="num">02</div><h3>Catégorisez</h3><p>Boissons, nourriture, personnel, charges fixes — ComptaCi range tout automatiquement.</p></div>
-      <div class="step"><div class="num">03</div><h3>Visualisez</h3><p>Tableau de bord clair : recettes, dépenses, marge, évolution mois par mois.</p></div>
-      <div class="step"><div class="num">04</div><h3>Décidez</h3><p>Voyez immédiatement si votre établissement est rentable, et où part l'argent.</p></div>
+      <div class="step"><div class="num">01</div><h3 data-i18n="step1_h">Saisissez</h3><p data-i18n="step1_p">Chaque vente et chaque dépense du jour, en quelques secondes depuis un téléphone.</p></div>
+      <div class="step"><div class="num">02</div><h3 data-i18n="step2_h">Catégorisez</h3><p data-i18n="step2_p">Boissons, nourriture, personnel, charges fixes — ComptaCi range tout automatiquement.</p></div>
+      <div class="step"><div class="num">03</div><h3 data-i18n="step3_h">Visualisez</h3><p data-i18n="step3_p">Tableau de bord clair : recettes, dépenses, marge, évolution mois par mois.</p></div>
+      <div class="step"><div class="num">04</div><h3 data-i18n="step4_h">Décidez</h3><p data-i18n="step4_p">Voyez immédiatement si votre établissement est rentable, et où part l'argent.</p></div>
     </div>
   </section>
 </div>
 
 <div class="wrap">
   <section>
-    <div class="kicker">Conçu pour vous</div>
-    <h2 class="section-title">Pensé pour les maquis, bars, restaurants et hôtels</h2>
+    <div class="kicker" data-i18n="s_concu_kicker">Conçu pour vous</div>
+    <h2 class="section-title" data-i18n="s_concu_titre">Pensé pour les maquis, bars, restaurants et hôtels</h2>
     <div class="features">
       <div class="feature"><h3>Montants en FCFA</h3><p>Aucune conversion, aucune confusion. Tous les chiffres dans votre devise.</p></div>
       <div class="feature"><h3>Paiement Mobile Money</h3><p>Réglez votre abonnement par Wave, simplement, sans compte bancaire.</p></div>
@@ -207,8 +216,8 @@
 
 <div class="wrap">
   <section>
-    <div class="kicker">Témoignages</div>
-    <h2 class="section-title">Ils suivent déjà leur activité avec ComptaCi</h2>
+    <div class="kicker" data-i18n="s_temoin_kicker">Témoignages</div>
+    <h2 class="section-title" data-i18n="s_temoin_titre">Ils suivent déjà leur activité avec ComptaCi</h2>
     <div class="testimonials">
       <div class="testi">
         <p>"Avant je notais tout sur un cahier. Maintenant je sais en temps réel si le mois est bon ou pas."</p>
@@ -229,8 +238,8 @@
 <div class="wrap" id="fondateurs">
   <section>
     <div class="fondateur-card">
-      <div class="fondateur-eyebrow">Offre limitée</div>
-      <h2 class="fondateur-title">Offre Fondateurs — 100 premiers établissements seulement</h2>
+      <div class="fondateur-eyebrow" data-i18n="f_eyebrow">Offre limitée</div>
+      <h2 class="fondateur-title" data-i18n="f_titre">Offre Fondateurs — 100 premiers établissements seulement</h2>
       <p class="fondateur-slots" id="fondateur-slots">Places restantes : —</p>
       <ul class="fondateur-list">
         <li>Installation et configuration de votre compte</li>
@@ -239,91 +248,91 @@
         <li>7 jours d'essai gratuit (au lieu de 3)</li>
         <li>Abonnement ComptaCi inclus</li>
       </ul>
-      <div class="fondateur-highlight">★ Tarif fondateur garanti — à vie, même si nos prix augmentent plus tard</div>
-      <a class="btn btn-primary" href="/app.html" style="margin-top:18px">Devenir établissement fondateur</a>
+      <div class="fondateur-highlight" data-i18n="f_highlight">★ Tarif fondateur garanti — à vie, même si nos prix augmentent plus tard</div>
+      <a class="btn btn-primary" href="/app.html" style="margin-top:18px" data-i18n="f_cta">Devenir établissement fondateur</a>
     </div>
   </section>
 </div>
 
 <div class="wrap" id="tarifs">
   <section>
-    <div class="kicker" style="text-align:center">Tarifs</div>
-    <h2 class="section-title" style="text-align:center;margin:0 auto;max-width:480px">Une formule pour chaque étape de votre activité</h2>
+    <div class="kicker" style="text-align:center" data-i18n="p_kicker">Tarifs</div>
+    <h2 class="section-title" style="text-align:center;margin:0 auto;max-width:480px" data-i18n="p_titre">Une formule pour chaque étape de votre activité</h2>
     <div class="pricing-wrap">
 
       <div class="price-card">
-        <div class="plan-name">Gratuit</div>
+        <div class="plan-name" data-i18n="plan_gratuit">Gratuit</div>
         <div class="amount">0 FCFA</div>
-        <div class="per">essai de 3 jours</div>
+        <div class="per" data-i18n="plan_gratuit_per">essai de 3 jours</div>
         <ul class="price-list">
-          <li>Accès complet pendant 3 jours</li>
-          <li>Saisie des ventes et dépenses</li>
-          <li>Tableau de bord et graphiques</li>
-          <li class="disabled">Accès coupé après 3 jours</li>
+          <li data-i18n="plan_gratuit_1">Accès complet pendant 3 jours</li>
+          <li data-i18n="plan_gratuit_2">Saisie des ventes et dépenses</li>
+          <li data-i18n="plan_gratuit_3">Tableau de bord et graphiques</li>
+          <li class="disabled" data-i18n="plan_gratuit_4">Accès coupé après 3 jours</li>
         </ul>
-        <a class="btn" href="/app.html">Essayer gratuitement</a>
+        <a class="btn" href="/app.html" data-i18n="plan_essayer">Essayer gratuitement</a>
       </div>
 
       <div class="price-card featured">
-        <div class="badge-populaire">Le plus choisi</div>
+        <div class="badge-populaire" data-i18n="plan_populaire">Le plus choisi</div>
         <div class="plan-name">Starter</div>
         <div class="amount">7 000 FCFA</div>
-        <div class="per">par mois, par établissement</div>
+        <div class="per" data-i18n="plan_par_mois">par mois, par établissement</div>
         <ul class="price-list">
-          <li>1 établissement</li>
-          <li>Saisie illimitée des ventes et dépenses</li>
-          <li>Tableau de bord et graphiques</li>
-          <li>Historique des 30 derniers jours</li>
-          <li>Estimation TVA automatique</li>
-          <li class="disabled">Pas d'invitation de gérant</li>
+          <li data-i18n="plan_1etab">1 établissement</li>
+          <li data-i18n="plan_saisie_illim">Saisie illimitée des ventes et dépenses</li>
+          <li data-i18n="plan_dashboard">Tableau de bord et graphiques</li>
+          <li data-i18n="plan_hist30">Historique des 30 derniers jours</li>
+          <li data-i18n="plan_tva">Estimation TVA automatique</li>
+          <li class="disabled" data-i18n="plan_pas_gerant">Pas d'invitation de gérant</li>
         </ul>
-        <a class="btn" href="/app.html">Commencer</a>
+        <a class="btn" href="/app.html" data-i18n="plan_commencer">Commencer</a>
       </div>
 
       <div class="price-card">
         <div class="plan-name">Pro</div>
         <div class="amount">10 000 FCFA</div>
-        <div class="per">par mois, par établissement</div>
+        <div class="per" data-i18n="plan_par_mois">par mois, par établissement</div>
         <ul class="price-list">
-          <li>1 établissement</li>
-          <li>Saisie illimitée des ventes et dépenses</li>
-          <li>Tableau de bord et graphiques</li>
-          <li>Historique complet, sans limite</li>
-          <li>Estimation TVA automatique</li>
-          <li>Invitation de gérant illimitée</li>
+          <li data-i18n="plan_1etab">1 établissement</li>
+          <li data-i18n="plan_saisie_illim">Saisie illimitée des ventes et dépenses</li>
+          <li data-i18n="plan_dashboard">Tableau de bord et graphiques</li>
+          <li data-i18n="plan_histcomplet">Historique complet, sans limite</li>
+          <li data-i18n="plan_tva">Estimation TVA automatique</li>
+          <li data-i18n="plan_gerant_illim">Invitation de gérant illimitée</li>
         </ul>
-        <a class="btn" href="/app.html">Commencer</a>
+        <a class="btn" href="/app.html" data-i18n="plan_commencer">Commencer</a>
       </div>
 
     </div>
-    <div class="price-note">Sans engagement · Paiement mensuel par Mobile Money</div>
+    <div class="price-note" data-i18n="p_note">Sans engagement · Paiement mensuel par Mobile Money</div>
   </section>
 </div>
 
 <div class="wrap" id="faq">
   <section>
-    <div class="kicker">FAQ</div>
-    <h2 class="section-title">Questions fréquentes</h2>
+    <div class="kicker" data-i18n="faq_kicker">FAQ</div>
+    <h2 class="section-title" data-i18n="faq_titre">Questions fréquentes</h2>
     <div style="margin-top:24px">
-      <div class="faq-item"><h3>Dois-je connaître la comptabilité pour utiliser ComptaCi ?</h3><p>Non. Vous saisissez simplement vos ventes et dépenses du jour ; ComptaCi calcule le reste.</p></div>
-      <div class="faq-item"><h3>Comment fonctionne le paiement ?</h3><p>Le règlement mensuel se fait par Wave, directement depuis votre téléphone.</p></div>
-      <div class="faq-item"><h3>Puis-je gérer plusieurs établissements ?</h3><p>Oui, chaque établissement dispose de son propre espace, accessible depuis un seul compte.</p></div>
-      <div class="faq-item"><h3>Les chiffres de TVA sont-ils valables pour une déclaration officielle ?</h3><p>Non, ComptaCi est un outil de pilotage interne. Pour une déclaration fiscale, rapprochez-vous d'un comptable agréé.</p></div>
+      <div class="faq-item"><h3 data-i18n="faq1_h">Dois-je connaître la comptabilité pour utiliser ComptaCi ?</h3><p data-i18n="faq1_p">Non. Vous saisissez simplement vos ventes et dépenses du jour ; ComptaCi calcule le reste.</p></div>
+      <div class="faq-item"><h3 data-i18n="faq2_h">Comment fonctionne le paiement ?</h3><p data-i18n="faq2_p">Le règlement mensuel se fait par Wave, directement depuis votre téléphone.</p></div>
+      <div class="faq-item"><h3 data-i18n="faq3_h">Puis-je gérer plusieurs établissements ?</h3><p data-i18n="faq3_p">Oui, chaque établissement dispose de son propre espace, accessible depuis un seul compte.</p></div>
+      <div class="faq-item"><h3 data-i18n="faq4_h">Les chiffres de TVA sont-ils valables pour une déclaration officielle ?</h3><p data-i18n="faq4_p">Non, ComptaCi est un outil de pilotage interne. Pour une déclaration fiscale, rapprochez-vous d'un comptable agréé.</p></div>
     </div>
   </section>
 </div>
 
 <div class="wrap">
   <section class="cta-final">
-    <h2>Prêt à voir clair sur votre rentabilité ?</h2>
-    <p>Rejoignez les gérants qui pilotent leur établissement au quotidien avec ComptaCi.</p>
-    <a class="btn btn-primary" href="#tarifs">Créer mon compte</a>
+    <h2 data-i18n="cta_titre">Prêt à voir clair sur votre rentabilité ?</h2>
+    <p data-i18n="cta_texte">Rejoignez les gérants qui pilotent leur établissement au quotidien avec ComptaCi.</p>
+    <a class="btn btn-primary" href="#tarifs" data-i18n="cta_btn">Créer mon compte</a>
   </section>
 </div>
 
 <footer>
   <div class="wrap">
-    © 2026 ComptaCi — Pilotage financier pour restaurants, bars, maquis et hôtels en Côte d'Ivoire.<br>
+    <span data-i18n="footer_texte">© 2026 ComptaCi — Pilotage financier pour restaurants, bars, maquis et hôtels en Côte d'Ivoire.</span><br>
     <span style="opacity:0.7">SHOPIN30 · 05 01 30 33 43</span>
   </div>
 </footer>

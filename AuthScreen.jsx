@@ -1,7 +1,10 @@
 import React, { useState } from "react";
 import { supabase, telephoneVersEmail } from "./supabaseClient.js";
+import LanguageSelector from "./LanguageSelector.jsx";
 
-export default function AuthScreen({ onAuthenticated }) {
+const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
+
+export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [mode, setMode] = useState("connexion"); // connexion | inscription | rejoindre
   const [telephone, setTelephone] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
@@ -11,19 +14,32 @@ export default function AuthScreen({ onAuthenticated }) {
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
 
+  const traduireErreur = (msg) => {
+    if (msg.includes("already registered") || msg.includes("already exists")) {
+      return t("auth_erreur_deja_utilise");
+    }
+    if (msg.includes("Invalid login")) {
+      return t("auth_erreur_login");
+    }
+    if (msg.includes("Password should be")) {
+      return t("auth_erreur_mdp");
+    }
+    return t("auth_erreur_generique");
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setErreur("");
     if (!telephone || !motDePasse) {
-      setErreur("Merci de remplir tous les champs.");
+      setErreur(t("auth_champs_requis"));
       return;
     }
     if (mode === "inscription" && !nomEtablissement) {
-      setErreur("Merci d'indiquer le nom de l'établissement.");
+      setErreur(t("auth_nom_requis"));
       return;
     }
     if (mode === "rejoindre" && !codeInvitation) {
-      setErreur("Merci d'indiquer le code d'invitation reçu du propriétaire.");
+      setErreur(t("auth_code_requis"));
       return;
     }
     setChargement(true);
@@ -51,7 +67,7 @@ export default function AuthScreen({ onAuthenticated }) {
         const { data: etabId, error: errRecherche } = await supabase
           .rpc("etablissement_par_code", { code: codeInvitation.trim() });
         if (errRecherche || !etabId) {
-          setErreur("Code d'invitation introuvable. Vérifiez-le auprès du propriétaire.");
+          setErreur(t("auth_code_introuvable"));
           setChargement(false);
           return;
         }
@@ -79,6 +95,9 @@ export default function AuthScreen({ onAuthenticated }) {
 
   return (
     <div style={styles.wrap}>
+      <div style={styles.langRow}>
+        <LanguageSelector langue={langue} onChange={setLangue} />
+      </div>
       <div style={styles.card}>
         <div style={styles.brand}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -93,33 +112,33 @@ export default function AuthScreen({ onAuthenticated }) {
             onClick={() => setMode("connexion")}
             style={{ ...styles.toggleBtn, ...(mode === "connexion" ? styles.toggleActive : {}) }}
           >
-            Se connecter
+            {t("auth_connexion")}
           </button>
           <button
             type="button"
             onClick={() => setMode("inscription")}
             style={{ ...styles.toggleBtn, ...(mode === "inscription" ? styles.toggleActive : {}) }}
           >
-            Créer un établissement
+            {t("auth_inscription")}
           </button>
           <button
             type="button"
             onClick={() => setMode("rejoindre")}
             style={{ ...styles.toggleBtn, ...(mode === "rejoindre" ? styles.toggleActive : {}) }}
           >
-            Rejoindre comme gérant
+            {t("auth_rejoindre")}
           </button>
         </div>
 
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {mode === "inscription" && (
             <label style={styles.field}>
-              <span style={styles.label}>Nom de l'établissement</span>
+              <span style={styles.label}>{t("auth_nom_etablissement")}</span>
               <input
                 type="text"
                 value={nomEtablissement}
                 onChange={(e) => setNomEtablissement(e.target.value)}
-                placeholder="Ex : Maquis Le Bon Coin"
+                placeholder={t("auth_nom_placeholder")}
                 style={styles.input}
               />
             </label>
@@ -127,47 +146,46 @@ export default function AuthScreen({ onAuthenticated }) {
 
           {mode === "inscription" && (
             <label style={styles.field}>
-              <span style={styles.label}>Secteur d'activité</span>
+              <span style={styles.label}>{t("auth_secteur")}</span>
               <select value={secteur} onChange={(e) => setSecteur(e.target.value)} style={styles.input}>
-                <option value="restauration">Restauration / Bar / Maquis / Hôtel</option>
-                <option value="quincaillerie">Quincaillerie</option>
-                <option value="boutique">Boutique</option>
-                <option value="pharmacie">Pharmacie</option>
+                {SECTEURS_IDS.map((id) => (
+                  <option key={id} value={id}>{t(`secteur_${id}`)}</option>
+                ))}
               </select>
             </label>
           )}
 
           {mode === "rejoindre" && (
             <label style={styles.field}>
-              <span style={styles.label}>Code d'invitation</span>
+              <span style={styles.label}>{t("auth_code_invitation")}</span>
               <input
                 type="text"
                 value={codeInvitation}
                 onChange={(e) => setCodeInvitation(e.target.value)}
-                placeholder="Reçu du propriétaire de l'établissement"
+                placeholder={t("auth_code_placeholder")}
                 style={styles.input}
               />
             </label>
           )}
 
           <label style={styles.field}>
-            <span style={styles.label}>Numéro de téléphone</span>
+            <span style={styles.label}>{t("auth_telephone")}</span>
             <input
               type="tel"
               value={telephone}
               onChange={(e) => setTelephone(e.target.value)}
-              placeholder="Ex : 0700000000"
+              placeholder={t("auth_telephone_placeholder")}
               style={styles.input}
             />
           </label>
 
           <label style={styles.field}>
-            <span style={styles.label}>Mot de passe</span>
+            <span style={styles.label}>{t("auth_mdp")}</span>
             <input
               type="password"
               value={motDePasse}
               onChange={(e) => setMotDePasse(e.target.value)}
-              placeholder="6 caractères minimum"
+              placeholder={t("auth_mdp_placeholder")}
               style={styles.input}
               onKeyDown={(e) => { if (e.key === "Enter") submit(e); }}
             />
@@ -176,7 +194,7 @@ export default function AuthScreen({ onAuthenticated }) {
           {erreur && <div style={styles.error}>{erreur}</div>}
 
           <button type="button" onClick={submit} disabled={chargement} style={styles.submitBtn}>
-            {chargement ? "Un instant…" : mode === "connexion" ? "Se connecter" : mode === "rejoindre" ? "Rejoindre l'établissement" : "Créer mon compte"}
+            {chargement ? t("auth_instant") : mode === "connexion" ? t("auth_connexion") : mode === "rejoindre" ? t("auth_rejoindre_btn") : t("auth_creer_compte")}
           </button>
         </div>
       </div>
@@ -185,23 +203,11 @@ export default function AuthScreen({ onAuthenticated }) {
   );
 }
 
-function traduireErreur(msg) {
-  if (msg.includes("already registered") || msg.includes("already exists")) {
-    return "Ce numéro de téléphone est déjà utilisé. Essayez de vous connecter.";
-  }
-  if (msg.includes("Invalid login")) {
-    return "Numéro de téléphone ou mot de passe incorrect.";
-  }
-  if (msg.includes("Password should be")) {
-    return "Le mot de passe doit contenir au moins 6 caractères.";
-  }
-  return "Une erreur est survenue. Réessayez.";
-}
-
 const styles = {
   footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
+  langRow: { marginBottom: 12 },
   wrap: {
-    minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+    minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,
   },
   card: {

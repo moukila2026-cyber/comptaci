@@ -1,11 +1,15 @@
 import React from "react";
 import { supabase } from "./supabaseClient.js";
+import LanguageSelector from "./LanguageSelector.jsx";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
-export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion }) {
+export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t }) {
   return (
     <div style={styles.wrap}>
+      <div style={styles.langRow}>
+        <LanguageSelector langue={langue} onChange={setLangue} />
+      </div>
       <div style={styles.card}>
         <div style={styles.brand}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
@@ -16,53 +20,48 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 
         <div style={styles.title}>
           {essaiTermine
-            ? `Votre essai gratuit de ${etablissement?.essai_jours || 3} jours est terminé`
-            : "Un dernier pas avant d'accéder à votre tableau de bord"}
+            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || 3 })
+            : t("paiement_titre_actif")}
         </div>
         {etablissement?.est_fondateur && (
           <div style={styles.fondateurBadge}>
-            ★ Établissement fondateur — tarif garanti à {fmt(etablissement.tarif_verrouille || 7000)} FCFA/mois, à vie
+            ★ {t("paiement_fondateur_badge", { tarif: fmt(etablissement.tarif_verrouille || 7000) })}
           </div>
         )}
         <p style={styles.text}>
-          {essaiTermine ? (
-            <>Pour continuer à utiliser ComptaCi pour <strong>{etablissement?.nom}</strong>, réglez l'abonnement de votre choix
-            en scannant ce code avec l'application Wave, puis indiquez le plan choisi.</>
-          ) : (
-            <>Votre compte pour <strong>{etablissement?.nom}</strong> est créé. Réglez l'abonnement de votre choix
-            en scannant ce code avec l'application Wave, puis indiquez le plan choisi.</>
-          )}
+          {essaiTermine
+            ? t("paiement_texte_expire", { nom: etablissement?.nom || "" })
+            : t("paiement_texte_actif", { nom: etablissement?.nom || "" })}
         </p>
 
         <div style={styles.plansRow}>
           <div style={styles.planBox}>
-            <div style={styles.planName}>Starter</div>
+            <div style={styles.planName}>{t("paiement_plan_starter")}</div>
             <div style={styles.planPrice}>7 000 FCFA/mois</div>
-            <div style={styles.planNote}>1 établissement, sans gérant</div>
+            <div style={styles.planNote}>{t("paiement_plan_starter_note")}</div>
           </div>
           <div style={styles.planBox}>
-            <div style={styles.planName}>Pro</div>
+            <div style={styles.planName}>{t("paiement_plan_pro")}</div>
             <div style={styles.planPrice}>10 000 FCFA/mois</div>
-            <div style={styles.planNote}>+ invitation de gérant</div>
+            <div style={styles.planNote}>{t("paiement_plan_pro_note")}</div>
           </div>
         </div>
 
         <img src="/wave-qr.png" alt="Code QR de paiement Wave" style={styles.qr} />
 
         <div style={styles.contactBlock}>
-          <div style={styles.contactLine}>Numéro Wave : <strong>05 46 69 74 78</strong></div>
+          <div style={styles.contactLine}>{t("paiement_numero_wave")} <strong>05 46 69 74 78</strong></div>
           <a href="https://wa.me/2250501303343" target="_blank" rel="noopener noreferrer" style={styles.whatsappBtn}>
-            Contacter sur WhatsApp
+            {t("paiement_contacter_whatsapp")}
           </a>
         </div>
 
         <div style={styles.notice}>
-          Une fois le paiement effectué, votre accès sera activé sous peu. Si besoin, contactez directement
-          votre gestionnaire ComptaCi pour confirmer votre paiement.
+          {t("paiement_notice")}
         </div>
 
         <button onClick={() => supabase.auth.signOut().then(onDeconnexion)} style={styles.logout}>
-          Se déconnecter
+          {t("paiement_deconnexion")}
         </button>
       </div>
       <div style={styles.footer}>SHOPIN30 · 05 01 30 33 43</div>
@@ -72,12 +71,13 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 
 const styles = {
   footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
+  langRow: { marginBottom: 12 },
   fondateurBadge: {
     background: "#16213E", color: "#F3D9A0", fontSize: 11.5, fontWeight: 700, padding: "6px 12px",
     borderRadius: 20, marginBottom: 14, display: "inline-block",
   },
   wrap: {
-    minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
+    minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,
   },
   card: {

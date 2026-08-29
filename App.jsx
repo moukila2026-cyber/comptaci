@@ -4,6 +4,8 @@ import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, Histo
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
+import LanguageSelector from "./LanguageSelector.jsx";
+import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
 
 const CATEGORIES_PAR_SECTEUR = {
   restauration: [
@@ -42,12 +44,10 @@ const CATEGORIES_PAR_SECTEUR = {
   ],
 };
 
-const SECTEURS = [
-  { id: "restauration", label: "Restauration / Bar / Maquis / Hôtel" },
-  { id: "quincaillerie", label: "Quincaillerie" },
-  { id: "boutique", label: "Boutique" },
-  { id: "pharmacie", label: "Pharmacie" },
-];
+const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
+function secteursTraduits(t) {
+  return SECTEURS_IDS.map((id) => ({ id, label: t(`secteur_${id}`) }));
+}
 
 function categoriesDuSecteur(secteur) {
   return CATEGORIES_PAR_SECTEUR[secteur] || CATEGORIES_PAR_SECTEUR.restauration;
@@ -81,11 +81,24 @@ function useIsMobile() {
 }
 
 export default function ComptaCi() {
+  const [langue, setLangueState] = useState(getLangueInitiale());
+  const t = traducteur(langue);
+
+  useEffect(() => {
+    document.documentElement.lang = langue;
+    document.documentElement.dir = RTL_LANGUES.includes(langue) ? "rtl" : "ltr";
+  }, [langue]);
+
+  const setLangue = (l) => {
+    setLangueState(l);
+    sauvegarderLangue(l);
+  };
+
   if (configManquante || clientEnErreur) {
     return (
       <div style={styles.configError}>
         <div style={styles.configErrorCard}>
-          <div style={styles.configErrorTitle}>Configuration Supabase invalide</div>
+          <div style={styles.configErrorTitle}>{t("config_manquante_titre")}</div>
           <p style={styles.configErrorText}>
             {clientEnErreur
               ? "La connexion à Supabase a échoué. Vérifie que le Project URL et la clé sont correctement collés, sans espace ni guillemet en trop."
@@ -101,10 +114,10 @@ export default function ComptaCi() {
       </div>
     );
   }
-  return <ComptaCiApp />;
+  return <ComptaCiApp langue={langue} setLangue={setLangue} t={t} />;
 }
 
-function ComptaCiApp() {
+function ComptaCiApp({ langue, setLangue, t }) {
   const isMobile = useIsMobile();
   const [maintenant, setMaintenant] = useState(Date.now());
   useEffect(() => {
@@ -246,9 +259,9 @@ function ComptaCiApp() {
     }
   };
 
-  const addTransaction = async (t) => {
+  const addTransaction = async (donneesTx) => {
     if (!etablissement) return false;
-    const { designation, quantite, ...champsTransaction } = t;
+    const { designation, quantite, ...champsTransaction } = donneesTx;
     const { data, error } = await supabase
       .from("transactions")
       .insert({ ...champsTransaction, etablissement_id: etablissement.id })
@@ -261,7 +274,7 @@ function ComptaCiApp() {
     setTransactions([data[0], ...transactions]);
 
     if (designation && designation.trim() && quantite) {
-      await ajusterStock(designation.trim(), parseFloat(quantite) || 0, t.type);
+      await ajusterStock(designation.trim(), parseFloat(quantite) || 0, donneesTx.type);
     }
     return true;
   };
@@ -407,7 +420,7 @@ function ComptaCiApp() {
   }
 
   if (!session) {
-    return <AuthScreen onAuthenticated={() => {}} />;
+    return <AuthScreen onAuthenticated={() => {}} langue={langue} setLangue={setLangue} t={t} />;
   }
 
   const essaiExpireLe = etablissement
@@ -422,6 +435,9 @@ function ComptaCiApp() {
         etablissement={etablissement}
         essaiTermine={!essaiEnCours}
         onDeconnexion={() => { setSession(null); setEtablissement(null); }}
+        langue={langue}
+        setLangue={setLangue}
+        t={t}
       />
     );
   }
@@ -432,7 +448,7 @@ function ComptaCiApp() {
   return (
     <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
-      <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} />
+      <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} t={t} />
       <div style={styles.main}>
         <TopBar
           etablissement={etablissement?.nom || "Mon établissement"}
@@ -444,21 +460,25 @@ function ComptaCiApp() {
           etablissementActifId={etablissementActifId}
           onChangerEtablissement={changerEtablissement}
           onAjouterEtablissement={ajouterEtablissement}
+          langue={langue}
+          setLangue={setLangue}
+          t={t}
         />
-        {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} />}
+        {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} t={t} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {chargement ? (
-          <div style={styles.loading}>Chargement…</div>
+          <div style={styles.loading}>{t("chargement")}</div>
         ) : vue === "dashboard" ? (
-          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} />
+          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
         ) : vue === "saisie" ? (
-          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} />
+          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
         ) : vue === "stock" ? (
           <Stock
             produits={produits}
             onAdd={addProduit}
             onAjuster={ajusterQuantiteManuelle}
             onSupprimer={supprimerProduit}
+            t={t}
           />
         ) : vue === "caisse" ? (
           <Caisse
@@ -467,9 +487,10 @@ function ComptaCiApp() {
             transactions={transactions}
             onOuvrir={ouvrirCaisse}
             onFermer={fermerCaisse}
+            t={t}
           />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} />
+          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} t={t} />
         )}
         <AppFooter />
       </div>
@@ -482,13 +503,13 @@ function AppFooter() {
   return <div style={styles.appFooter}>SHOPIN30 · 05 01 30 33 43</div>;
 }
 
-function Sidebar({ vue, setVue, isMobile, onLogout }) {
+function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
   const items = [
-    { id: "dashboard", label: "Tableau de bord", icon: LayoutDashboard },
-    { id: "saisie", label: "Saisie du jour", icon: PenLine },
-    { id: "caisse", label: "Caisse", icon: Lock },
-    { id: "stock", label: "Stock", icon: Package },
-    { id: "historique", label: "Historique", icon: History },
+    { id: "dashboard", label: t("nav_dashboard"), icon: LayoutDashboard },
+    { id: "saisie", label: t("nav_saisie"), icon: PenLine },
+    { id: "caisse", label: t("nav_caisse"), icon: Lock },
+    { id: "stock", label: t("nav_stock"), icon: Package },
+    { id: "historique", label: t("nav_historique"), icon: History },
   ];
 
   if (isMobile) {
@@ -554,28 +575,27 @@ function Sidebar({ vue, setVue, isMobile, onLogout }) {
       <div style={styles.sidebarFooter}>
         <div style={styles.sidebarFooterPattern} />
         <button onClick={onLogout} style={styles.logoutBtn}>
-          <LogOut size={14} /> Déconnexion
+          <LogOut size={14} /> {t("nav_logout")}
         </button>
       </div>
     </aside>
   );
 }
 
-function EssaiBanner({ msRestant, estFondateur, essaiJours }) {
+function EssaiBanner({ msRestant, estFondateur, essaiJours, t }) {
   const heures = Math.max(0, Math.floor(msRestant / (1000 * 60 * 60)));
   const jours = Math.floor(heures / 24);
   const heuresRestantes = heures % 24;
   const urgent = heures < 24;
   return (
     <div style={{ ...styles.essaiBanner, ...(urgent ? styles.essaiBannerUrgent : {}) }}>
-      {estFondateur && <span style={styles.fondateurTag}>★ Fondateur</span>}
-      {urgent ? "⏰ " : ""}Essai gratuit ({essaiJours || 3} jours) — il vous reste {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} avant
-      de devoir vous abonner {estFondateur ? "(tarif fondateur garanti à 7 000 FCFA/mois)" : "(à partir de 7 000 FCFA / mois)"}.
+      {estFondateur && <span style={styles.fondateurTag}>★ {t("fondateur_tag")}</span>}
+      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || 3} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
     </div>
   );
 }
 
-function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtablissements, etablissementActifId, onChangerEtablissement, onAjouterEtablissement }) {
+function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtablissements, etablissementActifId, onChangerEtablissement, onAjouterEtablissement, langue, setLangue, t }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(etablissement);
   const [inviteOuvert, setInviteOuvert] = useState(false);
@@ -611,7 +631,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
         {mesEtablissements && mesEtablissements.length > 0 ? (
           <div style={{ position: "relative" }}>
             <button style={styles.topbarNameBtn} onClick={() => setSelecteurOuvert((v) => !v)}>
-              {etablissement}{role === "gerant" ? " · Gérant" : ""}
+              {etablissement}{role === "gerant" ? ` · ${t("nav_gerant")}` : ""}
               <ChevronDown size={14} color="#B5AF9E" />
             </button>
             {selecteurOuvert && (
@@ -626,30 +646,30 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
                     }}
                   >
                     <span>{m.etablissements.nom}</span>
-                    <span style={styles.etabPopoverRole}>{m.role === "proprietaire" ? "Propriétaire" : "Gérant"}</span>
+                    <span style={styles.etabPopoverRole}>{m.role === "proprietaire" ? t("etab_proprietaire") : t("etab_gerant")}</span>
                   </button>
                 ))}
                 <div style={styles.etabPopoverDivider} />
                 {!ajoutOuvert ? (
                   <button style={styles.etabPopoverAdd} onClick={() => setAjoutOuvert(true)}>
-                    + Ajouter un établissement
+                    {t("etab_ajouter")}
                   </button>
                 ) : (
                   <div style={{ padding: "8px 4px", display: "flex", flexDirection: "column", gap: 8 }}>
                     <input
                       type="text"
-                      placeholder="Nom de l'établissement"
+                      placeholder={t("etab_nom_placeholder")}
                       value={nouveauNom}
                       onChange={(e) => setNouveauNom(e.target.value)}
                       style={styles.etabPopoverInput}
                     />
                     <select value={nouveauSecteur} onChange={(e) => setNouveauSecteur(e.target.value)} style={styles.etabPopoverInput}>
-                      {SECTEURS.map((s) => (
+                      {secteursTraduits(t).map((s) => (
                         <option key={s.id} value={s.id}>{s.label}</option>
                       ))}
                     </select>
                     <button onClick={creerEtablissement} disabled={ajoutEnCours} style={styles.inviteCopyBtn}>
-                      {ajoutEnCours ? "Création…" : "Créer"}
+                      {ajoutEnCours ? t("etab_creation") : t("etab_creer")}
                     </button>
                   </div>
                 )}
@@ -676,21 +696,22 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
             <ChevronDown size={14} color="#B5AF9E" />
           </button>
         ) : (
-          <span style={styles.topbarNameBtn}>{etablissement} · Gérant</span>
+          <span style={styles.topbarNameBtn}>{etablissement} · {t("nav_gerant")}</span>
         )}
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+        <LanguageSelector langue={langue} onChange={setLangue} />
         {estProprietaire && codeInvitation && estPro && (
           <div style={{ position: "relative" }}>
             <button style={styles.inviteBtn} onClick={() => setInviteOuvert((v) => !v)}>
-              Inviter un gérant
+              {t("nav_invite_gerant")}
             </button>
             {inviteOuvert && (
               <div style={styles.invitePopover}>
-                <div style={styles.invitePopoverLabel}>Code d'invitation à partager</div>
+                <div style={styles.invitePopoverLabel}>{t("auth_code_invitation")}</div>
                 <div style={styles.inviteCode}>{codeInvitation}</div>
                 <p style={styles.invitePopoverText}>
-                  Le gérant crée son propre compte via "Rejoindre comme gérant" en utilisant ce code.
+                  {t("invite_texte")}
                 </p>
                 <button
                   style={styles.inviteCopyBtn}
@@ -700,24 +721,24 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
                     setTimeout(() => setCopie(false), 1500);
                   }}
                 >
-                  {copie ? "Copié !" : "Copier le code"}
+                  {copie ? t("invite_copie") : t("invite_copier")}
                 </button>
               </div>
             )}
           </div>
         )}
         {estProprietaire && !estPro && (
-          <div style={styles.upgradeHint}>Plan Pro requis pour inviter un gérant</div>
+          <div style={styles.upgradeHint}>{t("nav_plan_pro_requis")}</div>
         )}
         <div style={styles.topbarDate}>
-          {new Date().toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long" })}
+          {new Date().toLocaleDateString(langue === "ar" ? "ar-EG" : langue === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long" })}
         </div>
       </div>
     </header>
   );
 }
 
-function Dashboard({ transactions, isMobile, secteur, etablissement }) {
+function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
   const [copie, setCopie] = useState(false);
@@ -728,15 +749,15 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
   const copierBilan = () => {
     const moisLabel = new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
     const texte = [
-      `Bilan ${moisLabel} — ${etablissement?.nom || "Mon établissement"}`,
+      `${t("dash_bilan_titre")} ${moisLabel} — ${etablissement?.nom || "Mon établissement"}`,
       ``,
-      `Chiffre d'affaires : ${fmt(stats.caMois)} FCFA`,
-      `Dépenses : ${fmt(stats.depMois)} FCFA`,
-      `Résultat net : ${stats.resultatMois >= 0 ? "+" : ""}${fmt(stats.resultatMois)} FCFA`,
-      `Marge : ${stats.margeMois.toFixed(0)}%`,
-      `TVA à provisionner (estimation) : ${fmt(stats.tvaMois)} FCFA`,
+      `${t("dash_ca")} : ${fmt(stats.caMois)} FCFA`,
+      `${t("dash_depenses")} : ${fmt(stats.depMois)} FCFA`,
+      `${t("dash_resultat")} : ${stats.resultatMois >= 0 ? "+" : ""}${fmt(stats.resultatMois)} FCFA`,
+      `${t("dash_marge")} : ${stats.margeMois.toFixed(0)}%`,
+      `${t("dash_tva")} : ${fmt(stats.tvaMois)} FCFA`,
       ``,
-      `Généré via ComptaCi`,
+      t("dash_genere_via"),
     ].join("\n");
     navigator.clipboard?.writeText(texte);
     setCopie(true);
@@ -747,38 +768,38 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
     <div style={styles.page}>
       <div style={styles.dashboardHeader}>
         <button onClick={copierBilan} style={styles.copyBtn}>
-          <Copy size={14} /> {copie ? "Bilan copié !" : "Copier le bilan mensuel"}
+          <Copy size={14} /> {copie ? t("dash_bilan_copie") : t("dash_copier_bilan")}
         </button>
       </div>
       <div className="kpi-row">
         <KpiCard
-          label="Chiffre d'affaires"
+          label={t("dash_ca")}
           value={stats.caMois}
           accent="gold"
           icon={<Wallet size={16} />}
-          sub={`${stats.caMoisPct >= 0 ? "+" : ""}${stats.caMoisPct.toFixed(0)}% vs mois dernier`}
+          sub={`${stats.caMoisPct >= 0 ? "+" : ""}${stats.caMoisPct.toFixed(0)}% ${t("dash_vs_mois_dernier")}`}
         />
         <KpiCard
-          label="Dépenses"
+          label={t("dash_depenses")}
           value={stats.depMois}
           accent="clay"
           icon={<TrendingDown size={16} />}
-          sub={`${stats.depMoisPct >= 0 ? "+" : ""}${stats.depMoisPct.toFixed(0)}% vs mois dernier`}
+          sub={`${stats.depMoisPct >= 0 ? "+" : ""}${stats.depMoisPct.toFixed(0)}% ${t("dash_vs_mois_dernier")}`}
         />
         <KpiCard
-          label="Résultat net"
+          label={t("dash_resultat")}
           value={stats.resultatMois}
           accent={stats.resultatMois >= 0 ? "teal" : "clay"}
           icon={stats.resultatMois >= 0 ? <TrendingUp size={16} /> : <TrendingDown size={16} />}
-          sub={`Marge ${stats.margeMois.toFixed(0)}%`}
+          sub={`${t("dash_marge")} ${stats.margeMois.toFixed(0)}%`}
           hero
         />
         <KpiCard
-          label="TVA à provisionner"
+          label={t("dash_tva")}
           value={stats.tvaMois}
           accent="ink"
           icon={<Wallet size={16} />}
-          sub="Estimation à 18%, indicative"
+          sub={t("dash_tva_note")}
         />
       </div>
 
@@ -786,8 +807,8 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
         <div style={styles.card}>
           <div style={styles.cardHeader}>
             <div>
-              <div style={styles.cardTitle}>Évolution</div>
-              <div style={styles.cardCaption}>Recettes et dépenses, 6 derniers mois</div>
+              <div style={styles.cardTitle}>{t("dash_evolution")}</div>
+              <div style={styles.cardCaption}>{t("dash_evolution_sous")}</div>
             </div>
           </div>
           <div style={{ height: 220 }}>
@@ -810,8 +831,8 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
                   formatter={(v) => `${fmt(v)} FCFA`}
                   contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }}
                 />
-                <Area type="monotone" dataKey="ca" stroke="#D4A24C" strokeWidth={2} fill="url(#ca)" name="Recettes" />
-                <Area type="monotone" dataKey="dep" stroke="#C1502E" strokeWidth={2} fill="url(#dep)" name="Dépenses" />
+                <Area type="monotone" dataKey="ca" stroke="#D4A24C" strokeWidth={2} fill="url(#ca)" name={t("dash_ca")} />
+                <Area type="monotone" dataKey="dep" stroke="#C1502E" strokeWidth={2} fill="url(#dep)" name={t("dash_depenses")} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
@@ -820,8 +841,8 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
         <div style={styles.card}>
           <div style={styles.cardHeader}>
             <div>
-              <div style={styles.cardTitle}>Répartition des dépenses</div>
-              <div style={styles.cardCaption}>Ce mois-ci, par catégorie</div>
+              <div style={styles.cardTitle}>{t("dash_repartition")}</div>
+              <div style={styles.cardCaption}>{t("dash_repartition_sous")}</div>
             </div>
           </div>
           <div style={{ height: 220 }}>
@@ -846,8 +867,8 @@ function Dashboard({ transactions, isMobile, secteur, etablissement }) {
 
       {transactions.length === 0 && (
         <div style={styles.emptyState}>
-          <div style={styles.emptyTitle}>Aucune donnée pour l'instant</div>
-          <div style={styles.emptyText}>Va dans « Saisie du jour » pour enregistrer tes premières ventes et dépenses.</div>
+          <div style={styles.emptyTitle}>{t("dash_vide_titre")}</div>
+          <div style={styles.emptyText}>{t("dash_vide_texte")}</div>
         </div>
       )}
     </div>
@@ -876,7 +897,7 @@ function KpiCard({ label, value, accent, icon, sub, hero }) {
   );
 }
 
-function Saisie({ onAdd, secteur, etablissement }) {
+function Saisie({ onAdd, secteur, etablissement, t }) {
   const categories = categoriesDuSecteur(secteur);
   const [type, setType] = useState("vente");
   const [designation, setDesignation] = useState("");
@@ -915,20 +936,18 @@ function Saisie({ onAdd, secteur, etablissement }) {
       setConfirme(true);
       setTimeout(() => setConfirme(false), 1800);
     } else {
-      setErreurLocale("L'enregistrement a échoué. Vérifiez votre connexion et réessayez.");
+      setErreurLocale(t("saisie_erreur"));
     }
   };
 
   const texteRecu = (r) => [
-    `Reçu — ${etablissement?.nom || "Reçu de vente"}`,
+    `${etablissement?.nom || "ComptaCi"}`,
     `${new Date(r.date).toLocaleDateString("fr-FR", { day: "numeric", month: "long", year: "numeric" })}`,
     ``,
-    r.designation || "Vente",
-    `Quantité : ${r.quantite}`,
-    `Prix unitaire : ${fmt(parseFloat(r.prixUnitaire) || 0)} FCFA`,
-    `Total : ${fmt(r.total)} FCFA`,
-    ``,
-    `Merci de votre confiance !`,
+    r.designation || t("hist_vente"),
+    `${t("saisie_quantite")} : ${r.quantite}`,
+    `${t("saisie_prix_unitaire")} : ${fmt(parseFloat(r.prixUnitaire) || 0)} FCFA`,
+    `${t("saisie_total")} : ${fmt(r.total)} FCFA`,
   ].join("\n");
 
   const partagerRecuWhatsapp = (r) => {
@@ -944,23 +963,23 @@ function Saisie({ onAdd, secteur, etablissement }) {
     <div style={styles.page}>
       {dernierRecu && (
         <div style={styles.recuBox}>
-          <div style={styles.recuBoxText}>Vente enregistrée — partager le reçu ?</div>
+          <div style={styles.recuBoxText}>{t("saisie_recu_question")}</div>
           <div style={{ display: "flex", gap: 8 }}>
             <button onClick={() => partagerRecuWhatsapp(dernierRecu)} style={styles.recuBtn}>
-              Partager via WhatsApp
+              {t("saisie_recu_whatsapp")}
             </button>
             <button onClick={() => copierRecu(dernierRecu)} style={styles.recuBtnGhost}>
-              <Copy size={13} /> Copier
+              <Copy size={13} /> {t("saisie_recu_copier")}
             </button>
-            <button onClick={() => setDernierRecu(null)} style={styles.recuBtnGhost}>Fermer</button>
+            <button onClick={() => setDernierRecu(null)} style={styles.recuBtnGhost}>{t("saisie_recu_fermer")}</button>
           </div>
         </div>
       )}
       <div style={{ ...styles.card, maxWidth: 520, width: "100%" }}>
         <div style={styles.cardHeader}>
           <div>
-            <div style={styles.cardTitle}>Enregistrer un mouvement</div>
-            <div style={styles.cardCaption}>Une vente ou une dépense du jour</div>
+            <div style={styles.cardTitle}>{t("saisie_titre")}</div>
+            <div style={styles.cardCaption}>{t("saisie_sous")}</div>
           </div>
         </div>
 
@@ -971,24 +990,24 @@ function Saisie({ onAdd, secteur, etablissement }) {
               onClick={() => setType("vente")}
               style={{ ...styles.toggleBtn, ...(type === "vente" ? styles.toggleBtnActiveVente : {}) }}
             >
-              Vente (entrée)
+              {t("saisie_vente")}
             </button>
             <button
               type="button"
               onClick={() => setType("depense")}
               style={{ ...styles.toggleBtn, ...(type === "depense" ? styles.toggleBtnActiveDepense : {}) }}
             >
-              Dépense (sortie)
+              {t("saisie_depense")}
             </button>
           </div>
 
           <label style={styles.field}>
             <span style={styles.fieldLabel}>
-              {type === "vente" ? "Désignation du produit vendu" : "Désignation de l'achat / de la dépense"}
+              {type === "vente" ? t("saisie_designation_vente") : t("saisie_designation_depense")}
             </span>
             <input
               type="text"
-              placeholder={type === "vente" ? "Ex : Riz KC 50 kg" : "Ex : Sac de ciment 50 kg"}
+              placeholder={type === "vente" ? t("saisie_designation_placeholder_vente") : t("saisie_designation_placeholder_depense")}
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
               style={styles.input}
@@ -997,7 +1016,7 @@ function Saisie({ onAdd, secteur, etablissement }) {
 
           {type === "depense" && (
             <label style={styles.field}>
-              <span style={styles.fieldLabel}>Catégorie</span>
+              <span style={styles.fieldLabel}>{t("saisie_categorie")}</span>
               <select value={categorie} onChange={(e) => setCategorie(e.target.value)} style={styles.select}>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
@@ -1008,7 +1027,7 @@ function Saisie({ onAdd, secteur, etablissement }) {
 
           <div style={styles.qtyRow}>
             <label style={styles.field}>
-              <span style={styles.fieldLabel}>Quantité</span>
+              <span style={styles.fieldLabel}>{t("saisie_quantite")}</span>
               <input
                 type="number"
                 inputMode="decimal"
@@ -1021,7 +1040,7 @@ function Saisie({ onAdd, secteur, etablissement }) {
               />
             </label>
             <label style={styles.field}>
-              <span style={styles.fieldLabel}>Prix unitaire (FCFA)</span>
+              <span style={styles.fieldLabel}>{t("saisie_prix_unitaire")}</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -1036,19 +1055,19 @@ function Saisie({ onAdd, secteur, etablissement }) {
           </div>
 
           <div style={styles.totalBox}>
-            <span style={styles.totalLabel}>Total</span>
+            <span style={styles.totalLabel}>{t("saisie_total")}</span>
             <span style={styles.totalValue}>{fmt(totalCalcule)} FCFA</span>
           </div>
 
           <label style={styles.field}>
-            <span style={styles.fieldLabel}>Date</span>
+            <span style={styles.fieldLabel}>{t("saisie_date")}</span>
             <input type="date" value={date} onChange={(e) => setDate(e.target.value)} style={styles.input} />
           </label>
 
           <button type="button" onClick={submit} disabled={enCours} style={styles.submitBtn}>
-            <Plus size={16} /> {enCours ? "Enregistrement…" : "Enregistrer"}
+            <Plus size={16} /> {enCours ? t("saisie_enregistrement") : t("saisie_enregistrer")}
           </button>
-          {confirme && <div style={styles.confirmMsg}>Mouvement enregistré.</div>}
+          {confirme && <div style={styles.confirmMsg}>{t("saisie_confirme")}</div>}
           {erreurLocale && <div style={styles.erreurLocale}>{erreurLocale}</div>}
         </div>
       </div>
@@ -1056,7 +1075,7 @@ function Saisie({ onAdd, secteur, etablissement }) {
   );
 }
 
-function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer }) {
+function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer, t }) {
   const [fondOuverture, setFondOuverture] = useState("");
   const [fondCompte, setFondCompte] = useState("");
   const [modeFermeture, setModeFermeture] = useState(false);
@@ -1093,9 +1112,9 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <div style={styles.cardTitle}>Caisse</div>
+            <div style={styles.cardTitle}>{t("caisse_titre")}</div>
             <div style={styles.cardCaption}>
-              {sessionCaisse ? "Caisse actuellement ouverte" : "Aucune session de caisse en cours"}
+              {sessionCaisse ? t("caisse_ouverte") : t("caisse_fermee")}
             </div>
           </div>
         </div>
@@ -1103,7 +1122,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
         {!sessionCaisse ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 360 }}>
             <label style={styles.field}>
-              <span style={styles.fieldLabel}>Fond de caisse de départ (FCFA)</span>
+              <span style={styles.fieldLabel}>{t("caisse_fond_ouverture")}</span>
               <input
                 type="number"
                 inputMode="numeric"
@@ -1115,38 +1134,38 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
               />
             </label>
             <button onClick={ouvrir} disabled={enCours} style={styles.submitBtn}>
-              <Unlock size={16} /> {enCours ? "Ouverture…" : "Ouvrir la caisse"}
+              <Unlock size={16} /> {enCours ? t("caisse_ouverture") : t("caisse_ouvrir")}
             </button>
           </div>
         ) : (
           <>
             <div style={styles.caisseSummary}>
               <div style={styles.caisseSummaryRow}>
-                <span>Fond de départ</span>
+                <span>{t("caisse_fond_depart")}</span>
                 <strong>{fmt(sessionCaisse.fond_ouverture)} FCFA</strong>
               </div>
               <div style={styles.caisseSummaryRow}>
-                <span>+ Ventes depuis l'ouverture</span>
+                <span>{t("caisse_ventes_depuis")}</span>
                 <strong style={{ color: "#186B4E" }}>{fmt(ventesSession)} FCFA</strong>
               </div>
               <div style={styles.caisseSummaryRow}>
-                <span>− Dépenses depuis l'ouverture</span>
+                <span>{t("caisse_depenses_depuis")}</span>
                 <strong style={{ color: "#B4432A" }}>{fmt(depensesSession)} FCFA</strong>
               </div>
               <div style={{ ...styles.caisseSummaryRow, ...styles.caisseSummaryTotal }}>
-                <span>Solde attendu en caisse</span>
+                <span>{t("caisse_solde_attendu")}</span>
                 <strong>{fmt(soldeAttendu)} FCFA</strong>
               </div>
             </div>
 
             {!modeFermeture ? (
               <button onClick={() => setModeFermeture(true)} style={{ ...styles.submitBtn, marginTop: 16 }}>
-                <Lock size={16} /> Fermer la caisse
+                <Lock size={16} /> {t("caisse_fermer")}
               </button>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 14, marginTop: 16, maxWidth: 360 }}>
                 <label style={styles.field}>
-                  <span style={styles.fieldLabel}>Montant réellement compté en caisse (FCFA)</span>
+                  <span style={styles.fieldLabel}>{t("caisse_montant_compte")}</span>
                   <input
                     type="number"
                     inputMode="numeric"
@@ -1168,12 +1187,12 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
                         : styles.ecartNegatif),
                     }}
                   >
-                    Écart : {(parseFloat(fondCompte) - soldeAttendu) >= 0 ? "+" : ""}
+                    {t("caisse_ecart")} : {(parseFloat(fondCompte) - soldeAttendu) >= 0 ? "+" : ""}
                     {fmt(parseFloat(fondCompte) - soldeAttendu)} FCFA
                   </div>
                 )}
                 <button onClick={fermer} disabled={enCours} style={styles.submitBtn}>
-                  {enCours ? "Fermeture…" : "Confirmer la fermeture"}
+                  {enCours ? t("caisse_fermeture") : t("caisse_confirmer_fermeture")}
                 </button>
               </div>
             )}
@@ -1185,8 +1204,8 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
         <div style={styles.card}>
           <div style={styles.cardHeader}>
             <div>
-              <div style={styles.cardTitle}>Historique des clôtures</div>
-              <div style={styles.cardCaption}>{historiqueCaisse.length} session{historiqueCaisse.length > 1 ? "s" : ""} fermée{historiqueCaisse.length > 1 ? "s" : ""}</div>
+              <div style={styles.cardTitle}>{t("caisse_historique_titre")}</div>
+              <div style={styles.cardCaption}>{historiqueCaisse.length} {t("caisse_session_fermee")}</div>
             </div>
           </div>
           <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
@@ -1196,7 +1215,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
                   <div style={styles.txLabel}>
                     {new Date(s.date_ouverture).toLocaleDateString("fr-FR", { day: "numeric", month: "short" })}
                   </div>
-                  <div style={styles.txNote}>Fond départ : {fmt(s.fond_ouverture)} FCFA · Compté : {fmt(s.fond_fermeture_reel)} FCFA</div>
+                  <div style={styles.txNote}>{t("caisse_fond_depart")} : {fmt(s.fond_ouverture)} FCFA · {t("caisse_compte")} : {fmt(s.fond_fermeture_reel)} FCFA</div>
                 </div>
                 <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "#186B4E" : Math.abs(s.ecart) > 0 ? "#B4432A" : "#16213E" }}>
                   {s.ecart >= 0 ? "+" : ""}{fmt(s.ecart)}
@@ -1210,7 +1229,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   );
 }
 
-function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
+function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
   const [designation, setDesignation] = useState("");
   const [quantite, setQuantite] = useState("");
   const [prixUnitaire, setPrixUnitaire] = useState("");
@@ -1238,21 +1257,20 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
     <div style={styles.page}>
       {produitsEnAlerte.length > 0 && (
         <div style={styles.upgradeNotice}>
-          ⚠️ {produitsEnAlerte.length} produit{produitsEnAlerte.length > 1 ? "s" : ""} sous le seuil d'alerte :{" "}
+          ⚠️ {produitsEnAlerte.length} {t("stock_alerte")}{" "}
           {produitsEnAlerte.map((p) => p.designation).join(", ")}
         </div>
       )}
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <div style={styles.cardTitle}>Stock</div>
+            <div style={styles.cardTitle}>{t("stock_titre")}</div>
             <div style={styles.cardCaption}>
-              {produits.length} produit{produits.length > 1 ? "s" : ""} suivi{produits.length > 1 ? "s" : ""} — se
-              met à jour automatiquement avec vos ventes et dépenses
+              {produits.length} — {t("stock_sous")}
             </div>
           </div>
           <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
-            {ouvert ? "Annuler" : "+ Ajouter un produit"}
+            {ouvert ? t("stock_annuler") : t("stock_ajouter")}
           </button>
         </div>
 
@@ -1260,44 +1278,43 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
           <div style={styles.stockForm}>
             <input
               type="text"
-              placeholder="Désignation (ex : Riz KC 50 kg)"
+              placeholder={t("stock_designation_placeholder")}
               value={designation}
               onChange={(e) => setDesignation(e.target.value)}
               style={{ ...styles.input, flex: "1 1 200px" }}
             />
             <input
               type="number"
-              placeholder="Quantité en stock"
+              placeholder={t("stock_quantite_placeholder")}
               value={quantite}
               onChange={(e) => setQuantite(e.target.value)}
               style={{ ...styles.input, flex: "1 1 130px" }}
             />
             <input
               type="number"
-              placeholder="Prix unitaire (facultatif)"
+              placeholder={t("stock_prix_placeholder")}
               value={prixUnitaire}
               onChange={(e) => setPrixUnitaire(e.target.value)}
               style={{ ...styles.input, flex: "1 1 150px" }}
             />
             <input
               type="number"
-              placeholder="Seuil d'alerte (défaut 5)"
+              placeholder={t("stock_seuil_placeholder")}
               value={seuilAlerte}
               onChange={(e) => setSeuilAlerte(e.target.value)}
               style={{ ...styles.input, flex: "1 1 150px" }}
             />
             <button onClick={submit} disabled={enCours} style={{ ...styles.submitBtn, flex: "1 1 100%" }}>
-              {enCours ? "Ajout…" : "Ajouter au stock"}
+              {enCours ? t("stock_ajout_en_cours") : t("stock_ajout_btn")}
             </button>
           </div>
         )}
 
         {produits.length === 0 ? (
           <div style={styles.emptyState}>
-            <div style={styles.emptyTitle}>Aucun produit suivi</div>
+            <div style={styles.emptyTitle}>{t("stock_vide_titre")}</div>
             <div style={styles.emptyText}>
-              Ajoutez vos produits ici pour suivre leur stock automatiquement à chaque vente ou dépense portant
-              le même nom.
+              {t("stock_vide_texte")}
             </div>
           </div>
         ) : (
@@ -1309,7 +1326,7 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.stockLabel}>{p.designation}</div>
                   {p.prix_unitaire && (
-                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} FCFA / unité — seuil d'alerte : {fmt(p.seuil_alerte || 5)}</div>
+                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} {t("stock_unite")} — {t("stock_seuil_label")} : {fmt(p.seuil_alerte || 5)}</div>
                   )}
                 </div>
                 <button
@@ -1340,22 +1357,22 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil }) {
   );
 }
 
-function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
+function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   const categories = categoriesDuSecteur(secteur);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const transactionsVisibles = limite30j
-    ? transactions.filter((t) => new Date(t.date).getTime() >= seuil)
+    ? transactions.filter((tx) => new Date(tx.date).getTime() >= seuil)
     : transactions;
   const masquees = transactions.length - transactionsVisibles.length;
   const [enEdition, setEnEdition] = useState(null);
   const [montantEdit, setMontantEdit] = useState("");
   const [noteEdit, setNoteEdit] = useState("");
 
-  const commencerEdition = (t) => {
-    setEnEdition(t.id);
-    setMontantEdit(String(t.montant));
-    setNoteEdit(t.note || "");
+  const commencerEdition = (tx) => {
+    setEnEdition(tx.id);
+    setMontantEdit(String(tx.montant));
+    setNoteEdit(tx.note || "");
   };
 
   const validerEdition = async (id) => {
@@ -1367,8 +1384,8 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
 
   const groups = useMemo(() => {
     const byDate = {};
-    for (const t of transactionsVisibles) {
-      (byDate[t.date] ||= []).push(t);
+    for (const tx of transactionsVisibles) {
+      (byDate[tx.date] ||= []).push(tx);
     }
     return Object.entries(byDate).sort((a, b) => (a[0] < b[0] ? 1 : -1));
   }, [transactionsVisibles]);
@@ -1378,25 +1395,24 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
-            <div style={styles.cardTitle}>Historique des mouvements</div>
+            <div style={styles.cardTitle}>{t("hist_titre")}</div>
             <div style={styles.cardCaption}>
-              {transactionsVisibles.length} enregistrement{transactionsVisibles.length > 1 ? "s" : ""}
-              {limite30j ? " (30 derniers jours)" : ""} — cliquez un montant pour le corriger
+              {transactionsVisibles.length}
+              {limite30j ? ` ${t("hist_30j")}` : ""} — {t("hist_sous")}
             </div>
           </div>
         </div>
 
         {limite30j && masquees > 0 && (
           <div style={styles.upgradeNotice}>
-            {masquees} enregistrement{masquees > 1 ? "s" : ""} plus ancien{masquees > 1 ? "s" : ""} masqué
-            {masquees > 1 ? "s" : ""} — passez au plan Pro pour l'historique complet.
+            {masquees} {t("hist_masques")}
           </div>
         )}
 
         {groups.length === 0 ? (
           <div style={styles.emptyState}>
-            <div style={styles.emptyTitle}>Rien à afficher</div>
-            <div style={styles.emptyText}>Les mouvements que tu enregistres apparaîtront ici.</div>
+            <div style={styles.emptyTitle}>{t("hist_vide_titre")}</div>
+            <div style={styles.emptyText}>{t("hist_vide_texte")}</div>
           </div>
         ) : (
           <div style={{ display: "flex", flexDirection: "column", gap: 20 }}>
@@ -1406,9 +1422,9 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
                   {new Date(date).toLocaleDateString("fr-FR", { weekday: "long", day: "numeric", month: "long", year: "numeric" })}
                 </div>
                 <div style={{ display: "flex", flexDirection: "column", gap: 6 }}>
-                  {items.map((t) =>
-                    enEdition === t.id ? (
-                      <div key={t.id} style={styles.txRowEdit}>
+                  {items.map((tx) =>
+                    enEdition === tx.id ? (
+                      <div key={tx.id} style={styles.txRowEdit}>
                         <input
                           type="number"
                           value={montantEdit}
@@ -1423,25 +1439,25 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur }) {
                           placeholder="Note"
                           style={{ ...styles.txEditInput, flex: 1 }}
                         />
-                        <button onClick={() => validerEdition(t.id)} style={styles.txSaveBtn}>Valider</button>
-                        <button onClick={() => setEnEdition(null)} style={styles.txCancelBtn}>Annuler</button>
+                        <button onClick={() => validerEdition(tx.id)} style={styles.txSaveBtn}>{t("hist_valider")}</button>
+                        <button onClick={() => setEnEdition(null)} style={styles.txCancelBtn}>{t("hist_annuler")}</button>
                       </div>
                     ) : (
-                      <div key={t.id} style={styles.txRow}>
-                        <div style={{ ...styles.txDot, background: t.type === "vente" ? "#186B4E" : "#B4432A" }} />
+                      <div key={tx.id} style={styles.txRow}>
+                        <div style={{ ...styles.txDot, background: tx.type === "vente" ? "#186B4E" : "#B4432A" }} />
                         <div style={styles.txInfo}>
                           <div style={styles.txLabel}>
-                            {t.type === "vente" ? "Vente" : categories.find((c) => c.id === t.categorie)?.label || "Dépense"}
+                            {tx.type === "vente" ? t("hist_vente") : categories.find((c) => c.id === tx.categorie)?.label || t("hist_depense")}
                           </div>
-                          {t.note && <div style={styles.txNote}>{t.note}</div>}
+                          {tx.note && <div style={styles.txNote}>{tx.note}</div>}
                         </div>
                         <button
-                          onClick={() => commencerEdition(t)}
-                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: t.type === "vente" ? "#186B4E" : "#B4432A" }}
+                          onClick={() => commencerEdition(tx)}
+                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: tx.type === "vente" ? "#186B4E" : "#B4432A" }}
                         >
-                          {t.type === "vente" ? "+" : "-"}{fmt(t.montant)}
+                          {tx.type === "vente" ? "+" : "-"}{fmt(tx.montant)}
                         </button>
-                        <button onClick={() => onDelete(t.id)} style={styles.txDelete} aria-label="Supprimer">
+                        <button onClick={() => onDelete(tx.id)} style={styles.txDelete} aria-label="Supprimer">
                           <Trash2 size={14} />
                         </button>
                       </div>
