@@ -1,7 +1,7 @@
 import React, { useState } from "react";
 import { supabase, telephoneVersEmail } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import Decor3D from "./Decor3D.jsx";
+import { wallpaperStyle } from "./wallpaper.js";
 
 const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
 
@@ -96,7 +96,6 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
 
   return (
     <div style={styles.wrap}>
-      <Decor3D />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -209,7 +208,8 @@ const styles = {
   footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E", position: "relative", zIndex: 1 },
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
+    fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
+    ...wallpaperStyle,
   },
   langRow: { marginBottom: 12, position: "relative", zIndex: 1 },
   card: {

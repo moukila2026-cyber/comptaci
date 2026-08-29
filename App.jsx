@@ -7,6 +7,7 @@ import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
 import { WAVE_QR_DATA_URI } from "./WaveQR.js";
+import { wallpaperStyle } from "./wallpaper.js";
 
 const CATEGORIES_PAR_SECTEUR = {
   restauration: [
@@ -1826,7 +1827,7 @@ const styles = {
     display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
     color: "#9AA4C4", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
   },
-  main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%" },
+  main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%", ...wallpaperStyle },
   topbar: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6,
     padding: "14px 20px", borderBottom: "1px solid #EDE7DA", background: "#FFFEFB",

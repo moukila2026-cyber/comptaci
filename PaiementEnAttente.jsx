@@ -2,14 +2,13 @@ import React from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { WAVE_QR_DATA_URI } from "./WaveQR.js";
-import Decor3D from "./Decor3D.jsx";
+import { wallpaperStyle } from "./wallpaper.js";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
 export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t }) {
   return (
     <div style={styles.wrap}>
-      <Decor3D />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -81,7 +80,8 @@ const styles = {
   },
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
+    fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
+    ...wallpaperStyle,
   },
   card: {
     background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
