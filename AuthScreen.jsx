@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { supabase, telephoneVersEmail } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
+import Decor3D from "./Decor3D.jsx";
 
 const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
 
@@ -95,6 +96,7 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
 
   return (
     <div style={styles.wrap}>
+      <Decor3D />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -204,15 +206,15 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
 }
 
 const styles = {
-  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
-  langRow: { marginBottom: 12 },
+  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E", position: "relative", zIndex: 1 },
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,
+    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
   },
+  langRow: { marginBottom: 12, position: "relative", zIndex: 1 },
   card: {
     background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
-    width: "100%", maxWidth: 380,
+    width: "100%", maxWidth: 380, position: "relative", zIndex: 1,
   },
   brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 24 },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "#16213E" },

@@ -1,12 +1,15 @@
 import React from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
+import { WAVE_QR_DATA_URI } from "./WaveQR.js";
+import Decor3D from "./Decor3D.jsx";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
 export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t }) {
   return (
     <div style={styles.wrap}>
+      <Decor3D />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -47,7 +50,7 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
           </div>
         </div>
 
-        <img src="/wave-qr.png" alt="Code QR de paiement Wave" style={styles.qr} />
+        <img src={WAVE_QR_DATA_URI} alt="Code QR de paiement Wave" style={styles.qr} />
 
         <div style={styles.contactBlock}>
           <div style={styles.contactLine}>{t("paiement_numero_wave")} <strong>05 46 69 74 78</strong></div>
@@ -70,19 +73,19 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 }
 
 const styles = {
-  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E" },
-  langRow: { marginBottom: 12 },
+  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E", position: "relative", zIndex: 1 },
+  langRow: { marginBottom: 12, position: "relative", zIndex: 1 },
   fondateurBadge: {
     background: "#16213E", color: "#F3D9A0", fontSize: 11.5, fontWeight: 700, padding: "6px 12px",
     borderRadius: 20, marginBottom: 14, display: "inline-block",
   },
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20,
+    background: "#FBF7F0", fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
   },
   card: {
     background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
-    width: "100%", maxWidth: 420, textAlign: "center",
+    width: "100%", maxWidth: 420, textAlign: "center", position: "relative", zIndex: 1,
   },
   brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },

@@ -1,11 +1,12 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
+import { WAVE_QR_DATA_URI } from "./WaveQR.js";
 
 const CATEGORIES_PAR_SECTEUR = {
   restauration: [
@@ -130,6 +131,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const [transactions, setTransactions] = useState([]);
   const [produits, setProduits] = useState([]);
   const [fournisseurs, setFournisseurs] = useState([]);
+  const [nombreGerants, setNombreGerants] = useState(0);
   const [sessionCaisse, setSessionCaisse] = useState(null);
   const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
@@ -216,6 +218,13 @@ function ComptaCiApp({ langue, setLangue, t }) {
             .order("nom", { ascending: true });
           if (errFours) throw errFours;
           setFournisseurs(fours || []);
+
+          const { count: countGerants, error: errGerants } = await supabase
+            .from("membres")
+            .select("id", { count: "exact", head: true })
+            .eq("etablissement_id", etab.id)
+            .eq("role", "gerant");
+          if (!errGerants) setNombreGerants(countGerants || 0);
 
           const { data: sessions, error: errSessions } = await supabase
             .from("sessions_caisse")
@@ -471,6 +480,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
   const msRestantEssai = essaiExpireLe ? essaiExpireLe.getTime() - maintenant : 0;
   const enEssai = !etablissement?.abonnement_actif && essaiEnCours;
+  // Pendant l'essai gratuit, accès complet au niveau Starter (pas Pro) pour
+  // permettre de tester l'outil avant de choisir un forfait.
+  const planEffectif = enEssai ? "starter" : etablissement?.plan;
 
   return (
     <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
@@ -482,11 +494,12 @@ function ComptaCiApp({ langue, setLangue, t }) {
           onRename={renameEtablissement}
           role={role}
           codeInvitation={etablissement?.code_invitation}
-          plan={etablissement?.plan}
+          plan={planEffectif}
           mesEtablissements={mesEtablissements}
           etablissementActifId={etablissementActifId}
           onChangerEtablissement={changerEtablissement}
           onAjouterEtablissement={ajouterEtablissement}
+          nombreGerants={nombreGerants}
           langue={langue}
           setLangue={setLangue}
           t={t}
@@ -523,8 +536,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onSupprimer={supprimerFournisseur}
             t={t}
           />
+        ) : vue === "abonnement" ? (
+          <Abonnement etablissement={etablissement} planEffectif={planEffectif} enEssai={enEssai} t={t} />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={etablissement?.plan} secteur={etablissement?.secteur} t={t} />
+          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={planEffectif} secteur={etablissement?.secteur} t={t} />
         )}
         <AppFooter />
       </div>
@@ -545,6 +560,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
     { id: "stock", label: t("nav_stock"), icon: Package },
     { id: "historique", label: t("nav_historique"), icon: History },
     { id: "fournisseurs", label: t("nav_fournisseurs"), icon: Phone },
+    { id: "abonnement", label: t("nav_abonnement"), icon: CreditCard },
   ];
 
   if (isMobile) {
@@ -630,7 +646,7 @@ function EssaiBanner({ msRestant, estFondateur, essaiJours, t }) {
   );
 }
 
-function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtablissements, etablissementActifId, onChangerEtablissement, onAjouterEtablissement, langue, setLangue, t }) {
+function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtablissements, etablissementActifId, onChangerEtablissement, onAjouterEtablissement, nombreGerants, langue, setLangue, t }) {
   const [editing, setEditing] = useState(false);
   const [val, setVal] = useState(etablissement);
   const [inviteOuvert, setInviteOuvert] = useState(false);
@@ -642,6 +658,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   const [copie, setCopie] = useState(false);
   const estProprietaire = role === "proprietaire";
   const estPro = plan === "pro";
+  const peutInviterGerant = estPro || (plan === "starter" && nombreGerants < 1);
   const plusieursEtablissements = mesEtablissements && mesEtablissements.length > 1;
 
   useEffect(() => setVal(etablissement), [etablissement]);
@@ -736,7 +753,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
       </div>
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <LanguageSelector langue={langue} onChange={setLangue} />
-        {estProprietaire && codeInvitation && estPro && (
+        {estProprietaire && codeInvitation && peutInviterGerant && (
           <div style={{ position: "relative" }}>
             <button style={styles.inviteBtn} onClick={() => setInviteOuvert((v) => !v)}>
               {t("nav_invite_gerant")}
@@ -762,8 +779,10 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
             )}
           </div>
         )}
-        {estProprietaire && !estPro && (
-          <div style={styles.upgradeHint}>{t("nav_plan_pro_requis")}</div>
+        {estProprietaire && !peutInviterGerant && (
+          <div style={styles.upgradeHint}>
+            {plan === "starter" && nombreGerants >= 1 ? t("nav_limite_gerant_atteinte") : t("nav_plan_requis")}
+          </div>
         )}
         <div style={styles.topbarDate}>
           {new Date().toLocaleDateString(langue === "ar" ? "ar-EG" : langue === "en" ? "en-US" : "fr-FR", { weekday: "long", day: "numeric", month: "long" })}
@@ -1392,6 +1411,70 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
   );
 }
 
+function Abonnement({ etablissement, planEffectif, enEssai, t }) {
+  const [planChoisi, setPlanChoisi] = useState(null);
+
+  const prix = { starter: "7 000", pro: "10 000" };
+
+  return (
+    <div style={styles.page}>
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("nav_abonnement")}</div>
+            <div style={styles.cardCaption}>
+              {enEssai
+                ? t("abo_en_essai")
+                : `${t("abo_plan_actuel")} : ${planEffectif === "pro" ? t("paiement_plan_pro") : t("paiement_plan_starter")}`}
+            </div>
+          </div>
+        </div>
+
+        <div style={styles.plansRowLarge}>
+          <div style={{ ...styles.planBoxLarge, ...(planEffectif === "starter" && !enEssai ? styles.planBoxActive : {}) }}>
+            <div style={styles.planNameLarge}>{t("paiement_plan_starter")}</div>
+            <div style={styles.planPriceLarge}>{prix.starter} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
+            <div style={styles.planNote}>{t("paiement_plan_starter_note")}</div>
+            <button
+              style={planEffectif === "starter" && !enEssai ? styles.planBtnActive : styles.planBtn}
+              onClick={() => setPlanChoisi("starter")}
+            >
+              {planEffectif === "starter" && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
+            </button>
+          </div>
+          <div style={{ ...styles.planBoxLarge, ...(planEffectif === "pro" && !enEssai ? styles.planBoxActive : {}) }}>
+            <div style={styles.planNameLarge}>{t("paiement_plan_pro")}</div>
+            <div style={styles.planPriceLarge}>{prix.pro} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
+            <div style={styles.planNote}>{t("paiement_plan_pro_note")}</div>
+            <button
+              style={planEffectif === "pro" && !enEssai ? styles.planBtnActive : styles.planBtn}
+              onClick={() => setPlanChoisi("pro")}
+            >
+              {planEffectif === "pro" && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
+            </button>
+          </div>
+        </div>
+
+        {planChoisi && (
+          <div style={styles.aboConfirmBox}>
+            <div style={styles.cardTitle}>
+              {t("abo_paiement_titre")} — {planChoisi === "pro" ? t("paiement_plan_pro") : t("paiement_plan_starter")} ({prix[planChoisi]} FCFA/mois)
+            </div>
+            <img src={WAVE_QR_DATA_URI} alt="Code QR de paiement Wave" style={styles.qr} />
+            <div style={styles.contactBlock}>
+              <div style={styles.contactLine}>{t("paiement_numero_wave")} <strong>05 46 69 74 78</strong></div>
+              <a href="https://wa.me/2250501303343" target="_blank" rel="noopener noreferrer" style={styles.whatsappBtn}>
+                {t("paiement_contacter_whatsapp")}
+              </a>
+            </div>
+            <div style={styles.notice}>{t("abo_notice")}</div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   const [nom, setNom] = useState("");
   const [telephone, setTelephone] = useState("");
@@ -1859,6 +1942,41 @@ const styles = {
     width: 30, height: 30, borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
     display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#186B4E",
     textDecoration: "none", flexShrink: 0,
+  },
+  plansRowLarge: { display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 },
+  planBoxLarge: {
+    flex: "1 1 240px", background: "#FBF9F4", border: "1px solid #EDE7DA", borderRadius: 14,
+    padding: 22, textAlign: "center",
+  },
+  planBoxActive: { background: "#FBF3E2", borderColor: "#E8D9B5" },
+  planNameLarge: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E", marginBottom: 6 },
+  planPriceLarge: { fontFamily: "'Fraunces', serif", fontSize: 24, fontWeight: 600, color: "#B4801F", marginBottom: 4 },
+  planPriceUnit: { fontSize: 12, fontWeight: 400, color: "#8A8578" },
+  planBtn: {
+    marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 9, border: "1px solid #16213E",
+    background: "transparent", color: "#16213E", fontSize: 13, fontWeight: 600, cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  planBtnActive: {
+    marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 9, border: "none",
+    background: "#16213E", color: "#F3D9A0", fontSize: 13, fontWeight: 600, cursor: "default",
+    fontFamily: "'Inter', sans-serif",
+  },
+  aboConfirmBox: {
+    marginTop: 24, paddingTop: 24, borderTop: "1px solid #EDE7DA", display: "flex",
+    flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14,
+  },
+  qr: { width: 180, height: 180, borderRadius: 12, border: "1px solid #EDE7DA", objectFit: "cover" },
+  contactBlock: { display: "flex", flexDirection: "column", gap: 10 },
+  contactLine: { fontSize: 13, color: "#5C5748" },
+  whatsappBtn: {
+    display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 20px",
+    borderRadius: 9, background: "#186B4E", color: "#FFFEFB", fontSize: 13, fontWeight: 600,
+    textDecoration: "none", fontFamily: "'Inter', sans-serif",
+  },
+  notice: {
+    fontSize: 12.5, color: "#8A8578", background: "#FBF3E2", padding: "12px 14px",
+    borderRadius: 10, lineHeight: 1.5, maxWidth: 380,
   },
   stockQty: {
     fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",

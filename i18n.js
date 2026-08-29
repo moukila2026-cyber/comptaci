@@ -19,6 +19,8 @@ const dict = {
     nav_gerant: "Gérant",
     nav_invite_gerant: "Inviter un gérant",
     nav_plan_pro_requis: "Plan Pro requis pour inviter un gérant",
+    nav_plan_requis: "Passez au moins au plan Starter pour inviter un gérant",
+    nav_limite_gerant_atteinte: "Limite d'un gérant atteinte (plan Starter) — passez au Pro pour en inviter davantage",
     invite_texte: "Le gérant crée son propre compte via « Rejoindre comme gérant » en utilisant ce code.",
     invite_copier: "Copier le code",
     invite_copie: "Copié !",
@@ -159,7 +161,7 @@ const dict = {
     paiement_texte_expire: "Pour continuer à utiliser ComptaCi pour {nom}, réglez l'abonnement de votre choix en scannant ce code avec l'application Wave, puis indiquez le plan choisi.",
     paiement_texte_actif: "Votre compte pour {nom} est créé. Réglez l'abonnement de votre choix en scannant ce code avec l'application Wave, puis indiquez le plan choisi.",
     paiement_plan_starter: "Starter",
-    paiement_plan_starter_note: "1 établissement, sans gérant",
+    paiement_plan_starter_note: "1 établissement, 1 gérant inclus",
     paiement_plan_pro: "Pro",
     paiement_plan_pro_note: "+ invitation de gérant",
     paiement_numero_wave: "Numéro Wave :",
@@ -191,6 +193,15 @@ const dict = {
     four_vide_texte: "Ajoutez vos fournisseurs pour retrouver rapidement leurs coordonnées.",
     four_appeler: "Appeler",
     four_whatsapp: "WhatsApp",
+
+    // Abonnement
+    nav_abonnement: "Abonnement",
+    abo_en_essai: "Vous êtes en période d'essai gratuit",
+    abo_plan_actuel: "Votre forfait actuel",
+    abo_choisir: "Choisir ce forfait",
+    abo_plan_actif: "Forfait actuel",
+    abo_paiement_titre: "Paiement",
+    abo_notice: "Scannez ce code avec Wave pour régler le forfait choisi, puis confirmez votre paiement par WhatsApp. Votre forfait sera activé sous peu.",
   },
 
   en: {
@@ -204,6 +215,8 @@ const dict = {
     nav_gerant: "Manager",
     nav_invite_gerant: "Invite a manager",
     nav_plan_pro_requis: "Pro plan required to invite a manager",
+    nav_plan_requis: "Upgrade to at least Starter to invite a manager",
+    nav_limite_gerant_atteinte: "One-manager limit reached (Starter plan) — upgrade to Pro to invite more",
     invite_texte: "The manager creates their own account via \"Join as manager\" using this code.",
     invite_copier: "Copy code",
     invite_copie: "Copied!",
@@ -336,7 +349,7 @@ const dict = {
     paiement_texte_expire: "To keep using ComptaCi for {nom}, pay your chosen subscription by scanning this code with the Wave app, then indicate the plan chosen.",
     paiement_texte_actif: "Your account for {nom} has been created. Pay your chosen subscription by scanning this code with the Wave app, then indicate the plan chosen.",
     paiement_plan_starter: "Starter",
-    paiement_plan_starter_note: "1 business, no manager",
+    paiement_plan_starter_note: "1 business, 1 manager included",
     paiement_plan_pro: "Pro",
     paiement_plan_pro_note: "+ manager invitation",
     paiement_numero_wave: "Wave number:",
@@ -366,6 +379,15 @@ const dict = {
     four_vide_texte: "Add your suppliers to quickly find their contact details.",
     four_appeler: "Call",
     four_whatsapp: "WhatsApp",
+
+    // Subscription
+    nav_abonnement: "Subscription",
+    abo_en_essai: "You are in your free trial period",
+    abo_plan_actuel: "Your current plan",
+    abo_choisir: "Choose this plan",
+    abo_plan_actif: "Current plan",
+    abo_paiement_titre: "Payment",
+    abo_notice: "Scan this code with Wave to pay for the chosen plan, then confirm your payment via WhatsApp. Your plan will be activated shortly.",
   },
 
   ar: {
@@ -379,6 +401,8 @@ const dict = {
     nav_gerant: "مدير",
     nav_invite_gerant: "دعوة مدير",
     nav_plan_pro_requis: "باقة Pro مطلوبة لدعوة مدير",
+    nav_plan_requis: "انتقل على الأقل إلى باقة Starter لدعوة مدير",
+    nav_limite_gerant_atteinte: "تم بلوغ حد المدير الواحد (باقة Starter) — انتقل إلى Pro لدعوة المزيد",
     invite_texte: "سينشئ المدير حسابه الخاص عبر «الانضمام كمدير» باستخدام هذا الرمز.",
     invite_copier: "نسخ الرمز",
     invite_copie: "تم النسخ!",
@@ -511,7 +535,7 @@ const dict = {
     paiement_texte_expire: "لمواصلة استخدام ComptaCi لـ {nom}، ادفع اشتراكك المختار بمسح هذا الرمز بتطبيق Wave، ثم حدد الباقة المختارة.",
     paiement_texte_actif: "تم إنشاء حسابك لـ {nom}. ادفع اشتراكك المختار بمسح هذا الرمز بتطبيق Wave، ثم حدد الباقة المختارة.",
     paiement_plan_starter: "Starter",
-    paiement_plan_starter_note: "منشأة واحدة، بدون مدير",
+    paiement_plan_starter_note: "منشأة واحدة، مدير واحد مشمول",
     paiement_plan_pro: "Pro",
     paiement_plan_pro_note: "+ دعوة مدير",
     paiement_numero_wave: "رقم Wave:",
@@ -541,6 +565,15 @@ const dict = {
     four_vide_texte: "أضف مورديك للعثور بسرعة على بياناتهم.",
     four_appeler: "اتصال",
     four_whatsapp: "واتساب",
+
+    // الاشتراك
+    nav_abonnement: "الاشتراك",
+    abo_en_essai: "أنت في فترة التجربة المجانية",
+    abo_plan_actuel: "باقتك الحالية",
+    abo_choisir: "اختيار هذه الباقة",
+    abo_plan_actif: "الباقة الحالية",
+    abo_paiement_titre: "الدفع",
+    abo_notice: "امسح هذا الرمز عبر Wave لدفع الباقة المختارة، ثم أكّد دفعتك عبر واتساب. سيتم تفعيل باقتك قريباً.",
   },
 };
 
