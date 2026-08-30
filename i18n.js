@@ -49,6 +49,7 @@ const dict = {
     auth_erreur_login: "Numéro de téléphone ou mot de passe incorrect.",
     auth_erreur_mdp: "Le mot de passe doit contenir au moins 6 caractères.",
     auth_erreur_generique: "Une erreur est survenue. Réessayez.",
+    auth_confirmer_email: "Compte créé, mais la connexion exige une confirmation d'email. Désactivez « Confirm email » dans Supabase → Authentication → Providers → Email (ComptaCi utilise des emails internes sans boîte de réception), puis réessayez de vous connecter.",
 
     // Secteurs
     secteur_restauration: "Restauration / Bar / Maquis / Hôtel",
@@ -247,6 +248,7 @@ const dict = {
     auth_erreur_login: "Incorrect phone number or password.",
     auth_erreur_mdp: "Password must be at least 6 characters.",
     auth_erreur_generique: "Something went wrong. Please try again.",
+    auth_confirmer_email: "Account created, but sign-in requires email confirmation. Turn off \"Confirm email\" in Supabase → Authentication → Providers → Email (ComptaCi uses internal emails with no inbox), then try logging in.",
 
     secteur_restauration: "Restaurant / Bar / Hotel",
     secteur_quincaillerie: "Hardware store",
@@ -436,6 +438,7 @@ const dict = {
     auth_erreur_login: "رقم الهاتف أو كلمة المرور غير صحيحة.",
     auth_erreur_mdp: "يجب أن تحتوي كلمة المرور على 6 أحرف على الأقل.",
     auth_erreur_generique: "حدث خطأ ما. حاول مرة أخرى.",
+    auth_confirmer_email: "تم إنشاء الحساب، لكن تسجيل الدخول يتطلب تأكيد البريد الإلكتروني. عطّل «Confirm email» في Supabase ← Authentication ← Providers ← Email (يستعمل ComptaCi عناوين بريد داخلية بدون صندوق بريد)، ثم حاول تسجيل الدخول.",
 
     secteur_restauration: "مطعم / بار / فندق",
     secteur_quincaillerie: "محل أدوات",
