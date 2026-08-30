@@ -253,6 +253,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
   const ajouterEtablissement = async (nom, secteur) => {
     if (!session) return false;
+    const dejaProprietaire = mesEtablissements.some((m) => m.role === "proprietaire");
+    const aLeForfaitEntreprise = mesEtablissements.some(
+      (m) => m.role === "proprietaire" && m.etablissements?.plan === "entreprise"
+    );
+    if (dejaProprietaire && !aLeForfaitEntreprise) {
+      setErreur(t("etab_forfait_requis"));
+      return false;
+    }
     try {
       const { data: etab, error: errEtab } = await supabase
         .from("etablissements")
@@ -1415,7 +1423,11 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
 function Abonnement({ etablissement, planEffectif, enEssai, t }) {
   const [planChoisi, setPlanChoisi] = useState(null);
 
-  const prix = { starter: "7 000", pro: "10 000" };
+  const prix = { starter: "7 000", pro: "10 000", entreprise: "20 000" };
+  const nomPlan = (p) =>
+    p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
+  const notePlan = (p) =>
+    p === "pro" ? t("paiement_plan_pro_note") : p === "entreprise" ? t("paiement_plan_entreprise_note") : t("paiement_plan_starter_note");
 
   return (
     <div style={styles.page}>
@@ -1424,42 +1436,31 @@ function Abonnement({ etablissement, planEffectif, enEssai, t }) {
           <div>
             <div style={styles.cardTitle}>{t("nav_abonnement")}</div>
             <div style={styles.cardCaption}>
-              {enEssai
-                ? t("abo_en_essai")
-                : `${t("abo_plan_actuel")} : ${planEffectif === "pro" ? t("paiement_plan_pro") : t("paiement_plan_starter")}`}
+              {enEssai ? t("abo_en_essai") : `${t("abo_plan_actuel")} : ${nomPlan(planEffectif)}`}
             </div>
           </div>
         </div>
 
         <div style={styles.plansRowLarge}>
-          <div style={{ ...styles.planBoxLarge, ...(planEffectif === "starter" && !enEssai ? styles.planBoxActive : {}) }}>
-            <div style={styles.planNameLarge}>{t("paiement_plan_starter")}</div>
-            <div style={styles.planPriceLarge}>{prix.starter} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
-            <div style={styles.planNote}>{t("paiement_plan_starter_note")}</div>
-            <button
-              style={planEffectif === "starter" && !enEssai ? styles.planBtnActive : styles.planBtn}
-              onClick={() => setPlanChoisi("starter")}
-            >
-              {planEffectif === "starter" && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
-            </button>
-          </div>
-          <div style={{ ...styles.planBoxLarge, ...(planEffectif === "pro" && !enEssai ? styles.planBoxActive : {}) }}>
-            <div style={styles.planNameLarge}>{t("paiement_plan_pro")}</div>
-            <div style={styles.planPriceLarge}>{prix.pro} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
-            <div style={styles.planNote}>{t("paiement_plan_pro_note")}</div>
-            <button
-              style={planEffectif === "pro" && !enEssai ? styles.planBtnActive : styles.planBtn}
-              onClick={() => setPlanChoisi("pro")}
-            >
-              {planEffectif === "pro" && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
-            </button>
-          </div>
+          {["starter", "pro", "entreprise"].map((p) => (
+            <div key={p} style={{ ...styles.planBoxLarge, ...(planEffectif === p && !enEssai ? styles.planBoxActive : {}) }}>
+              <div style={styles.planNameLarge}>{nomPlan(p)}</div>
+              <div style={styles.planPriceLarge}>{prix[p]} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
+              <div style={styles.planNote}>{notePlan(p)}</div>
+              <button
+                style={planEffectif === p && !enEssai ? styles.planBtnActive : styles.planBtn}
+                onClick={() => setPlanChoisi(p)}
+              >
+                {planEffectif === p && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
+              </button>
+            </div>
+          ))}
         </div>
 
         {planChoisi && (
           <div style={styles.aboConfirmBox}>
             <div style={styles.cardTitle}>
-              {t("abo_paiement_titre")} — {planChoisi === "pro" ? t("paiement_plan_pro") : t("paiement_plan_starter")} ({prix[planChoisi]} FCFA/mois)
+              {t("abo_paiement_titre")} — {nomPlan(planChoisi)} ({prix[planChoisi]} FCFA/mois)
             </div>
             <img src={WAVE_QR_DATA_URI} alt="Code QR de paiement Wave" style={styles.qr} />
             <div style={styles.contactBlock}>

@@ -202,6 +202,9 @@ const dict = {
     abo_plan_actif: "Forfait actuel",
     abo_paiement_titre: "Paiement",
     abo_notice: "Scannez ce code avec Wave pour régler le forfait choisi, puis confirmez votre paiement par WhatsApp. Votre forfait sera activé sous peu.",
+    etab_forfait_requis: "Le forfait Entreprise est requis pour gérer plusieurs établissements. Passez à ce forfait pour en ajouter un nouveau.",
+    paiement_plan_entreprise: "Entreprise",
+    paiement_plan_entreprise_note: "Multi-établissements + tous les avantages Pro",
   },
 
   en: {
@@ -388,6 +391,9 @@ const dict = {
     abo_plan_actif: "Current plan",
     abo_paiement_titre: "Payment",
     abo_notice: "Scan this code with Wave to pay for the chosen plan, then confirm your payment via WhatsApp. Your plan will be activated shortly.",
+    etab_forfait_requis: "The Enterprise plan is required to manage multiple businesses. Upgrade to this plan to add a new one.",
+    paiement_plan_entreprise: "Enterprise",
+    paiement_plan_entreprise_note: "Multi-business + all Pro benefits",
   },
 
   ar: {
@@ -574,6 +580,9 @@ const dict = {
     abo_plan_actif: "الباقة الحالية",
     abo_paiement_titre: "الدفع",
     abo_notice: "امسح هذا الرمز عبر Wave لدفع الباقة المختارة، ثم أكّد دفعتك عبر واتساب. سيتم تفعيل باقتك قريباً.",
+    etab_forfait_requis: "باقة Entreprise مطلوبة لإدارة عدة منشآت. انتقل إلى هذه الباقة لإضافة منشأة جديدة.",
+    paiement_plan_entreprise: "Entreprise",
+    paiement_plan_entreprise_note: "منشآت متعددة + جميع مزايا Pro",
   },
 };
 
