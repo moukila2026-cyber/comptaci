@@ -1,7 +1,6 @@
 import React, { useState } from "react";
 import { supabase, telephoneVersEmail } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import { wallpaperStyle } from "./wallpaper.js";
 
 const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
 
@@ -96,6 +95,7 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
 
   return (
     <div style={styles.wrap}>
+      <div style={styles.photoOverlay} />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -209,7 +209,12 @@ const styles = {
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
-    ...wallpaperStyle,
+    backgroundImage: "url(/images/photo-boutique.png)",
+    backgroundSize: "cover", backgroundPosition: "center 30%", backgroundColor: "#16213E",
+  },
+  photoOverlay: {
+    position: "absolute", inset: 0,
+    background: "linear-gradient(160deg, rgba(22,33,62,0.92) 0%, rgba(22,33,62,0.86) 45%, rgba(22,33,62,0.72) 100%)",
   },
   langRow: { marginBottom: 12, position: "relative", zIndex: 1 },
   card: {

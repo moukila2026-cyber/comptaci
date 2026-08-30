@@ -149,6 +149,36 @@
     .fondateur-card { padding: 28px 20px; }
     .fondateur-title { font-size: 21px; }
   }
+
+  /* ---- Photo hero (pleine largeur) ---- */
+  .photo-hero {
+    position: relative; width: 100%; min-height: 560px; display: flex; align-items: flex-end;
+    background-color: var(--ink); overflow: hidden; margin-bottom: 8px;
+  }
+  .photo-hero img {
+    position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: center 22%;
+  }
+  .photo-hero::after {
+    content: ""; position: absolute; inset: 0;
+    background: linear-gradient(0deg, rgba(22,33,62,0.92) 0%, rgba(22,33,62,0.55) 45%, rgba(22,33,62,0.25) 75%, rgba(22,33,62,0.35) 100%);
+  }
+  .photo-hero-content { position: relative; z-index: 1; color: #FBF7F0; padding: 48px 24px 44px; width: 100%; max-width: 1080px; margin: 0 auto; }
+  .photo-hero-brand { font-family: 'Fraunces', serif; font-size: 15px; font-weight: 700; letter-spacing: 0.12em; color: #F3D9A0; margin-bottom: 14px; }
+  .photo-hero-content h1 { font-size: 42px; font-weight: 600; line-height: 1.1; margin-bottom: 6px; }
+  .photo-hero-tags { font-size: 13.5px; color: #E4DDD0; margin: 14px 0 22px; letter-spacing: 0.01em; }
+  .photo-hero-cta { display: inline-flex; align-items: center; gap: 6px; padding: 12px 20px; border-radius: 9px; background: #F3D9A0; color: var(--ink); font-weight: 700; font-size: 13px; letter-spacing: 0.03em; }
+  @media (max-width: 860px) {
+    .photo-hero { min-height: 440px; }
+    .photo-hero-content h1 { font-size: 30px; }
+  }
+
+  /* ---- Bannières photo pleine largeur entre les sections ---- */
+  .photo-banner { width: 100%; border-radius: 20px; overflow: hidden; box-shadow: 0 16px 40px rgba(22,33,62,0.12); }
+  .photo-banner img { width: 100%; height: 320px; object-fit: cover; display: block; }
+  .photo-banner.tall img { height: auto; object-fit: contain; background: var(--ink); }
+  @media (max-width: 860px) {
+    .photo-banner img { height: 220px; }
+  }
 </style>
 </head>
 <body>
@@ -174,6 +204,17 @@
   </header>
 </div>
 
+<div class="photo-hero">
+  <img src="/images/photo-boutique.png" alt="Commerçante ivoirienne pilotant son activité depuis son téléphone" />
+  <div class="photo-hero-content">
+    <div class="photo-hero-brand">COMPTACI</div>
+    <h1 data-i18n="photohero_titre1">Votre activité.</h1>
+    <h1 data-i18n="photohero_titre2">Votre contrôle.</h1>
+    <div class="photo-hero-tags" data-i18n="photohero_tags">Ventes • Dépenses • Résultats • Suivi à distance</div>
+    <a class="photo-hero-cta" href="#tarifs" data-i18n="photohero_cta">PRENEZ LE CONTRÔLE</a>
+  </div>
+</div>
+
 <div class="wrap">
   <section class="hero">
     <span class="eyebrow" data-i18n="hero_eyebrow">Pilotage financier simplifié</span>
@@ -195,6 +236,12 @@
       </div>
     </div>
   </section>
+</div>
+
+<div class="wrap">
+  <div class="photo-banner">
+    <img src="/images/photo-marche.png" alt="Gérante ivoirienne suivant ses ventes au marché depuis son téléphone" />
+  </div>
 </div>
 
 <div class="wrap" id="comment-ca-marche">
@@ -264,6 +311,12 @@
       <a class="btn btn-primary" href="/app.html" style="margin-top:18px" data-i18n="f_cta">Devenir établissement fondateur</a>
     </div>
   </section>
+</div>
+
+<div class="wrap">
+  <div class="photo-banner tall">
+    <img src="/images/promo-dashboard.png" alt="Aperçu du tableau de bord ComptaCi sur téléphone" />
+  </div>
 </div>
 
 <div class="wrap" id="tarifs">
@@ -347,6 +400,12 @@
       <div class="faq-item"><h3 data-i18n="faq4_h">Les chiffres de TVA sont-ils valables pour une déclaration officielle ?</h3><p data-i18n="faq4_p">Non, ComptaCi est un outil de pilotage interne. Pour une déclaration fiscale, rapprochez-vous d'un comptable agréé.</p></div>
     </div>
   </section>
+</div>
+
+<div class="wrap">
+  <div class="photo-banner tall">
+    <img src="/images/promo-controle.png" alt="ComptaCi — vous gardez le contrôle de votre activité" />
+  </div>
 </div>
 
 <div class="wrap">

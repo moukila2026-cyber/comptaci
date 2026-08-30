@@ -193,57 +193,92 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
     (async () => {
       setChargement(true);
-      try {
-        const etab = membreActif?.etablissements;
-        if (etab) {
-          const { data: tx, error: errTx } = await supabase
-            .from("transactions")
-            .select("*")
-            .eq("etablissement_id", etab.id)
-            .order("date", { ascending: false });
-          if (errTx) throw errTx;
-          setTransactions(tx || []);
-
-          const { data: prod, error: errProd } = await supabase
-            .from("produits")
-            .select("*")
-            .eq("etablissement_id", etab.id)
-            .order("designation", { ascending: true });
-          if (errProd) throw errProd;
-          setProduits(prod || []);
-
-          const { data: fours, error: errFours } = await supabase
-            .from("fournisseurs")
-            .select("*")
-            .eq("etablissement_id", etab.id)
-            .order("nom", { ascending: true });
-          if (errFours) throw errFours;
-          setFournisseurs(fours || []);
-
-          const { count: countGerants, error: errGerants } = await supabase
-            .from("membres")
-            .select("id", { count: "exact", head: true })
-            .eq("etablissement_id", etab.id)
-            .eq("role", "gerant");
-          if (!errGerants) setNombreGerants(countGerants || 0);
-
-          const { data: sessions, error: errSessions } = await supabase
-            .from("sessions_caisse")
-            .select("*")
-            .eq("etablissement_id", etab.id)
-            .order("date_ouverture", { ascending: false })
-            .limit(20);
-          if (errSessions) throw errSessions;
-          const ouverte = (sessions || []).find((s) => s.statut === "ouverte");
-          setSessionCaisse(ouverte || null);
-          setHistoriqueCaisse((sessions || []).filter((s) => s.statut === "fermee"));
-        }
-      } catch (e) {
-        console.error("Erreur chargement données:", e);
-        setErreur("Impossible de charger vos données. Vérifiez votre connexion.");
-      } finally {
+      const etab = membreActif?.etablissements;
+      if (!etab) {
         setChargement(false);
+        return;
       }
+      // Chaque requête est isolée : si une table optionnelle échoue (ex. une
+      // migration Supabase pas encore appliquée), les autres continuent de
+      // se charger normalement au lieu de bloquer toute la page.
+      const erreursRencontrees = [];
+
+      try {
+        const { data: tx, error: errTx } = await supabase
+          .from("transactions")
+          .select("*")
+          .eq("etablissement_id", etab.id)
+          .order("date", { ascending: false });
+        if (errTx) throw errTx;
+        setTransactions(tx || []);
+      } catch (e) {
+        console.error("Erreur chargement transactions:", e);
+        erreursRencontrees.push("mouvements");
+      }
+
+      try {
+        const { data: prod, error: errProd } = await supabase
+          .from("produits")
+          .select("*")
+          .eq("etablissement_id", etab.id)
+          .order("designation", { ascending: true });
+        if (errProd) throw errProd;
+        setProduits(prod || []);
+      } catch (e) {
+        console.error("Erreur chargement produits:", e);
+        erreursRencontrees.push("stock");
+      }
+
+      try {
+        const { data: fours, error: errFours } = await supabase
+          .from("fournisseurs")
+          .select("*")
+          .eq("etablissement_id", etab.id)
+          .order("nom", { ascending: true });
+        if (errFours) throw errFours;
+        setFournisseurs(fours || []);
+      } catch (e) {
+        console.error("Erreur chargement fournisseurs:", e);
+        erreursRencontrees.push("fournisseurs");
+      }
+
+      try {
+        const { count: countGerants, error: errGerants } = await supabase
+          .from("membres")
+          .select("id", { count: "exact", head: true })
+          .eq("etablissement_id", etab.id)
+          .eq("role", "gerant");
+        if (errGerants) throw errGerants;
+        setNombreGerants(countGerants || 0);
+      } catch (e) {
+        console.error("Erreur chargement gérants:", e);
+      }
+
+      try {
+        const { data: sessions, error: errSessions } = await supabase
+          .from("sessions_caisse")
+          .select("*")
+          .eq("etablissement_id", etab.id)
+          .order("date_ouverture", { ascending: false })
+          .limit(20);
+        if (errSessions) throw errSessions;
+        const ouverte = (sessions || []).find((s) => s.statut === "ouverte");
+        setSessionCaisse(ouverte || null);
+        setHistoriqueCaisse((sessions || []).filter((s) => s.statut === "fermee"));
+      } catch (e) {
+        console.error("Erreur chargement caisse:", e);
+        erreursRencontrees.push("caisse");
+      }
+
+      if (erreursRencontrees.length > 0) {
+        setErreur(
+          `Certaines données n'ont pas pu être chargées (${erreursRencontrees.join(", ")}). ` +
+          `Vérifie que le script supabase-MASTER-COMPLET.sql a bien été exécuté dans Supabase.`
+        );
+      } else {
+        setErreur(null);
+      }
+      setChargement(false);
     })();
   }, [etablissementActifId, mesEtablissements]);
 
@@ -268,26 +303,19 @@ function ComptaCiApp({ langue, setLangue, t }) {
         .select()
         .single();
       if (errEtab) throw errEtab;
-      if (!etab || !etab.id) throw new Error("Établissement créé sans ID");
-      
       const { error: errMembre } = await supabase
         .from("membres")
         .insert({ etablissement_id: etab.id, user_id: session.user.id, role: "proprietaire" });
       if (errMembre) throw errMembre;
 
-      // 🔴 FIX: Recharger la liste AVANT de changer d'établissement actif
       const { data: membreRows } = await supabase
         .from("membres")
         .select("role, etablissement_id, etablissements(*)")
         .eq("user_id", session.user.id);
-      const listeMAJ = (membreRows || []).filter((m) => m.etablissements);
-      setMesEtablissements(listeMAJ);
-      
-      // Maintenant on change d'établissement avec les données fraîches
+      setMesEtablissements((membreRows || []).filter((m) => m.etablissements));
       setEtablissementActifId(etab.id);
       return true;
     } catch (e) {
-      console.error("Erreur création établissement:", e);
       setErreur("Impossible de créer ce nouvel établissement.");
       return false;
     }
@@ -314,9 +342,6 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const ajusterStock = async (designation, quantite, type) => {
-    if (!etablissement || !etablissement.id) {
-      return; // Silencieusement échouer si pas d'établissement (ne pas crasher)
-    }
     const existant = produits.find(
       (p) => p.designation.toLowerCase() === designation.toLowerCase()
     );
@@ -345,10 +370,6 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
-    if (!etablissement || !etablissement.id) {
-      setErreur("Veuillez sélectionner un établissement.");
-      return false;
-    }
     const { data, error } = await supabase
       .from("produits")
       .insert({
@@ -360,8 +381,8 @@ function ComptaCiApp({ langue, setLangue, t }) {
       })
       .select();
     if (error) {
-      console.error("Erreur ajout produit:", error);
-      setErreur("Impossible d'ajouter ce produit au stock.");
+      console.error("Erreur insertion produit:", error);
+      setErreur(`Impossible d'ajouter ce produit au stock : ${error.message}`);
       return false;
     }
     setProduits([...produits, data[0]]);
@@ -385,17 +406,13 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const ajouterFournisseur = async (nom, telephone, note) => {
-    if (!etablissement || !etablissement.id) {
-      setErreur("Veuillez sélectionner un établissement.");
-      return false;
-    }
     const { data, error } = await supabase
       .from("fournisseurs")
       .insert({ etablissement_id: etablissement.id, nom, telephone, note: note || null })
       .select();
     if (error) {
-      console.error("Erreur ajout fournisseur:", error);
-      setErreur("Impossible d'ajouter ce fournisseur.");
+      console.error("Erreur insertion fournisseur:", error);
+      setErreur(`Impossible d'ajouter ce fournisseur : ${error.message}`);
       return false;
     }
     setFournisseurs([...fournisseurs, data[0]].sort((a, b) => a.nom.localeCompare(b.nom)));
@@ -489,7 +506,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   }
 
   const essaiExpireLe = etablissement
-    ? new Date(new Date(etablissement.date_creation).getTime() + (etablissement.essai_jours || 3) * 24 * 60 * 60 * 1000)
+    ? new Date(new Date(etablissement.date_creation).getTime() + (etablissement.essai_jours || 7) * 24 * 60 * 60 * 1000)
     : null;
   const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
   const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
@@ -535,6 +552,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
         />
         {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} t={t} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
+        {!chargement && <PageBanner vue={vue} t={t} />}
         {chargement ? (
           <div style={styles.loading}>{t("chargement")}</div>
         ) : vue === "dashboard" ? (
@@ -581,6 +599,31 @@ function AppFooter() {
   return <div style={styles.appFooter}>SHOPIN30 · 05 01 30 33 43</div>;
 }
 
+// Une photo professionnelle différente en tête de chaque page de l'app,
+// pour un rendu plus soigné qu'un simple fond uni.
+const PAGE_BANNERS = {
+  dashboard: { src: "/images/promo-dashboard.png", position: "center 15%" },
+  saisie: { src: "/images/photo-saisie.png", position: "center 30%" },
+  caisse: { src: "/images/photo-boutique.png", position: "center 35%" },
+  stock: { src: "/images/photo-marche.png", position: "center 30%" },
+  historique: { src: "/images/photo-boutique.png", position: "center 20%" },
+  fournisseurs: { src: "/images/photo-marche.png", position: "center 40%" },
+  abonnement: { src: "/images/promo-controle.png", position: "center 10%" },
+};
+
+function PageBanner({ vue, t }) {
+  const banner = PAGE_BANNERS[vue];
+  if (!banner) return null;
+  const label = t(`nav_${vue}`);
+  return (
+    <div className="page-banner" style={styles.pageBanner}>
+      <img src={banner.src} alt={label} style={{ ...styles.pageBannerImg, objectPosition: banner.position }} />
+      <div style={styles.pageBannerOverlay} />
+      <div style={styles.pageBannerLabel}>{label}</div>
+    </div>
+  );
+}
+
 function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
   const items = [
     { id: "dashboard", label: t("nav_dashboard"), icon: LayoutDashboard },
@@ -595,13 +638,18 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
   if (isMobile) {
     return (
       <aside style={styles.sidebarMobile}>
-        <div style={styles.brand}>
-          <div style={styles.brandMark}>
-            <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-              <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-            </svg>
+        <div style={styles.brandRowMobile}>
+          <div style={styles.brand}>
+            <div style={styles.brandMark}>
+              <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
+                <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+            </div>
+            <div style={styles.brandName}>ComptaCi</div>
           </div>
-          <div style={styles.brandName}>ComptaCi</div>
+          <button onClick={onLogout} style={styles.logoutBtnMobile}>
+            <LogOut size={14} /> {t("nav_logout")}
+          </button>
         </div>
         <nav style={styles.navMobile}>
           {items.map((it) => {
@@ -670,7 +718,7 @@ function EssaiBanner({ msRestant, estFondateur, essaiJours, t }) {
   return (
     <div style={{ ...styles.essaiBanner, ...(urgent ? styles.essaiBannerUrgent : {}) }}>
       {estFondateur && <span style={styles.fondateurTag}>★ {t("fondateur_tag")}</span>}
-      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || 3} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
+      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || 7} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
     </div>
   );
 }
@@ -1796,6 +1844,10 @@ const GLOBAL_CSS = `
 @media (max-width: 560px) {
   .kpi-row { grid-template-columns: 1fr; }
 }
+
+@media (max-width: 780px) {
+  .page-banner { margin: 12px 16px 0 !important; height: 96px !important; }
+}
 `;
 
 const styles = {
@@ -1832,6 +1884,12 @@ const styles = {
   sidebarMobile: {
     width: "100%", background: "#16213E", color: "#FBF7F0",
     padding: "14px 16px", flexShrink: 0,
+  },
+  brandRowMobile: { display: "flex", alignItems: "center", justifyContent: "space-between" },
+  logoutBtnMobile: {
+    display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.06)",
+    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#F3D9A0", fontSize: 12,
+    fontWeight: 600, cursor: "pointer", padding: "7px 10px", fontFamily: "'Inter', sans-serif",
   },
   navMobile: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" },
   navItemMobile: {
@@ -1910,6 +1968,19 @@ const styles = {
   fondateurTag: {
     display: "inline-block", background: "#16213E", color: "#F3D9A0", fontSize: 10.5, fontWeight: 700,
     padding: "2px 8px", borderRadius: 20, marginRight: 8, letterSpacing: "0.02em",
+  },
+  pageBanner: {
+    position: "relative", margin: "16px 32px 0", height: 130, borderRadius: 14,
+    overflow: "hidden", flexShrink: 0,
+  },
+  pageBannerImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
+  pageBannerOverlay: {
+    position: "absolute", inset: 0,
+    background: "linear-gradient(90deg, rgba(22,33,62,0.72) 0%, rgba(22,33,62,0.28) 55%, rgba(22,33,62,0.05) 100%)",
+  },
+  pageBannerLabel: {
+    position: "absolute", left: 20, bottom: 14, color: "#FBF7F0",
+    fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, letterSpacing: "-0.01em",
   },
   loading: { padding: 40, color: "#8A8578", fontSize: 14 },
   appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "#B5AF9E" },

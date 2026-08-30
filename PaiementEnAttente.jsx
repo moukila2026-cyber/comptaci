@@ -2,13 +2,13 @@ import React from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { WAVE_QR_DATA_URI } from "./WaveQR.js";
-import { wallpaperStyle } from "./wallpaper.js";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
 export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t }) {
   return (
     <div style={styles.wrap}>
+      <div style={styles.photoOverlay} />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
@@ -22,7 +22,7 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 
         <div style={styles.title}>
           {essaiTermine
-            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || 3 })
+            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || 7 })
             : t("paiement_titre_actif")}
         </div>
         {etablissement?.est_fondateur && (
@@ -46,6 +46,11 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
             <div style={styles.planName}>{t("paiement_plan_pro")}</div>
             <div style={styles.planPrice}>10 000 FCFA/mois</div>
             <div style={styles.planNote}>{t("paiement_plan_pro_note")}</div>
+          </div>
+          <div style={styles.planBox}>
+            <div style={styles.planName}>{t("paiement_plan_entreprise")}</div>
+            <div style={styles.planPrice}>20 000 FCFA/mois</div>
+            <div style={styles.planNote}>{t("paiement_plan_entreprise_note")}</div>
           </div>
         </div>
 
@@ -81,11 +86,16 @@ const styles = {
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
-    ...wallpaperStyle,
+    backgroundImage: "url(/images/promo-controle.png)",
+    backgroundSize: "cover", backgroundPosition: "center 15%", backgroundColor: "#16213E",
+  },
+  photoOverlay: {
+    position: "absolute", inset: 0,
+    background: "linear-gradient(160deg, rgba(22,33,62,0.93) 0%, rgba(22,33,62,0.87) 45%, rgba(22,33,62,0.74) 100%)",
   },
   card: {
     background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
-    width: "100%", maxWidth: 420, textAlign: "center", position: "relative", zIndex: 1,
+    width: "100%", maxWidth: 460, textAlign: "center", position: "relative", zIndex: 1,
   },
   brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },
