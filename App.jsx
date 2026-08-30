@@ -268,19 +268,26 @@ function ComptaCiApp({ langue, setLangue, t }) {
         .select()
         .single();
       if (errEtab) throw errEtab;
+      if (!etab || !etab.id) throw new Error("Établissement créé sans ID");
+      
       const { error: errMembre } = await supabase
         .from("membres")
         .insert({ etablissement_id: etab.id, user_id: session.user.id, role: "proprietaire" });
       if (errMembre) throw errMembre;
 
+      // 🔴 FIX: Recharger la liste AVANT de changer d'établissement actif
       const { data: membreRows } = await supabase
         .from("membres")
         .select("role, etablissement_id, etablissements(*)")
         .eq("user_id", session.user.id);
-      setMesEtablissements((membreRows || []).filter((m) => m.etablissements));
+      const listeMAJ = (membreRows || []).filter((m) => m.etablissements);
+      setMesEtablissements(listeMAJ);
+      
+      // Maintenant on change d'établissement avec les données fraîches
       setEtablissementActifId(etab.id);
       return true;
     } catch (e) {
+      console.error("Erreur création établissement:", e);
       setErreur("Impossible de créer ce nouvel établissement.");
       return false;
     }
@@ -307,6 +314,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const ajusterStock = async (designation, quantite, type) => {
+    if (!etablissement || !etablissement.id) {
+      return; // Silencieusement échouer si pas d'établissement (ne pas crasher)
+    }
     const existant = produits.find(
       (p) => p.designation.toLowerCase() === designation.toLowerCase()
     );
@@ -335,6 +345,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
+    if (!etablissement || !etablissement.id) {
+      setErreur("Veuillez sélectionner un établissement.");
+      return false;
+    }
     const { data, error } = await supabase
       .from("produits")
       .insert({
@@ -346,6 +360,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
       })
       .select();
     if (error) {
+      console.error("Erreur ajout produit:", error);
       setErreur("Impossible d'ajouter ce produit au stock.");
       return false;
     }
@@ -370,11 +385,16 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const ajouterFournisseur = async (nom, telephone, note) => {
+    if (!etablissement || !etablissement.id) {
+      setErreur("Veuillez sélectionner un établissement.");
+      return false;
+    }
     const { data, error } = await supabase
       .from("fournisseurs")
       .insert({ etablissement_id: etablissement.id, nom, telephone, note: note || null })
       .select();
     if (error) {
+      console.error("Erreur ajout fournisseur:", error);
       setErreur("Impossible d'ajouter ce fournisseur.");
       return false;
     }
