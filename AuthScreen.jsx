@@ -209,7 +209,7 @@ const styles = {
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
-    backgroundImage: "url(/images/photo-boutique.png)",
+    backgroundImage: "url(/images/photo-boutique.jpg)",
     backgroundSize: "cover", backgroundPosition: "center 30%", backgroundColor: "#16213E",
   },
   photoOverlay: {

@@ -603,11 +603,11 @@ function AppFooter() {
 // pour un rendu plus soigné qu'un simple fond uni.
 const PAGE_BANNERS = {
   dashboard: { src: "/images/promo-dashboard.png", position: "center 15%" },
-  saisie: { src: "/images/photo-saisie.png", position: "center 30%" },
-  caisse: { src: "/images/photo-boutique.png", position: "center 35%" },
-  stock: { src: "/images/photo-marche.png", position: "center 30%" },
-  historique: { src: "/images/photo-boutique.png", position: "center 20%" },
-  fournisseurs: { src: "/images/photo-marche.png", position: "center 40%" },
+  saisie: { src: "/images/photo-saisie.jpg", position: "center 30%" },
+  caisse: { src: "/images/photo-boutique.jpg", position: "center 35%" },
+  stock: { src: "/images/photo-marche.jpg", position: "center 30%" },
+  historique: { src: "/images/photo-boutique.jpg", position: "center 20%" },
+  fournisseurs: { src: "/images/photo-marche.jpg", position: "center 40%" },
   abonnement: { src: "/images/promo-controle.png", position: "center 10%" },
 };
 
