@@ -6,7 +6,7 @@ import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
-import PaiementWave from "./PaiementWave.jsx";
+import PaiementWave, { PRIX_PLANS } from "./PaiementWave.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
 
 const CATEGORIES_PAR_SECTEUR = {
@@ -1491,7 +1491,75 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
   );
 }
 
-function Abonnement({ etablissement, planEffectif, enEssai, t }) {
+/**
+ * Les 9 caractéristiques comparées, sans doublon.
+ * Chaque ligne indique si la caractéristique est incluse dans le forfait.
+ */
+export const LIGNES_COMPARATIF = [
+  { cle: "abo_feat_1etab", starter: true, pro: true, entreprise: false },
+  { cle: "abo_feat_multi", starter: false, pro: false, entreprise: true },
+  { cle: "abo_feat_saisie", starter: true, pro: true, entreprise: true },
+  { cle: "abo_feat_dashboard", starter: true, pro: true, entreprise: true },
+  { cle: "abo_feat_hist30", starter: true, pro: false, entreprise: false },
+  { cle: "abo_feat_histcomplet", starter: false, pro: true, entreprise: true },
+  { cle: "abo_feat_tva", starter: true, pro: true, entreprise: true },
+  { cle: "abo_feat_gerant1", starter: true, pro: false, entreprise: false },
+  { cle: "abo_feat_gerantillim", starter: false, pro: true, entreprise: true },
+];
+
+const formatterFCFA = (n) =>
+  new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
+
+/** Cellule ✅ / — du tableau comparatif. */
+function CelluleComparatif({ inclus }) {
+  return (
+    <div style={styles.comparatifCell}>
+      <span aria-hidden="true" style={styles.comparatifCheck}>
+        {inclus ? "✅" : "—"}
+      </span>
+    </div>
+  );
+}
+
+/** Carte « Comparer les forfaits » : 9 caractéristiques × 3 forfaits. */
+function ComparatifForfaits({ t }) {
+  const plans = ["starter", "pro", "entreprise"];
+  const nomPlan = (p) =>
+    p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
+
+  return (
+    <div style={styles.comparatifCard}>
+      <div style={styles.comparatifTitre}>{t("abo_comparatif_titre")}</div>
+      <div style={styles.comparatifTable} role="table">
+        <div className="comparatif-row" style={styles.comparatifHead} role="row">
+          <div style={styles.comparatifLabelHead} role="columnheader">
+            {t("abo_comparatif_colonne")}
+          </div>
+          {plans.map((p) => (
+            <div key={p} style={styles.comparatifColHead} role="columnheader">
+              <span style={styles.comparatifColNom}>{nomPlan(p)}</span>
+              <span style={styles.comparatifColPrix}>
+                {formatterFCFA(PRIX_PLANS[p])} FCFA{t("plan_par_mois_court")}
+              </span>
+            </div>
+          ))}
+        </div>
+        {LIGNES_COMPARATIF.map((ligne) => (
+          <div className="comparatif-row" style={styles.comparatifRow} role="row" key={ligne.cle}>
+            <div style={styles.comparatifLabel} role="cell">
+              {t(ligne.cle)}
+            </div>
+            {plans.map((p) => (
+              <CelluleComparatif key={p} inclus={Boolean(ligne[p])} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function Abonnement({ etablissement, planEffectif, enEssai, t }) {
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
 
@@ -1520,6 +1588,9 @@ function Abonnement({ etablissement, planEffectif, enEssai, t }) {
           planActuel={etablissement?.abonnement_actif && !enEssai ? planEffectif : null}
           compact
         />
+
+        {/* Les 3 forfaits en détail : 9 caractéristiques × 3 colonnes */}
+        <ComparatifForfaits t={t} />
       </div>
     </div>
   );
@@ -1828,6 +1899,10 @@ const GLOBAL_CSS = `
 @media (max-width: 780px) {
   .page-banner { margin: 12px 16px 0 !important; height: 96px !important; }
 }
+
+@media (max-width: 760px) {
+  .comparatif-row { grid-template-columns: 1.5fr repeat(3, 1fr) !important; gap: 4px !important; font-size: 11px !important; }
+}
 `;
 
 const styles = {
@@ -2019,6 +2094,42 @@ const styles = {
   aboIntro: {
     fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
   },
+  comparatifCard: {
+    marginTop: 18,
+    border: "1px solid #EDE7DA",
+    borderRadius: 14,
+    background: "#FFFEFB",
+    padding: "14px 14px 8px",
+  },
+  comparatifTitre: {
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", marginBottom: 10,
+  },
+  comparatifTable: { display: "flex", flexDirection: "column" },
+  comparatifRow: {
+    display: "grid",
+    gridTemplateColumns: "1.7fr 1fr 1fr 1fr",
+    gap: 6,
+    alignItems: "center",
+    padding: "8px 4px",
+    borderTop: "1px solid #F1ECE2",
+    fontSize: 12,
+    color: "#5C5748",
+  },
+  comparatifHead: {
+    display: "grid",
+    gridTemplateColumns: "1.7fr 1fr 1fr 1fr",
+    gap: 6,
+    alignItems: "center",
+    padding: "4px 4px 8px",
+    borderTop: "none",
+  },
+  comparatifLabel: { fontSize: 11.5, lineHeight: 1.35, color: "#5C5748" },
+  comparatifLabelHead: { fontSize: 10.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  comparatifColHead: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, textAlign: "center" },
+  comparatifColNom: { fontFamily: "'Fraunces', serif", fontSize: 12.5, fontWeight: 600, color: "#16213E" },
+  comparatifColPrix: { fontSize: 10.5, fontWeight: 700, color: "#B4801F" },
+  comparatifCell: { display: "flex", alignItems: "center", justifyContent: "center" },
+  comparatifCheck: { fontSize: 11, lineHeight: 1 },
   stockQty: {
     fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
   },

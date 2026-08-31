@@ -130,42 +130,76 @@ L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 
 | Formule | Prix | Pour qui |
 |---|---|---|
-| Starter | **7 000 FCFA/mois** | Tout le monde — **et c'est le seul plan de l'offre Fondateurs** |
-| Pro | **10 000 FCFA/mois** | Établissements non fondateurs |
-| Entreprise | 20 000 FCFA/mois | Établissements non fondateurs |
+| Starter | **7 000 FCFA/mois** | Tout le monde |
+| Pro | **10 000 FCFA/mois** | Tout le monde |
+| Entreprise | **20 000 FCFA/mois** | Tout le monde |
 
-**Offre Fondateurs = les 100 premiers établissements, et rien d'autre que le plan STARTER.**
+**Offre Fondateurs = les 100 premiers établissements.**
 
-- Un établissement fondateur (`est_fondateur = true`) ne voit **qu'un seul bouton de
-  forfait : Starter**, au tarif verrouillé `tarif_verrouille = 7 000` FCFA/mois, à vie.
-- Le 101ᵉ établissement créé n'est pas fondateur et retrouve les trois forfaits.
+```
+J0 ──────── 7 jours d'offre fondateurs ──────── J7 ───────────────▶
+  STARTER seul actif (7 000 FCFA verrouillés)      choix libre :
+  Pro + Entreprise affichés mais cadenassés        Starter · Pro · Entreprise
+```
+
+- **Pendant les 7 jours** : un fondateur (`est_fondateur = true`) utilise **uniquement le plan
+  Starter à 7 000 FCFA/mois** (`tarif_verrouille = 7000`). Les forfaits Pro et Entreprise
+  restent **affichés** (prix, note, 6 caractéristiques) mais **cadenassés** :
+  `aria-disabled="true"`, un clic affiche l'explication au lieu de changer de plan, et un
+  compte à rebours indique « Pro et Entreprise se débloquent dans X j Y h ».
+- **À la fin des 7 jours** : le fondateur choisit librement Starter (7 000), **Pro (10 000)**
+  ou **Entreprise (20 000)**, au tarif normal. Les cartes Pro / Entreprise portent alors le
+  badge « Disponible — upgrade fondateur ».
+- Un minuteur interne (30 s) débloque les boutons **sans rechargement de page**.
+- Le 101é établissement créé n'est pas fondateur et voit les trois forfaits dès le départ.
+
+### Fenêtre de l'offre
+
+Front (`PaiementWave.jsx` — `fondateurVerrouille()`) et SQL partagent la même règle :
+
+```sql
+now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+```
 
 ### Où la règle est appliquée
 
-1. **`PaiementWave.jsx`** — `plansDisponibles()` ne renvoie que `["starter"]` pour un
-   fondateur ; `planEffectifFondateur()` ramène tout choix (`pro`, `entreprise`) vers
-   `starter` ; la demande de paiement est enregistrée en `starter` quoi qu'il arrive.
-2. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
+1. **`PaiementWave.jsx`** — constantes `PRIX_PLANS`, `PRIX_FONDATEUR = 7000`,
+   `LIMITE_FONDATEURS = 100`, `JOURS_FONDATEUR = 7`, `AVANTAGES_PLANS` (6 clés
+   `abo_feat_*` par forfait) ; fonctions exportées `estFondateur()`, `finEssai()`,
+   `fondateurVerrouille()`, `tarifFondateurActif()`, `resteAvantDeblocage()`,
+   `plansDisponibles()`, `planEffectifFondateur()`, `montantDuPlan()`.
+2. **`App.jsx`** — `export function Abonnement()` et `export const LIGNES_COMPARATIF`
+   (9 caractéristiques sans doublon) alimentent la carte « Comparer les forfaits »
+   (9 lignes × 3 colonnes), avec les styles `comparatif*` et la media query
+   `.comparatif-row` dans `GLOBAL_CSS`.
+3. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
    - `appliquer_offre_fondateur()` force `plan = 'starter'` pour les 100 premiers
      établissements (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
-   - `empecher_sortie_plan_fondateur()` (trigger `BEFORE UPDATE`) remet tout fondateur
-     sur `starter` / 7 000 FCFA — donc même `valider_paiement()` ne peut pas le sortir
-     du Starter ;
-   - `forcer_plan_fondateur_demande()` (trigger sur `demandes_paiement`) ramène toute
-     déclaration de paiement d'un fondateur à `starter` / 7 000 FCFA ;
-   - un `UPDATE` de rattrapage remet en `starter` les fondateurs déjà passés en
-     `pro` / `entreprise`.
+   - `empecher_sortie_plan_fondateur()` (trigger `BEFORE UPDATE`) **n'agit que pendant
+     l'offre** : après les 7 jours, un fondateur peut passer en Pro ou Entreprise ;
+   - `forcer_plan_fondateur_demande()` (trigger sur `demandes_paiement`, SETUP-FINAL)
+     ramène la demande à `starter` / 7 000 FCFA **pendant l'offre seulement** ; après,
+     le montant réel (10 000 / 20 000) est conservé ;
+   - l'`UPDATE` de rattrapage ne touche **que les fondateurs encore dans leur fenêtre
+     d'offre** : un fondateur hors offre déjà en Pro n'est jamais écrasé.
 
 ### À faire côté Supabase
 
-Relancer **`supabase-SETUP-FINAL.sql`** (idempotent) dans le SQL Editor. Le rattrapage
-des fondateurs déjà en `pro` / `entreprise` se fait tout seul au passage.
+Relancer **`supabase-SETUP-FINAL.sql`** (idempotent) dans le SQL Editor. Le rattrapage des
+fondateurs encore en offre se fait tout seul au passage.
 
 ```sql
--- Vérification : aucun fondateur hors STARTER
-select id, nom, plan, tarif_verrouille from etablissements
- where est_fondateur = true and (plan <> 'starter' or tarif_verrouille <> 7000);
+-- 1. doit renvoyer 0 ligne : aucun fondateur EN offre hors STARTER
+select id, nom, plan from etablissements
+ where est_fondateur = true
+   and now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+   and plan <> 'starter';
 
--- Places restantes sur l'offre Fondateurs
+-- 2. fondateurs éligibles à l'upgrade (offre terminée)
+select id, nom, plan, date_creation from etablissements
+ where est_fondateur = true
+   and now() >= date_creation + make_interval(days => coalesce(essai_jours, 7));
+
+-- 3. places restantes
 select public.places_fondateurs_restantes();
 ```
