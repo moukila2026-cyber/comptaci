@@ -7,9 +7,10 @@ export const WAVE_NUMERO = "05 46 69 74 78";
 export const WAVE_NUMERO_CLEAN = "0546697478";
 export const WHATSAPP_SUPPORT = "2250501303343";
 
+/** Tarifs officiels ComptaCi — Pro fixé à 10 000 FCFA/mois */
 export const PRIX_PLANS = {
   starter: 7000,
-  pro: 10000,
+  pro: 10000, // Forfait Pro : 10 000 FCFA/mois (prix de référence Wave)
   entreprise: 20000,
 };
 
