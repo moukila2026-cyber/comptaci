@@ -126,45 +126,55 @@ L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 
 ---
 
-## Tarifs & offre Fondateurs (règle définitive)
+## Tarifs & offre Fondateurs (règle en vigueur)
 
 | Formule | Prix | Pour qui |
 |---|---|---|
-| Starter | **7 000 FCFA/mois** | Tout le monde — **et c'est le seul plan de l'offre Fondateurs** |
-| Pro | **10 000 FCFA/mois** | Établissements non fondateurs |
-| Entreprise | 20 000 FCFA/mois | Établissements non fondateurs |
+| Starter | **7 000 FCFA/mois** | Tout le monde — **tarif verrouillé à vie pour les Fondateurs** |
+| Pro | **10 000 FCFA/mois** | Tout le monde, fondateurs compris |
+| Entreprise | 20 000 FCFA/mois | Tout le monde, fondateurs compris |
 
-**Offre Fondateurs = les 100 premiers établissements, et rien d'autre que le plan STARTER.**
+**Offre Fondateurs = les 100 premiers établissements, avec cette règle :**
 
-- Un établissement fondateur (`est_fondateur = true`) ne voit **qu'un seul bouton de
-  forfait : Starter**, au tarif verrouillé `tarif_verrouille = 7 000` FCFA/mois, à vie.
-- Le 101ᵉ établissement créé n'est pas fondateur et retrouve les trois forfaits.
+- **Pendant l'essai gratuit (7 jours)** : un fondateur utilise **uniquement le plan
+  Starter** (tarif verrouillé `tarif_verrouille = 7 000` FCFA/mois). Seule la carte
+  Starter est affichée sur la page Abonnement.
+- **À la fin des 7 jours** : le choix lui est donné — Starter, **Pro (10 000
+  FCFA/mois)** et **Entreprise (20 000 FCFA/mois)** sont affichés **et opérationnels**
+  (sélection + paiement Wave + activation par `valider_paiement()`).
 
 ### Où la règle est appliquée
 
-1. **`PaiementWave.jsx`** — `plansDisponibles()` ne renvoie que `["starter"]` pour un
-   fondateur ; `planEffectifFondateur()` ramène tout choix (`pro`, `entreprise`) vers
-   `starter` ; la demande de paiement est enregistrée en `starter` quoi qu'il arrive.
-2. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
-   - `appliquer_offre_fondateur()` force `plan = 'starter'` pour les 100 premiers
-     établissements (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
-   - `empecher_sortie_plan_fondateur()` (trigger `BEFORE UPDATE`) remet tout fondateur
-     sur `starter` / 7 000 FCFA — donc même `valider_paiement()` ne peut pas le sortir
-     du Starter ;
-   - `forcer_plan_fondateur_demande()` (trigger sur `demandes_paiement`) ramène toute
-     déclaration de paiement d'un fondateur à `starter` / 7 000 FCFA ;
-   - un `UPDATE` de rattrapage remet en `starter` les fondateurs déjà passés en
-     `pro` / `entreprise`.
+1. **`PaiementWave.jsx`** — `plansDisponibles(etablissement, essaiEnCours)` ne renvoie
+   que `["starter"]` pour un fondateur **en essai**, et les trois forfaits dès la fin
+   de l'essai (ou après abonnement). La demande de paiement enregistre le plan choisi
+   ; seul le tarif du plan **Starter** d'un fondateur utilise `tarif_verrouille`
+   (7 000 FCFA), Pro/Entreprise sont aux tarifs officiels.
+2. **Prop `essaiEnCours`** — passée depuis `App.jsx` (page Abonnement, `enEssai`) et
+   `PaiementEnAttente.jsx` (`!essaiTermine`), pour basculer proprement entre les deux
+   phases.
+3. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
+   - `appliquer_offre_fondateur()` marque les 100 premiers établissements comme
+     fondateurs, verrouille `tarif_verrouille = 7000` et les fait démarrer sur
+     `starter` (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
+   - **plus de** `empecher_sortie_plan_fondateur()` ni
+     `forcer_plan_fondateur_demande()` : un fondateur peut passer à Pro/Entreprise,
+     `valider_paiement()` applique le plan demandé.
+4. **`supabase-plans-tous-disponibles.sql`** — migration idempotente à exécuter sur une
+   base déjà en place : elle supprime les deux triggers de verrouillage fondateurs.
 
 ### À faire côté Supabase
 
-Relancer **`supabase-SETUP-FINAL.sql`** (idempotent) dans le SQL Editor. Le rattrapage
-des fondateurs déjà en `pro` / `entreprise` se fait tout seul au passage.
+**Script recommandé (un seul à exécuter)** : **`supabase-ACTIVATION-COMPLETE.sql`**
+— idempotent, auto-suffisant. Il crée la table `demandes_paiement` si elle est
+absente (cause de l'erreur `42P01`) et supprime les deux verrous fondateur.
+Pour une base neuve, exécuter directement **`supabase-SETUP-FINAL.sql`**
+(version mise à jour, sans les verrous).
 
 ```sql
--- Vérification : aucun fondateur hors STARTER
-select id, nom, plan, tarif_verrouille from etablissements
- where est_fondateur = true and (plan <> 'starter' or tarif_verrouille <> 7000);
+-- Vérification : plus aucun trigger de verrouillage fondateur
+select tgname from pg_trigger
+ where tgname in ('trg_fondateur_plan_starter', 'trg_demandes_paiement_fondateur');
 
 -- Places restantes sur l'offre Fondateurs
 select public.places_fondateurs_restantes();

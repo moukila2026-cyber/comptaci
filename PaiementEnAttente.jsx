@@ -94,6 +94,7 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
           t={t}
           planInitial={demandeExistante?.plan || etablissement?.plan || "starter"}
           planActuel={etablissement?.abonnement_actif ? etablissement?.plan : null}
+          essaiEnCours={!essaiTermine}
         />
 
         <button onClick={() => supabase.auth.signOut().then(onDeconnexion)} style={styles.logout}>

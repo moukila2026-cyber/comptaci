@@ -33,16 +33,15 @@ export function estFondateur(etablissement) {
 }
 
 /**
- * Règle métier : un établissement fondateur reste sur le plan STARTER
- * et sur rien d'autre. Aucun autre plan ne lui est proposé.
+ * Règle métier de l'offre Fondateurs :
+ *  - Pendant l'essai gratuit (7 jours), un établissement fondateur reste
+ *    sur le plan STARTER uniquement.
+ *  - À la fin de l'essai, le choix lui est donné : Starter, Pro et
+ *    Entreprise sont affichés et souscriptibles, fondateurs compris.
+ *  - Seul le tarif du plan Starter est verrouillé à vie (7 000 FCFA/mois).
  */
-export function plansDisponibles(etablissement) {
-  return estFondateur(etablissement) ? ["starter"] : PLANS;
-}
-
-/** Ramène n'importe quel plan vers « starter » pour un fondateur. */
-export function planEffectifFondateur(plan, etablissement) {
-  return estFondateur(etablissement) ? "starter" : plan;
+export function plansDisponibles(etablissement, essaiEnCours = false) {
+  return estFondateur(etablissement) && essaiEnCours ? ["starter"] : PLANS;
 }
 
 const fmt = (n) =>
@@ -87,8 +86,9 @@ function notePlan(t, p) {
 }
 
 function montantDuPlan(plan, etablissement) {
-  // Établissement fondateur : plan STARTER uniquement, tarif verrouillé à vie.
-  if (estFondateur(etablissement)) {
+  // Offre fondateurs : seul le plan STARTER reste au tarif verrouillé à vie.
+  // Pro (10 000 FCFA) et Entreprise (20 000 FCFA) sont au tarif officiel.
+  if (plan === "starter" && estFondateur(etablissement)) {
     const verrouille = Number(etablissement?.tarif_verrouille);
     return Number.isFinite(verrouille) && verrouille > 0 ? verrouille : PRIX_FONDATEUR;
   }
@@ -117,14 +117,16 @@ export default function PaiementWave({
   planInitial = null,
   planActuel = null,
   compact = false,
+  essaiEnCours = false,
   onDemandeEnvoyee,
 }) {
-  // Un établissement fondateur ne peut souscrire qu'au plan STARTER :
-  // le plan demandé est forcé, même si un ancien choix (Pro/Entreprise) traîne.
-  const [planBrut, setPlanBrut] = useState(planInitial || planActuel || "starter");
+  // Fondateur en essai : Starter uniquement. Fondateur hors essai : les
+  // 3 forfaits, l'offre fondateurs ne verrouillant que le tarif du Starter.
+  const [plan, setPlan] = useState(
+    essaiEnCours && estFondateur(etablissement) ? "starter" : planInitial || planActuel || "starter"
+  );
   const fondateur = estFondateur(etablissement);
-  const plan = planEffectifFondateur(planBrut, etablissement);
-  const plansChoisissables = plansDisponibles(etablissement);
+  const plansChoisissables = plansDisponibles(etablissement, essaiEnCours);
   const [telephone, setTelephone] = useState(etablissement?.telephone || "");
   const [reference, setReference] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -133,11 +135,19 @@ export default function PaiementWave({
   const [copieOk, setCopieOk] = useState(false);
 
   const montant = montantDuPlan(plan, etablissement);
+  // Tarif verrouillé de l'offre fondateurs, toujours celui du plan Starter.
+  const montantFondateur = montantDuPlan("starter", etablissement);
 
-  // Synchronise l'état interne dès qu'on bascule sur un établissement fondateur.
+  // Réinitialise la sélection quand on change d'établissement, de forfait
+  // actuel ou d'état d'essai (fin des 7 jours → choix donné, Starter inclus).
   useEffect(() => {
-    if (fondateur && planBrut !== "starter") setPlanBrut("starter");
-  }, [fondateur, planBrut]);
+    const initial = essaiEnCours && fondateur
+      ? "starter"
+      : planInitial || planActuel || "starter";
+    setPlan(initial);
+    setDemande(null);
+    setErreur("");
+  }, [essaiEnCours, fondateur, planInitial, planActuel, etablissement?.id]);
 
   const envoyerDemande = async () => {
     setErreur("");
@@ -153,8 +163,7 @@ export default function PaiementWave({
     try {
       const payload = {
         etablissement_id: etablissement.id,
-        // Règle fondateur : la demande est toujours enregistrée en STARTER.
-        plan: fondateur ? "starter" : plan,
+        plan,
         montant,
         telephone_payeur: (telephone || "").trim() || null,
         reference_wave: (reference || "").trim() || null,
@@ -213,15 +222,21 @@ export default function PaiementWave({
         <div style={S.fondateurBox}>
           <div style={S.fondateurTitre}>★ {t("paiement_fondateur_titre")}</div>
           <p style={S.fondateurNotice}>
-            {t("paiement_fondateur_notice", {
-              tarif: fmt(montant),
-              limite: LIMITE_FONDATEURS,
-            })}
+            {essaiEnCours
+              ? t("paiement_fondateur_essai_notice", {
+                  jours: etablissement?.essai_jours || 7,
+                  tarif: fmt(montantFondateur),
+                })
+              : t("paiement_fondateur_notice", {
+                  tarif: fmt(montantFondateur),
+                  limite: LIMITE_FONDATEURS,
+                })}
           </p>
         </div>
       )}
 
-      {/* 1. Choix du plan — un seul plan (Starter) pour les fondateurs */}
+      {/* 1. Choix du plan — Starter seul pendant l'essai fondateur,
+          les 3 forfaits dès la fin de l'essai */}
       <div style={S.plansRow}>
         {plansChoisissables.map((p) => {
           const actif = plan === p;
@@ -232,7 +247,7 @@ export default function PaiementWave({
               key={p}
               type="button"
               onClick={() => {
-                setPlanBrut(p);
+                setPlan(p);
                 setDemande(null);
                 setErreur("");
               }}
@@ -243,7 +258,7 @@ export default function PaiementWave({
             >
               <div style={S.planName}>
                 {nomPlan(t, p)}
-                {fondateur ? ` — ${t("paiement_fondateur_plan_nom")}` : ""}
+                {fondateur && p === "starter" ? ` — ${t("paiement_fondateur_plan_nom")}` : ""}
               </div>
               <div style={S.planPrice}>{fmt(prix)} FCFA<span style={S.planUnit}>/mois</span></div>
               <div style={S.planNote}>{notePlan(t, p)}</div>
