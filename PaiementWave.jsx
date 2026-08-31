@@ -21,11 +21,48 @@ export const PRIX_PLANS = {
 
 export const PLANS = ["starter", "pro", "entreprise"];
 
-/** Tarif fondateur garanti à vie = tarif Starter (7 000 FCFA/mois). */
+/** Tarif fondateur verrouillé = tarif Starter (7 000 FCFA/mois). */
 export const PRIX_FONDATEUR = 7000;
 
 /** Nombre d'établissements pouvant bénéficier de l'offre fondateurs. */
 export const LIMITE_FONDATEURS = 100;
+
+/** Durée de l'offre fondateurs : 7 jours d'essai en plan STARTER. */
+export const JOURS_FONDATEUR = 7;
+
+const JOUR_MS = 86400000;
+const HEURE_MS = 3600000;
+
+/**
+ * Les 6 caractéristiques affichées dans chaque carte de forfait.
+ * (6 clés abo_feat_* par plan → 18 ✅ sur la page Abonnement.)
+ */
+export const AVANTAGES_PLANS = {
+  starter: [
+    "abo_feat_1etab",
+    "abo_feat_saisie",
+    "abo_feat_dashboard",
+    "abo_feat_hist30",
+    "abo_feat_tva",
+    "abo_feat_gerant1",
+  ],
+  pro: [
+    "abo_feat_1etab",
+    "abo_feat_saisie",
+    "abo_feat_dashboard",
+    "abo_feat_histcomplet",
+    "abo_feat_tva",
+    "abo_feat_gerantillim",
+  ],
+  entreprise: [
+    "abo_feat_multi",
+    "abo_feat_saisie",
+    "abo_feat_dashboard",
+    "abo_feat_histcomplet",
+    "abo_feat_tva",
+    "abo_feat_gerantillim",
+  ],
+};
 
 /** L'offre fondateurs est limitée aux 100 premiers établissements. */
 export function estFondateur(etablissement) {
@@ -33,16 +70,75 @@ export function estFondateur(etablissement) {
 }
 
 /**
- * Règle métier : un établissement fondateur reste sur le plan STARTER
- * et sur rien d'autre. Aucun autre plan ne lui est proposé.
+ * Fin de la fenêtre « offre fondateurs » : date_creation + essai_jours (7 j par défaut).
+ * Miroir exact du SQL : now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
  */
-export function plansDisponibles(etablissement) {
-  return estFondateur(etablissement) ? ["starter"] : PLANS;
+export function finEssai(etablissement) {
+  const jours = Number(etablissement?.essai_jours) || JOURS_FONDATEUR;
+  const brut = etablissement?.date_creation;
+  if (!brut) return null;
+  const base = new Date(brut);
+  const ms = base.getTime();
+  if (!Number.isFinite(ms)) return null;
+  return new Date(ms + jours * JOUR_MS);
 }
 
-/** Ramène n'importe quel plan vers « starter » pour un fondateur. */
-export function planEffectifFondateur(plan, etablissement) {
-  return estFondateur(etablissement) ? "starter" : plan;
+/**
+ * VRAI uniquement pendant la fenêtre de l'offre : le fondateur est alors
+ * bloqué sur le plan STARTER à 7 000 FCFA. Après les 7 jours → faux, il
+ * choisit librement Starter, Pro ou Entreprise.
+ */
+export function fondateurVerrouille(etablissement, maintenant = Date.now()) {
+  if (!estFondateur(etablissement)) return false;
+  const fin = finEssai(etablissement);
+  // Sans date de création exploitable, on reste prudent : l'offre est en cours.
+  if (!fin) return true;
+  return maintenant < fin.getTime();
+}
+
+/** Le tarif fondateur verrouillé (7 000 FCFA) s'applique-t-il ? */
+export function tarifFondateurActif(etablissement, maintenant = Date.now()) {
+  return estFondateur(etablissement) && fondateurVerrouille(etablissement, maintenant);
+}
+
+/** Compte à rebours avant le déblocage de Pro / Entreprise. */
+export function resteAvantDeblocage(etablissement, maintenant = Date.now()) {
+  const fin = finEssai(etablissement);
+  const ms = fin
+    ? Math.max(0, fin.getTime() - maintenant)
+    : JOURS_FONDATEUR * JOUR_MS;
+  return {
+    ms,
+    jours: Math.floor(ms / JOUR_MS),
+    heures: Math.floor((ms % JOUR_MS) / HEURE_MS),
+  };
+}
+
+/** Format « 4 j 3 h » utilisé par le compte à rebours. */
+export function formatReste({ jours, heures }) {
+  return `${jours} j ${heures} h`;
+}
+
+/**
+ * Plans réellement choisissables : STARTER seul pendant l'offre fondateurs,
+ * les 3 forfaits ensuite (ou pour un établissement non fondateur).
+ */
+export function plansDisponibles(etablissement, maintenant = Date.now()) {
+  return fondateurVerrouille(etablissement, maintenant) ? ["starter"] : PLANS;
+}
+
+/** Ramène n'importe quel plan vers « starter » tant que l'offre fondateurs court. */
+export function planEffectifFondateur(plan, etablissement, maintenant = Date.now()) {
+  return fondateurVerrouille(etablissement, maintenant) ? "starter" : plan;
+}
+
+/** Montant à payer pour un plan donné, offre fondateurs comprise. */
+export function montantDuPlan(plan, etablissement, maintenant = Date.now()) {
+  if (tarifFondateurActif(etablissement, maintenant)) {
+    const verrouille = Number(etablissement?.tarif_verrouille);
+    return Number.isFinite(verrouille) && verrouille > 0 ? verrouille : PRIX_FONDATEUR;
+  }
+  return PRIX_PLANS[plan] || PRIX_PLANS.starter;
 }
 
 const fmt = (n) =>
@@ -86,15 +182,6 @@ function notePlan(t, p) {
   return t("paiement_plan_starter_note");
 }
 
-function montantDuPlan(plan, etablissement) {
-  // Établissement fondateur : plan STARTER uniquement, tarif verrouillé à vie.
-  if (estFondateur(etablissement)) {
-    const verrouille = Number(etablissement?.tarif_verrouille);
-    return Number.isFinite(verrouille) && verrouille > 0 ? verrouille : PRIX_FONDATEUR;
-  }
-  return PRIX_PLANS[plan] || PRIX_PLANS.starter;
-}
-
 function messageWhatsApp({ t, etablissement, plan, montant, reference, telephone }) {
   const lignes = [
     `Bonjour ComptaCi, je confirme mon paiement Wave.`,
@@ -110,6 +197,10 @@ function messageWhatsApp({ t, etablissement, plan, montant, reference, telephone
 /**
  * Bloc complet : choix du plan → QR Wave → formulaire « j'ai payé ».
  * Utilisé par l'écran de blocage (essai expiré) et la page Abonnement.
+ *
+ * Les 3 forfaits sont TOUJOURS affichés. Pendant l'offre fondateurs,
+ * Pro et Entreprise sont cadenassés (aria-disabled, clic = explication) ;
+ * un minuteur interne les débloque à la fin des 7 jours sans rechargement.
  */
 export default function PaiementWave({
   etablissement,
@@ -119,12 +210,10 @@ export default function PaiementWave({
   compact = false,
   onDemandeEnvoyee,
 }) {
-  // Un établissement fondateur ne peut souscrire qu'au plan STARTER :
-  // le plan demandé est forcé, même si un ancien choix (Pro/Entreprise) traîne.
   const [planBrut, setPlanBrut] = useState(planInitial || planActuel || "starter");
-  const fondateur = estFondateur(etablissement);
-  const plan = planEffectifFondateur(planBrut, etablissement);
-  const plansChoisissables = plansDisponibles(etablissement);
+  // Horloge interne : permet de débloquer Pro / Entreprise sans recharger la page.
+  const [maintenant, setMaintenant] = useState(() => Date.now());
+  const [messageVerrou, setMessageVerrou] = useState("");
   const [telephone, setTelephone] = useState(etablissement?.telephone || "");
   const [reference, setReference] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -132,12 +221,42 @@ export default function PaiementWave({
   const [demande, setDemande] = useState(null);
   const [copieOk, setCopieOk] = useState(false);
 
-  const montant = montantDuPlan(plan, etablissement);
+  const fondateur = estFondateur(etablissement);
+  const verrouille = fondateurVerrouille(etablissement, maintenant);
+  const dureeOffre = Number(etablissement?.essai_jours) || JOURS_FONDATEUR;
+  const plan = planEffectifFondateur(planBrut, etablissement, maintenant);
+  const montant = montantDuPlan(plan, etablissement, maintenant);
+  const reste = resteAvantDeblocage(etablissement, maintenant);
 
-  // Synchronise l'état interne dès qu'on bascule sur un établissement fondateur.
+  // Minuteur : rafraîchit l'horloge tant que l'offre fondateurs est en cours.
   useEffect(() => {
-    if (fondateur && planBrut !== "starter") setPlanBrut("starter");
-  }, [fondateur, planBrut]);
+    if (!fondateur || !verrouille) return undefined;
+    const id = setInterval(() => setMaintenant(Date.now()), 30000);
+    return () => clearInterval(id);
+  }, [fondateur, verrouille]);
+
+  // Synchronise l'état interne dès qu'on bascule sur un fondateur en offre.
+  useEffect(() => {
+    if (verrouille && planBrut !== "starter") setPlanBrut("starter");
+  }, [verrouille, planBrut]);
+
+  const choisirPlan = (p) => {
+    if (verrouille && p !== "starter") {
+      // Le clic ne change pas de plan : il explique pourquoi c'est verrouillé.
+      setMessageVerrou(
+        t("paiement_fondateur_verrou_avertissement", {
+          tarif: fmt(PRIX_FONDATEUR),
+          duree: dureeOffre,
+          jours: formatReste(reste),
+        })
+      );
+      return;
+    }
+    setMessageVerrou("");
+    setPlanBrut(p);
+    setDemande(null);
+    setErreur("");
+  };
 
   const envoyerDemande = async () => {
     setErreur("");
@@ -153,8 +272,8 @@ export default function PaiementWave({
     try {
       const payload = {
         etablissement_id: etablissement.id,
-        // Règle fondateur : la demande est toujours enregistrée en STARTER.
-        plan: fondateur ? "starter" : plan,
+        // Pendant l'offre, la demande est toujours enregistrée en STARTER.
+        plan: verrouille ? "starter" : plan,
         montant,
         telephone_payeur: (telephone || "").trim() || null,
         reference_wave: (reference || "").trim() || null,
@@ -212,46 +331,89 @@ export default function PaiementWave({
       {fondateur && (
         <div style={S.fondateurBox}>
           <div style={S.fondateurTitre}>★ {t("paiement_fondateur_titre")}</div>
-          <p style={S.fondateurNotice}>
-            {t("paiement_fondateur_notice", {
-              tarif: fmt(montant),
-              limite: LIMITE_FONDATEURS,
-            })}
-          </p>
+          {verrouille ? (
+            <>
+              <p style={S.fondateurNotice}>
+                {t("paiement_fondateur_notice", {
+                  tarif: fmt(PRIX_FONDATEUR),
+                  limite: LIMITE_FONDATEURS,
+                  duree: dureeOffre,
+                })}
+              </p>
+              <div style={S.fondateurVerrou}>{t("paiement_fondateur_verrouille")}</div>
+              <div style={S.compteRebours}>
+                {t("paiement_fondateur_deblocage", { jours: formatReste(reste) })}
+              </div>
+            </>
+          ) : (
+            <>
+              <p style={S.fondateurNotice}>{t("paiement_fondateur_upgrade")}</p>
+              <div style={S.fondateurBadge}>
+                {t("paiement_fondateur_badge", {
+                  tarif: fmt(PRIX_FONDATEUR),
+                  duree: dureeOffre,
+                })}
+              </div>
+            </>
+          )}
         </div>
       )}
 
-      {/* 1. Choix du plan — un seul plan (Starter) pour les fondateurs */}
+      {/* 1. Choix du plan — les 3 forfaits sont toujours affichés */}
       <div style={S.plansRow}>
-        {plansChoisissables.map((p) => {
+        {PLANS.map((p) => {
           const actif = plan === p;
           const estActuel = planActuel === p;
-          const prix = montantDuPlan(p, etablissement);
+          const bloque = verrouille && p !== "starter";
+          const prix = montantDuPlan(p, etablissement, maintenant);
           return (
             <button
               key={p}
               type="button"
-              onClick={() => {
-                setPlanBrut(p);
-                setDemande(null);
-                setErreur("");
-              }}
+              onClick={() => choisirPlan(p)}
+              aria-disabled={bloque ? "true" : "false"}
               style={{
                 ...S.planBox,
                 ...(actif ? S.planBoxActive : {}),
+                ...(bloque ? S.planBoxLocked : {}),
               }}
             >
               <div style={S.planName}>
                 {nomPlan(t, p)}
-                {fondateur ? ` — ${t("paiement_fondateur_plan_nom")}` : ""}
+                {p === "starter" && fondateur ? ` — ${t("paiement_fondateur_plan_nom")}` : ""}
               </div>
-              <div style={S.planPrice}>{fmt(prix)} FCFA<span style={S.planUnit}>/mois</span></div>
+              {bloque ? (
+                <div style={S.planLocked}>
+                  <span aria-hidden="true">🔒</span> {t("paiement_plan_verrouille")}
+                </div>
+              ) : (
+                <div style={S.planPrice}>
+                  {fmt(prix)} FCFA<span style={S.planUnit}>{t("plan_par_mois_court")}</span>
+                </div>
+              )}
               <div style={S.planNote}>{notePlan(t, p)}</div>
+              <ul style={S.planFeatures}>
+                {(AVANTAGES_PLANS[p] || []).map((cle) => (
+                  <li key={cle} style={S.planFeature}>
+                    <span aria-hidden="true" style={S.check}>
+                      ✅
+                    </span>
+                    <span>{t(cle)}</span>
+                  </li>
+                ))}
+              </ul>
+              {!bloque && fondateur && !verrouille && p !== "starter" && (
+                <div style={S.planUpgrade}>
+                  {t("paiement_plan_disponible_fondateur")}
+                </div>
+              )}
               {estActuel && <div style={S.planBadge}>{t("abo_plan_actif")}</div>}
             </button>
           );
         })}
       </div>
+
+      {messageVerrou && <div style={S.verrouAvertissement}>{messageVerrou}</div>}
 
       {/* 2. QR + montant */}
       <div style={S.qrBlock}>
@@ -350,9 +512,40 @@ const S = {
     lineHeight: 1.45,
     color: "#8A6420",
   },
+  fondateurVerrou: {
+    marginTop: 6,
+    fontSize: 11.5,
+    fontWeight: 700,
+    color: "#8A6420",
+  },
+  fondateurBadge: {
+    marginTop: 6,
+    display: "inline-block",
+    fontSize: 11,
+    fontWeight: 600,
+    color: "#186B4E",
+    background: "#E7F5EF",
+    padding: "3px 9px",
+    borderRadius: 20,
+  },
+  compteRebours: {
+    marginTop: 6,
+    fontSize: 12,
+    fontWeight: 700,
+    color: "#B4801F",
+  },
+  verrouAvertissement: {
+    fontSize: 12,
+    lineHeight: 1.45,
+    color: "#8A6420",
+    background: "#FBF3E2",
+    border: "1px solid #E5C88C",
+    borderRadius: 10,
+    padding: "9px 11px",
+  },
   plansRow: { display: "flex", gap: 10, flexWrap: "wrap" },
   planBox: {
-    flex: "1 1 120px",
+    flex: "1 1 160px",
     background: "#FBF9F4",
     border: "1.5px solid #EDE7DA",
     borderRadius: 12,
@@ -367,10 +560,50 @@ const S = {
     borderColor: "#D4A24C",
     boxShadow: "0 0 0 1px #D4A24C",
   },
+  planBoxLocked: {
+    background: "#F4F2ED",
+    borderStyle: "dashed",
+    cursor: "not-allowed",
+    opacity: 0.72,
+  },
   planName: { fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "#16213E" },
   planPrice: { fontSize: 13.5, color: "#B4801F", fontWeight: 700, margin: "4px 0" },
   planUnit: { fontSize: 11, fontWeight: 500, color: "#8A8578" },
   planNote: { fontSize: 10.5, color: "#8A8578", lineHeight: 1.35 },
+  planLocked: {
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#8A8578",
+    margin: "4px 0",
+  },
+  planFeatures: {
+    listStyle: "none",
+    margin: "8px 0 0",
+    padding: 0,
+    display: "flex",
+    flexDirection: "column",
+    gap: 3,
+    textAlign: "left",
+  },
+  planFeature: {
+    display: "flex",
+    alignItems: "flex-start",
+    gap: 5,
+    fontSize: 10.5,
+    lineHeight: 1.35,
+    color: "#5C5748",
+  },
+  check: { fontSize: 9, lineHeight: 1.5 },
+  planUpgrade: {
+    marginTop: 7,
+    display: "inline-block",
+    fontSize: 9.5,
+    fontWeight: 700,
+    color: "#186B4E",
+    background: "#E7F5EF",
+    padding: "2px 7px",
+    borderRadius: 20,
+  },
   planBadge: {
     marginTop: 6,
     display: "inline-block",

@@ -184,7 +184,8 @@ begin
   if compte_fondateurs < 100 then
     new.est_fondateur := true;
     new.tarif_verrouille := 7000;
-    -- Règle métier : l'offre fondateurs = plan STARTER et rien d'autre.
+    -- Règle métier : l'offre fondateurs démarre sur le plan STARTER
+    -- (7 000 FCFA) ; le choix de Pro / Entreprise s'ouvre à la fin des 7 jours.
     new.plan := 'starter';
   else
     new.est_fondateur := false;
@@ -200,18 +201,25 @@ create trigger trg_offre_fondateur
   for each row execute function public.appliquer_offre_fondateur();
 
 -- ------------------------------------------------------------
--- 7bis) Garde-fou : un établissement fondateur ne peut JAMAIS
---       sortir du plan STARTER (règle « STARTER et rien d'autre »).
+-- 7bis) Garde-fou : PENDANT l'offre fondateurs (fenêtre de 7 jours),
+--       un fondateur reste sur STARTER / 7 000 FCFA. Une fois la
+--       fenêtre passée, il choisit librement Starter, Pro ou
+--       Entreprise : le garde-fou ne s'applique plus.
+--       Fenêtre : now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
 -- ------------------------------------------------------------
 create or replace function public.empecher_sortie_plan_fondateur()
 returns trigger language plpgsql
 as $$
 begin
-  if new.est_fondateur and new.plan is distinct from 'starter' then
-    new.plan := 'starter';
-  end if;
-  if new.est_fondateur and (new.tarif_verrouille is null or new.tarif_verrouille <> 7000) then
-    new.tarif_verrouille := 7000;
+  if new.est_fondateur
+     and now() < coalesce(new.date_creation, now())
+                 + make_interval(days => coalesce(new.essai_jours, 7)) then
+    if new.plan is distinct from 'starter' then
+      new.plan := 'starter';
+    end if;
+    if new.tarif_verrouille is null or new.tarif_verrouille <> 7000 then
+      new.tarif_verrouille := 7000;
+    end if;
   end if;
   return new;
 end;
@@ -222,12 +230,15 @@ create trigger trg_fondateur_plan_starter
   before update on etablissements
   for each row execute function public.empecher_sortie_plan_fondateur();
 
--- Rattrapage : tout fondateur déjà passé sur pro / entreprise revient en STARTER.
+-- Rattrapage : un fondateur ENCORE dans sa fenêtre d'offre et déjà passé sur
+-- pro / entreprise revient en STARTER. Un fondateur hors offre (essai terminé)
+-- qui a choisi Pro ou Entreprise n'est jamais touché.
 update etablissements
    set plan = 'starter',
        tarif_verrouille = 7000
  where est_fondateur = true
-   and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000);
+   and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000)
+   and now() < date_creation + make_interval(days => coalesce(essai_jours, 7));
 
 -- ------------------------------------------------------------
 -- 8) Déclencheur : membre propriétaire créé automatiquement
@@ -456,8 +467,10 @@ create trigger trg_demandes_paiement_auteur
   for each row execute function public.demandes_paiement_set_auteur();
 
 -- ------------------------------------------------------------
--- Un fondateur ne peut déclarer un paiement que pour le plan STARTER,
--- au tarif verrouillé de 7 000 FCFA (règle « STARTER et rien d'autre »).
+-- PENDANT l'offre fondateurs (fenêtre de 7 jours), une demande de paiement
+-- d'un fondateur est ramenée au plan STARTER / 7 000 FCFA. Après la fenêtre,
+-- le fondateur paie le tarif normal du forfait réellement choisi
+-- (Pro 10 000 FCFA, Entreprise 20 000 FCFA).
 -- ------------------------------------------------------------
 create or replace function public.forcer_plan_fondateur_demande()
 returns trigger language plpgsql security definer set search_path = public
@@ -466,7 +479,9 @@ declare
   e etablissements;
 begin
   select * into e from etablissements where id = new.etablissement_id;
-  if e.est_fondateur then
+  if e.est_fondateur
+     and now() < coalesce(e.date_creation, now())
+                 + make_interval(days => coalesce(e.essai_jours, 7)) then
     new.plan := 'starter';
     new.montant := coalesce(e.tarif_verrouille, 7000);
   end if;
