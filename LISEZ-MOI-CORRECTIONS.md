@@ -90,3 +90,36 @@ automatiquement copiés dans le build (déployés avec le site).
 
 Les images sont dans `public/images/` et sont donc automatiquement
 déployées avec le site (rien à faire de plus).
+
+
+## 4) Paiement Wave + validation (nouveau)
+
+### Affichage du QR
+Le QR était une capture d'écran verticale (720×1612) affichée en `object-fit: cover`
+dans un carré 200×200 → le code était **rogné et illisible**.  
+Correctif : image carrée croppée dans `public/images/wave-qr.png`, affichage en
+`object-fit: contain`, avec repli data-URI (`WaveQR.js`).
+
+### Parcours client
+1. Choisir le forfait (Starter / Pro / Entreprise)
+2. Scanner le QR Wave **ou** envoyer le montant au **05 46 69 74 78**
+3. Cliquer **« J'ai payé »** (téléphone + référence Wave optionnelle)
+4. Une ligne est créée dans `demandes_paiement` (statut `en_attente`)
+5. Bouton WhatsApp prérempli pour prévenir l'équipe
+
+### Validation admin (vous)
+Après avoir relancé **`supabase-SETUP-FINAL.sql`** :
+
+```sql
+-- File d'attente
+select * from v_paiements_en_attente;
+
+-- Valider une demande (active abonnement_actif + pose le plan)
+select public.valider_paiement('<uuid_de_la_demande>');
+
+-- Ou refuser
+select public.refuser_paiement('<uuid_de_la_demande>', 'motif');
+```
+
+L'écran de blocage interroge l'établissement toutes les 15 s : dès que
+`abonnement_actif = true`, l'utilisateur entre automatiquement dans l'app.

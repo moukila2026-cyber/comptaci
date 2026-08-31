@@ -1,11 +1,55 @@
-import React from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import { WAVE_QR_DATA_URI } from "./WaveQR.js";
+import PaiementWave from "./PaiementWave.jsx";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
-export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t }) {
+export default function PaiementEnAttente({ etablissement, essaiTermine, onDeconnexion, langue, setLangue, t, onAbonnementActif }) {
+  const [demandeExistante, setDemandeExistante] = useState(null);
+
+  // Si une demande est déjà en attente, on l'affiche ; on poll aussi
+  // l'activation de l'abonnement (l'admin active côté Supabase).
+  useEffect(() => {
+    if (!etablissement?.id) return;
+    let annule = false;
+
+    const charger = async () => {
+      try {
+        const { data } = await supabase
+          .from("demandes_paiement")
+          .select("*")
+          .eq("etablissement_id", etablissement.id)
+          .eq("statut", "en_attente")
+          .order("cree_le", { ascending: false })
+          .limit(1);
+        if (!annule && data?.[0]) setDemandeExistante(data[0]);
+      } catch (_) {
+        // Table absente : on ignore, le formulaire affichera l'erreur au submit.
+      }
+    };
+
+    const verifierActivation = async () => {
+      try {
+        const { data } = await supabase
+          .from("etablissements")
+          .select("id, abonnement_actif, plan")
+          .eq("id", etablissement.id)
+          .limit(1);
+        if (!annule && data?.[0]?.abonnement_actif) {
+          onAbonnementActif?.(data[0]);
+        }
+      } catch (_) {}
+    };
+
+    charger();
+    const poll = setInterval(verifierActivation, 15000);
+    return () => {
+      annule = true;
+      clearInterval(poll);
+    };
+  }, [etablissement?.id]);
+
   return (
     <div style={styles.wrap}>
       <div style={styles.photoOverlay} />
@@ -36,36 +80,21 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
             : t("paiement_texte_actif", { nom: etablissement?.nom || "" })}
         </p>
 
-        <div style={styles.plansRow}>
-          <div style={styles.planBox}>
-            <div style={styles.planName}>{t("paiement_plan_starter")}</div>
-            <div style={styles.planPrice}>7 000 FCFA/mois</div>
-            <div style={styles.planNote}>{t("paiement_plan_starter_note")}</div>
+        {demandeExistante && (
+          <div style={styles.attenteBanner}>
+            {t("paiement_demande_deja_en_attente", {
+              plan: demandeExistante.plan,
+              montant: fmt(demandeExistante.montant),
+            })}
           </div>
-          <div style={styles.planBox}>
-            <div style={styles.planName}>{t("paiement_plan_pro")}</div>
-            <div style={styles.planPrice}>10 000 FCFA/mois</div>
-            <div style={styles.planNote}>{t("paiement_plan_pro_note")}</div>
-          </div>
-          <div style={styles.planBox}>
-            <div style={styles.planName}>{t("paiement_plan_entreprise")}</div>
-            <div style={styles.planPrice}>20 000 FCFA/mois</div>
-            <div style={styles.planNote}>{t("paiement_plan_entreprise_note")}</div>
-          </div>
-        </div>
+        )}
 
-        <img src={WAVE_QR_DATA_URI} alt="Code QR de paiement Wave" style={styles.qr} />
-
-        <div style={styles.contactBlock}>
-          <div style={styles.contactLine}>{t("paiement_numero_wave")} <strong>05 46 69 74 78</strong></div>
-          <a href="https://wa.me/2250501303343" target="_blank" rel="noopener noreferrer" style={styles.whatsappBtn}>
-            {t("paiement_contacter_whatsapp")}
-          </a>
-        </div>
-
-        <div style={styles.notice}>
-          {t("paiement_notice")}
-        </div>
+        <PaiementWave
+          etablissement={etablissement}
+          t={t}
+          planInitial={demandeExistante?.plan || etablissement?.plan || "starter"}
+          planActuel={etablissement?.abonnement_actif ? etablissement?.plan : null}
+        />
 
         <button onClick={() => supabase.auth.signOut().then(onDeconnexion)} style={styles.logout}>
           {t("paiement_deconnexion")}
@@ -94,32 +123,19 @@ const styles = {
     background: "linear-gradient(160deg, rgba(22,33,62,0.93) 0%, rgba(22,33,62,0.87) 45%, rgba(22,33,62,0.74) 100%)",
   },
   card: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
-    width: "100%", maxWidth: 460, textAlign: "center", position: "relative", zIndex: 1,
+    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 28,
+    width: "100%", maxWidth: 520, textAlign: "center", position: "relative", zIndex: 1,
   },
-  brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 20 },
+  brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 18 },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },
   title: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#16213E", marginBottom: 10 },
-  text: { fontSize: 13.5, color: "#5C5748", lineHeight: 1.6, marginBottom: 20 },
-  qr: { width: 200, height: 200, borderRadius: 12, border: "1px solid #EDE7DA", marginBottom: 18, objectFit: "cover" },
-  contactBlock: { display: "flex", flexDirection: "column", gap: 10, marginBottom: 18 },
-  plansRow: { display: "flex", gap: 10, marginBottom: 20 },
-  planBox: { flex: 1, background: "#FBF9F4", border: "1px solid #EDE7DA", borderRadius: 10, padding: "10px 8px", textAlign: "center" },
-  planName: { fontFamily: "'Fraunces', serif", fontSize: 13, fontWeight: 600, color: "#16213E" },
-  planPrice: { fontSize: 12.5, color: "#B4801F", fontWeight: 600, margin: "3px 0" },
-  planNote: { fontSize: 10.5, color: "#8A8578" },
-  contactLine: { fontSize: 13, color: "#5C5748" },
-  whatsappBtn: {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 0",
-    borderRadius: 9, background: "#186B4E", color: "#FFFEFB", fontSize: 13, fontWeight: 600,
-    textDecoration: "none", fontFamily: "'Inter', sans-serif",
-  },
-  notice: {
-    fontSize: 12.5, color: "#8A8578", background: "#FBF3E2", padding: "12px 14px",
-    borderRadius: 10, marginBottom: 18, lineHeight: 1.5,
+  text: { fontSize: 13.5, color: "#5C5748", lineHeight: 1.6, marginBottom: 16 },
+  attenteBanner: {
+    background: "#FBF3E2", color: "#8A6420", fontSize: 12.5, fontWeight: 600,
+    padding: "10px 12px", borderRadius: 10, marginBottom: 14, lineHeight: 1.45,
   },
   logout: {
     background: "none", border: "none", color: "#B4432A", fontSize: 12.5,
-    cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    cursor: "pointer", fontFamily: "'Inter', sans-serif", marginTop: 18,
   },
 };

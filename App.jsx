@@ -6,7 +6,7 @@ import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
-import { WAVE_QR_DATA_URI } from "./WaveQR.js";
+import PaiementWave from "./PaiementWave.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
 
 const CATEGORIES_PAR_SECTEUR = {
@@ -517,6 +517,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
         etablissement={etablissement}
         essaiTermine={!essaiEnCours}
         onDeconnexion={() => { setSession(null); setEtablissement(null); }}
+        onAbonnementActif={(etabMaj) => {
+          setEtablissement((prev) => (prev ? { ...prev, ...etabMaj } : prev));
+        }}
         langue={langue}
         setLangue={setLangue}
         t={t}
@@ -1489,13 +1492,8 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
 }
 
 function Abonnement({ etablissement, planEffectif, enEssai, t }) {
-  const [planChoisi, setPlanChoisi] = useState(null);
-
-  const prix = { starter: "7 000", pro: "10 000", entreprise: "20 000" };
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
-  const notePlan = (p) =>
-    p === "pro" ? t("paiement_plan_pro_note") : p === "entreprise" ? t("paiement_plan_entreprise_note") : t("paiement_plan_starter_note");
 
   return (
     <div style={styles.page}>
@@ -1504,42 +1502,24 @@ function Abonnement({ etablissement, planEffectif, enEssai, t }) {
           <div>
             <div style={styles.cardTitle}>{t("nav_abonnement")}</div>
             <div style={styles.cardCaption}>
-              {enEssai ? t("abo_en_essai") : `${t("abo_plan_actuel")} : ${nomPlan(planEffectif)}`}
+              {enEssai
+                ? t("abo_en_essai")
+                : etablissement?.abonnement_actif
+                  ? `${t("abo_plan_actuel")} : ${nomPlan(planEffectif)}`
+                  : t("abo_paiement_titre")}
             </div>
           </div>
         </div>
 
-        <div style={styles.plansRowLarge}>
-          {["starter", "pro", "entreprise"].map((p) => (
-            <div key={p} style={{ ...styles.planBoxLarge, ...(planEffectif === p && !enEssai ? styles.planBoxActive : {}) }}>
-              <div style={styles.planNameLarge}>{nomPlan(p)}</div>
-              <div style={styles.planPriceLarge}>{prix[p]} FCFA<span style={styles.planPriceUnit}>/mois</span></div>
-              <div style={styles.planNote}>{notePlan(p)}</div>
-              <button
-                style={planEffectif === p && !enEssai ? styles.planBtnActive : styles.planBtn}
-                onClick={() => setPlanChoisi(p)}
-              >
-                {planEffectif === p && !enEssai ? t("abo_plan_actif") : t("abo_choisir")}
-              </button>
-            </div>
-          ))}
-        </div>
+        <p style={styles.aboIntro}>{t("abo_notice")}</p>
 
-        {planChoisi && (
-          <div style={styles.aboConfirmBox}>
-            <div style={styles.cardTitle}>
-              {t("abo_paiement_titre")} — {nomPlan(planChoisi)} ({prix[planChoisi]} FCFA/mois)
-            </div>
-            <img src={WAVE_QR_DATA_URI} alt="Code QR de paiement Wave" style={styles.qr} />
-            <div style={styles.contactBlock}>
-              <div style={styles.contactLine}>{t("paiement_numero_wave")} <strong>05 46 69 74 78</strong></div>
-              <a href="https://wa.me/2250501303343" target="_blank" rel="noopener noreferrer" style={styles.whatsappBtn}>
-                {t("paiement_contacter_whatsapp")}
-              </a>
-            </div>
-            <div style={styles.notice}>{t("abo_notice")}</div>
-          </div>
-        )}
+        <PaiementWave
+          etablissement={etablissement}
+          t={t}
+          planInitial={planEffectif || "starter"}
+          planActuel={etablissement?.abonnement_actif && !enEssai ? planEffectif : null}
+          compact
+        />
       </div>
     </div>
   );
@@ -2036,40 +2016,8 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#186B4E",
     textDecoration: "none", flexShrink: 0,
   },
-  plansRowLarge: { display: "flex", gap: 16, flexWrap: "wrap", marginTop: 8 },
-  planBoxLarge: {
-    flex: "1 1 240px", background: "#FBF9F4", border: "1px solid #EDE7DA", borderRadius: 14,
-    padding: 22, textAlign: "center",
-  },
-  planBoxActive: { background: "#FBF3E2", borderColor: "#E8D9B5" },
-  planNameLarge: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E", marginBottom: 6 },
-  planPriceLarge: { fontFamily: "'Fraunces', serif", fontSize: 24, fontWeight: 600, color: "#B4801F", marginBottom: 4 },
-  planPriceUnit: { fontSize: 12, fontWeight: 400, color: "#8A8578" },
-  planBtn: {
-    marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 9, border: "1px solid #16213E",
-    background: "transparent", color: "#16213E", fontSize: 13, fontWeight: 600, cursor: "pointer",
-    fontFamily: "'Inter', sans-serif",
-  },
-  planBtnActive: {
-    marginTop: 14, width: "100%", padding: "10px 0", borderRadius: 9, border: "none",
-    background: "#16213E", color: "#F3D9A0", fontSize: 13, fontWeight: 600, cursor: "default",
-    fontFamily: "'Inter', sans-serif",
-  },
-  aboConfirmBox: {
-    marginTop: 24, paddingTop: 24, borderTop: "1px solid #EDE7DA", display: "flex",
-    flexDirection: "column", alignItems: "center", textAlign: "center", gap: 14,
-  },
-  qr: { width: 180, height: 180, borderRadius: 12, border: "1px solid #EDE7DA", objectFit: "cover" },
-  contactBlock: { display: "flex", flexDirection: "column", gap: 10 },
-  contactLine: { fontSize: 13, color: "#5C5748" },
-  whatsappBtn: {
-    display: "inline-flex", alignItems: "center", justifyContent: "center", padding: "10px 20px",
-    borderRadius: 9, background: "#186B4E", color: "#FFFEFB", fontSize: 13, fontWeight: 600,
-    textDecoration: "none", fontFamily: "'Inter', sans-serif",
-  },
-  notice: {
-    fontSize: 12.5, color: "#8A8578", background: "#FBF3E2", padding: "12px 14px",
-    borderRadius: 10, lineHeight: 1.5, maxWidth: 380,
+  aboIntro: {
+    fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
   },
   stockQty: {
     fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
