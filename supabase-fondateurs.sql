@@ -20,7 +20,8 @@ begin
     new.est_fondateur := true;
     new.essai_jours := 7;
     new.tarif_verrouille := 7000;
-    -- Règle métier : l'offre fondateurs = plan STARTER et rien d'autre.
+    -- Les fondateurs démarrent sur le plan STARTER au tarif verrouillé à vie,
+    -- mais Pro et Entreprise restent souscriptibles (tarifs officiels).
     new.plan := 'starter';
   else
     new.est_fondateur := false;
@@ -35,36 +36,6 @@ drop trigger if exists trg_offre_fondateur on etablissements;
 create trigger trg_offre_fondateur
   before insert on etablissements
   for each row execute function public.appliquer_offre_fondateur();
-
--- ------------------------------------------------------------
--- 7bis) Garde-fou : un établissement fondateur ne peut JAMAIS
---       sortir du plan STARTER (règle « STARTER et rien d'autre »).
--- ------------------------------------------------------------
-create or replace function public.empecher_sortie_plan_fondateur()
-returns trigger language plpgsql
-as $$
-begin
-  if new.est_fondateur and new.plan is distinct from 'starter' then
-    new.plan := 'starter';
-  end if;
-  if new.est_fondateur and (new.tarif_verrouille is null or new.tarif_verrouille <> 7000) then
-    new.tarif_verrouille := 7000;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_fondateur_plan_starter on etablissements;
-create trigger trg_fondateur_plan_starter
-  before update on etablissements
-  for each row execute function public.empecher_sortie_plan_fondateur();
-
--- Rattrapage : tout fondateur déjà passé sur pro / entreprise revient en STARTER.
-update etablissements
-   set plan = 'starter',
-       tarif_verrouille = 7000
- where est_fondateur = true
-   and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000);
 
 -- Fonction publique pour afficher le nombre de places fondateurs restantes
 -- sur la landing page, sans exposer aucune donnée des établissements.

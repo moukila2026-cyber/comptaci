@@ -184,7 +184,8 @@ begin
   if compte_fondateurs < 100 then
     new.est_fondateur := true;
     new.tarif_verrouille := 7000;
-    -- Règle métier : l'offre fondateurs = plan STARTER et rien d'autre.
+    -- Les fondateurs démarrent sur le plan STARTER au tarif verrouillé à vie,
+    -- mais Pro et Entreprise restent souscriptibles (tarifs officiels).
     new.plan := 'starter';
   else
     new.est_fondateur := false;
@@ -198,36 +199,6 @@ drop trigger if exists trg_offre_fondateur on etablissements;
 create trigger trg_offre_fondateur
   before insert on etablissements
   for each row execute function public.appliquer_offre_fondateur();
-
--- ------------------------------------------------------------
--- 7bis) Garde-fou : un établissement fondateur ne peut JAMAIS
---       sortir du plan STARTER (règle « STARTER et rien d'autre »).
--- ------------------------------------------------------------
-create or replace function public.empecher_sortie_plan_fondateur()
-returns trigger language plpgsql
-as $$
-begin
-  if new.est_fondateur and new.plan is distinct from 'starter' then
-    new.plan := 'starter';
-  end if;
-  if new.est_fondateur and (new.tarif_verrouille is null or new.tarif_verrouille <> 7000) then
-    new.tarif_verrouille := 7000;
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_fondateur_plan_starter on etablissements;
-create trigger trg_fondateur_plan_starter
-  before update on etablissements
-  for each row execute function public.empecher_sortie_plan_fondateur();
-
--- Rattrapage : tout fondateur déjà passé sur pro / entreprise revient en STARTER.
-update etablissements
-   set plan = 'starter',
-       tarif_verrouille = 7000
- where est_fondateur = true
-   and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000);
 
 -- ------------------------------------------------------------
 -- 8) Déclencheur : membre propriétaire créé automatiquement
@@ -454,30 +425,6 @@ drop trigger if exists trg_demandes_paiement_auteur on demandes_paiement;
 create trigger trg_demandes_paiement_auteur
   before insert on demandes_paiement
   for each row execute function public.demandes_paiement_set_auteur();
-
--- ------------------------------------------------------------
--- Un fondateur ne peut déclarer un paiement que pour le plan STARTER,
--- au tarif verrouillé de 7 000 FCFA (règle « STARTER et rien d'autre »).
--- ------------------------------------------------------------
-create or replace function public.forcer_plan_fondateur_demande()
-returns trigger language plpgsql security definer set search_path = public
-as $$
-declare
-  e etablissements;
-begin
-  select * into e from etablissements where id = new.etablissement_id;
-  if e.est_fondateur then
-    new.plan := 'starter';
-    new.montant := coalesce(e.tarif_verrouille, 7000);
-  end if;
-  return new;
-end;
-$$;
-
-drop trigger if exists trg_demandes_paiement_fondateur on demandes_paiement;
-create trigger trg_demandes_paiement_fondateur
-  before insert on demandes_paiement
-  for each row execute function public.forcer_plan_fondateur_demande();
 
 -- RPC admin : valider une demande → active l'abonnement + pose le plan.
 -- À appeler depuis le SQL Editor (service role) ou un futur back-office :
