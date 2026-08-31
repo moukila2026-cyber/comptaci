@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import { WAVE_QR_SRC, WAVE_QR_DATA_URI } from "./WaveQR.js";
 
@@ -7,14 +7,43 @@ export const WAVE_NUMERO = "05 46 69 74 78";
 export const WAVE_NUMERO_CLEAN = "0546697478";
 export const WHATSAPP_SUPPORT = "2250501303343";
 
-/** Tarifs officiels ComptaCi — Pro fixé à 10 000 FCFA/mois */
+/**
+ * Tarifs officiels ComptaCi (FCFA / mois / établissement) :
+ *  - Starter  : 7 000  → c'est aussi le tarif fondateur verrouillé
+ *  - Pro      : 10 000 (prix de référence Wave)
+ *  - Entreprise : 20 000
+ */
 export const PRIX_PLANS = {
   starter: 7000,
-  pro: 10000, // Forfait Pro : 10 000 FCFA/mois (prix de référence Wave)
+  pro: 10000,
   entreprise: 20000,
 };
 
 export const PLANS = ["starter", "pro", "entreprise"];
+
+/** Tarif fondateur garanti à vie = tarif Starter (7 000 FCFA/mois). */
+export const PRIX_FONDATEUR = 7000;
+
+/** Nombre d'établissements pouvant bénéficier de l'offre fondateurs. */
+export const LIMITE_FONDATEURS = 100;
+
+/** L'offre fondateurs est limitée aux 100 premiers établissements. */
+export function estFondateur(etablissement) {
+  return Boolean(etablissement?.est_fondateur);
+}
+
+/**
+ * Règle métier : un établissement fondateur reste sur le plan STARTER
+ * et sur rien d'autre. Aucun autre plan ne lui est proposé.
+ */
+export function plansDisponibles(etablissement) {
+  return estFondateur(etablissement) ? ["starter"] : PLANS;
+}
+
+/** Ramène n'importe quel plan vers « starter » pour un fondateur. */
+export function planEffectifFondateur(plan, etablissement) {
+  return estFondateur(etablissement) ? "starter" : plan;
+}
 
 const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
@@ -58,12 +87,10 @@ function notePlan(t, p) {
 }
 
 function montantDuPlan(plan, etablissement) {
-  if (
-    etablissement?.est_fondateur &&
-    etablissement?.tarif_verrouille &&
-    (plan === "starter" || plan === "pro")
-  ) {
-    return Number(etablissement.tarif_verrouille) || PRIX_PLANS[plan];
+  // Établissement fondateur : plan STARTER uniquement, tarif verrouillé à vie.
+  if (estFondateur(etablissement)) {
+    const verrouille = Number(etablissement?.tarif_verrouille);
+    return Number.isFinite(verrouille) && verrouille > 0 ? verrouille : PRIX_FONDATEUR;
   }
   return PRIX_PLANS[plan] || PRIX_PLANS.starter;
 }
@@ -92,7 +119,12 @@ export default function PaiementWave({
   compact = false,
   onDemandeEnvoyee,
 }) {
-  const [plan, setPlan] = useState(planInitial || planActuel || "starter");
+  // Un établissement fondateur ne peut souscrire qu'au plan STARTER :
+  // le plan demandé est forcé, même si un ancien choix (Pro/Entreprise) traîne.
+  const [planBrut, setPlanBrut] = useState(planInitial || planActuel || "starter");
+  const fondateur = estFondateur(etablissement);
+  const plan = planEffectifFondateur(planBrut, etablissement);
+  const plansChoisissables = plansDisponibles(etablissement);
   const [telephone, setTelephone] = useState(etablissement?.telephone || "");
   const [reference, setReference] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -101,6 +133,11 @@ export default function PaiementWave({
   const [copieOk, setCopieOk] = useState(false);
 
   const montant = montantDuPlan(plan, etablissement);
+
+  // Synchronise l'état interne dès qu'on bascule sur un établissement fondateur.
+  useEffect(() => {
+    if (fondateur && planBrut !== "starter") setPlanBrut("starter");
+  }, [fondateur, planBrut]);
 
   const envoyerDemande = async () => {
     setErreur("");
@@ -116,7 +153,8 @@ export default function PaiementWave({
     try {
       const payload = {
         etablissement_id: etablissement.id,
-        plan,
+        // Règle fondateur : la demande est toujours enregistrée en STARTER.
+        plan: fondateur ? "starter" : plan,
         montant,
         telephone_payeur: (telephone || "").trim() || null,
         reference_wave: (reference || "").trim() || null,
@@ -170,9 +208,22 @@ export default function PaiementWave({
 
   return (
     <div style={{ ...S.wrap, ...(compact ? S.wrapCompact : {}) }}>
-      {/* 1. Choix du plan */}
+      {/* 0. Rappel de l'offre fondateurs (100 premiers établissements) */}
+      {fondateur && (
+        <div style={S.fondateurBox}>
+          <div style={S.fondateurTitre}>★ {t("paiement_fondateur_titre")}</div>
+          <p style={S.fondateurNotice}>
+            {t("paiement_fondateur_notice", {
+              tarif: fmt(montant),
+              limite: LIMITE_FONDATEURS,
+            })}
+          </p>
+        </div>
+      )}
+
+      {/* 1. Choix du plan — un seul plan (Starter) pour les fondateurs */}
       <div style={S.plansRow}>
-        {PLANS.map((p) => {
+        {plansChoisissables.map((p) => {
           const actif = plan === p;
           const estActuel = planActuel === p;
           const prix = montantDuPlan(p, etablissement);
@@ -181,7 +232,7 @@ export default function PaiementWave({
               key={p}
               type="button"
               onClick={() => {
-                setPlan(p);
+                setPlanBrut(p);
                 setDemande(null);
                 setErreur("");
               }}
@@ -190,7 +241,10 @@ export default function PaiementWave({
                 ...(actif ? S.planBoxActive : {}),
               }}
             >
-              <div style={S.planName}>{nomPlan(t, p)}</div>
+              <div style={S.planName}>
+                {nomPlan(t, p)}
+                {fondateur ? ` — ${t("paiement_fondateur_plan_nom")}` : ""}
+              </div>
               <div style={S.planPrice}>{fmt(prix)} FCFA<span style={S.planUnit}>/mois</span></div>
               <div style={S.planNote}>{notePlan(t, p)}</div>
               {estActuel && <div style={S.planBadge}>{t("abo_plan_actif")}</div>}
@@ -278,6 +332,24 @@ export default function PaiementWave({
 const S = {
   wrap: { display: "flex", flexDirection: "column", gap: 18, width: "100%" },
   wrapCompact: { gap: 14 },
+  fondateurBox: {
+    background: "#FBF3E2",
+    border: "1px solid #E5C88C",
+    borderRadius: 12,
+    padding: "10px 12px",
+  },
+  fondateurTitre: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "#8A6420",
+    fontFamily: "'Inter', sans-serif",
+  },
+  fondateurNotice: {
+    margin: "4px 0 0",
+    fontSize: 12,
+    lineHeight: 1.45,
+    color: "#8A6420",
+  },
   plansRow: { display: "flex", gap: 10, flexWrap: "wrap" },
   planBox: {
     flex: "1 1 120px",
