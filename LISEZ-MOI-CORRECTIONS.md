@@ -8,21 +8,26 @@ et caisse "inexistants", **boutons sans réaction après connexion**) viennent
 du fait que les tables/colonnes/politiques nécessaires n'existent pas encore
 dans ta base Supabase.
 
-**Va dans Supabase → SQL Editor → colle et exécute, DANS L'ORDRE :**
+**Va dans Supabase → SQL Editor → colle et exécute :**
 
-1. **`supabase-MASTER-COMPLET.sql`** (une seule fois) — crée toutes les
-   tables, colonnes et politiques de base.
-2. **`supabase-fix-rls-actions.sql`** (une seule fois) — corrige les
-   autorisations d'écriture :
-   - les **gérants** peuvent désormais saisir ventes/dépenses, gérer le
-     stock, les fournisseurs et la caisse (avant, les politiques RLS
-     bloquaient leurs écritures → les boutons semblaient morts) ;
-   - l'**inscription d'un établissement** crée automatiquement la ligne
-     « membres » du propriétaire (sinon l'insertion échouait à cause d'un
-     contrôle RLS circulaire).
+**`supabase-SETUP-FINAL.sql`** (une seule fois) — c'est le script unique et
+définitif qui remplace tous les anciens fichiers (`supabase-MASTER-COMPLET.sql`,
+`supabase-fix-rls-actions.sql`, etc.). Il crée, dans l'ordre, tout ce qui
+manque :
 
-Les deux scripts sont 100% idempotents : on peut les relancer sans risque,
-ils ne créent que ce qui manque et ne touchent pas aux données existantes.
+1. toutes les tables, colonnes et politiques de base ;
+2. les autorisations d'écriture : les **gérants** peuvent désormais saisir
+   ventes/dépenses, gérer le stock, les fournisseurs et la caisse (avant,
+   les politiques RLS bloquaient leurs écritures → les boutons semblaient
+   morts) ;
+3. **la fonction RPC `creer_etablissement`** (correctif définitif) : la
+   création d'un établissement insère désormais l'établissement **et** la
+   ligne « membres » du propriétaire dans une seule transaction, en
+   contournant la RLS. C'est ce qui répare définitivement l'inscription et
+   le bouton « Nouvel établissement » sans réaction.
+
+Le script est 100% idempotent : on peut le relancer sans risque, il ne crée
+que ce qui manque et ne touche pas aux données existantes.
 
 Après exécution :
 - tout nouvel établissement démarre avec le plan Starter gratuit pendant
