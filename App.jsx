@@ -297,23 +297,23 @@ function ComptaCiApp({ langue, setLangue, t }) {
       return false;
     }
     try {
-      const { data: etab, error: errEtab } = await supabase
-        .from("etablissements")
-        .insert({ proprietaire_id: session.user.id, nom, telephone: "", secteur })
-        .select()
-        .single();
-      if (errEtab) throw errEtab;
-      const { error: errMembre } = await supabase
-        .from("membres")
-        .insert({ etablissement_id: etab.id, user_id: session.user.id, role: "proprietaire" });
-      if (errMembre) throw errMembre;
+      // Correctif définitif : la création passe par la fonction RPC
+      // `creer_etablissement` (SECURITY DEFINER), qui insère l'établissement
+      // ET la ligne « membres » du propriétaire dans une seule transaction
+      // en contournant la RLS. L'ancien parcours en deux INSERT échouait à
+      // cause d'un contrôle RLS circulaire (bouton « sans réaction »).
+      const { data: etab, error: errRpc } = await supabase.rpc("creer_etablissement", {
+        nom,
+        secteur,
+      });
+      if (errRpc) throw errRpc;
 
       const { data: membreRows } = await supabase
         .from("membres")
         .select("role, etablissement_id, etablissements(*)")
         .eq("user_id", session.user.id);
       setMesEtablissements((membreRows || []).filter((m) => m.etablissements));
-      setEtablissementActifId(etab.id);
+      setEtablissementActifId(etab?.id);
       return true;
     } catch (e) {
       setErreur("Impossible de créer ce nouvel établissement.");
