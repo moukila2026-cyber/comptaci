@@ -165,9 +165,11 @@ L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 
 ### À faire côté Supabase
 
-Exécuter **`supabase-plans-tous-disponibles.sql`** dans le SQL Editor
-(idempotent). Pour une base neuve, exécuter directement
-**`supabase-SETUP-FINAL.sql`** (version mise à jour, sans les verrous).
+**Script recommandé (un seul à exécuter)** : **`supabase-ACTIVATION-COMPLETE.sql`**
+— idempotent, auto-suffisant. Il crée la table `demandes_paiement` si elle est
+absente (cause de l'erreur `42P01`) et supprime les deux verrous fondateur.
+Pour une base neuve, exécuter directement **`supabase-SETUP-FINAL.sql`**
+(version mise à jour, sans les verrous).
 
 ```sql
 -- Vérification : plus aucun trigger de verrouillage fondateur
