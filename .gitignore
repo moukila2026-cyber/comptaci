@@ -1,0 +1,14 @@
+# Dépendances
+node_modules/
+
+# Build de production
+dist/
+
+# Variables d'environnement (clés Supabase) — ne jamais committer
+.env
+.env.local
+.env.*.local
+
+# Logs & divers
+*.log
+.DS_Store

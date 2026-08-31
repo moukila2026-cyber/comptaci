@@ -50,17 +50,38 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
         const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
         if (error) throw error;
         const userId = data.user?.id;
+        // Si la confirmation d'email est activée côté Supabase, signUp ne
+        // renvoie pas de session (data.session === null). Comme ComptaCi
+        // utilise des emails internes (@comptaci.app, jamais consultés),
+        // il faut DÉSACTIVER la confirmation : on affiche une explication
+        // claire au lieu de rester bloqué sur un bouton sans réaction.
+        if (userId && !data.session) {
+          setErreur(t("auth_confirmer_email"));
+          setChargement(false);
+          return;
+        }
         if (userId) {
+          // La ligne « membres » propriétaire est normalement créée par le
+          // déclencheur SQL (trg_creer_membre_proprietaire) au moment de
+          // l'insertion de l'établissement. Si le déclencheur n'est pas
+          // encore appliqué, on crée quand même la ligne en secours.
           const { data: etab, error: errEtab } = await supabase
             .from("etablissements")
             .insert({ proprietaire_id: userId, nom: nomEtablissement, telephone, secteur })
             .select()
             .single();
           if (errEtab) throw errEtab;
-          const { error: errMembre } = await supabase
-            .from("membres")
-            .insert({ etablissement_id: etab.id, user_id: userId, role: "proprietaire" });
-          if (errMembre) throw errMembre;
+          if (etab?.id) {
+            const { error: errMembre } = await supabase
+              .from("membres")
+              .insert({ etablissement_id: etab.id, user_id: userId, role: "proprietaire" });
+            // Une ligne membre déjà créée par le déclencheur provoque une
+            // violation de contrainte (doublon) : ce n'est pas une erreur
+            // bloquante, on l'ignore.
+            if (errMembre && !errMembre.message?.includes("duplicate") && !errMembre.code?.includes("23505")) {
+              throw errMembre;
+            }
+          }
         }
         onAuthenticated();
       } else if (mode === "rejoindre") {
@@ -74,6 +95,13 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
         const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
         if (error) throw error;
         const userId = data.user?.id;
+        // Même remarque que pour l'inscription : si la confirmation d'email
+        // est activée dans Supabase, aucune session n'est renvoyée.
+        if (userId && !data.session) {
+          setErreur(t("auth_confirmer_email"));
+          setChargement(false);
+          return;
+        }
         if (userId) {
           const { error: errMembre } = await supabase
             .from("membres")
