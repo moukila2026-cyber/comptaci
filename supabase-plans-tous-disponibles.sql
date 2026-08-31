@@ -1,5 +1,5 @@
 -- ------------------------------------------------------------
--- ComptaCi — Tous les plans disponibles (Starter, Pro, Entreprise)
+-- ComptaCi — Déblocage des plans (Starter, Pro, Entreprise)
 -- à la fin des 7 jours d'essai, fondateurs compris
 --
 -- Règle appliquée :
@@ -9,9 +9,11 @@
 --   • Seul le tarif du plan Starter reste verrouillé à vie
 --     (7 000 FCFA/mois, colonne tarif_verrouille).
 --
--- Ce script est IDEMPOTENT et SANS DANGER : à exécuter dans le
--- SQL Editor Supabase. Il supprime les deux verrous SQL qui
--- ramenaient automatiquement les fondateurs sur le plan Starter.
+-- IMPORTANT : la table `demandes_paiement` doit exister avant
+-- l'exécution (sinon erreur 42P01). Si elle n'existe pas, exécute
+-- d'abord `supabase-ACTIVATION-COMPLETE.sql` qui s'en occupe.
+--
+-- IDEMPOTENT et SANS DANGER : à exécuter dans le SQL Editor Supabase.
 -- ------------------------------------------------------------
 
 -- 1) Supprime le garde-fou qui ramenait tout établissement fondateur
@@ -21,8 +23,15 @@ drop function if exists public.empecher_sortie_plan_fondateur();
 
 -- 2) Supprime le verrou qui forçait les demandes de paiement des
 --    fondateurs vers le plan STARTER / 7 000 FCFA (trigger BEFORE INSERT).
-drop trigger if exists trg_demandes_paiement_fondateur on demandes_paiement;
-drop function if exists public.forcer_plan_fondateur_demande();
+--    Protégé par to_regclass : ne peut plus provoquer d'erreur 42P01.
+do $$
+begin
+  if to_regclass('public.demandes_paiement') is not null then
+    execute 'drop trigger if exists trg_demandes_paiement_fondateur on demandes_paiement';
+  end if;
+  execute 'drop function if exists public.forcer_plan_fondateur_demande()';
+end;
+$$;
 
 -- 3) Vérification automatique : signale un problème si un verrou
 --    est encore présent, confirme sinon.
@@ -42,18 +51,3 @@ begin
   raise notice 'OK — verrous fondateur supprimés : Pro et Entreprise sont désormais opérationnels pour les fondateurs (après l''essai de 7 jours).';
 end;
 $$;
-
--- 4) Contrôles manuels (facultatifs, à copier-coller séparément si besoin)
-
---    a) Aucun trigger de verrouillage ne doit apparaître :
---       select tgname from pg_trigger
---        where tgname in ('trg_fondateur_plan_starter', 'trg_demandes_paiement_fondateur')
---          and not tgisinternal;
-
---    b) Aucun fondateur ne doit être re-verrouillé :
---       select id, nom, plan, tarif_verrouille from etablissements
---        where est_fondateur = true
---          and (plan not in ('starter','pro','entreprise') or tarif_verrouille <> 7000);
-
---    c) Places restantes sur l'offre Fondateurs :
---       select public.places_fondateurs_restantes();
