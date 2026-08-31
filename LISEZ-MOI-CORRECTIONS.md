@@ -134,28 +134,33 @@ L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 | Pro | **10 000 FCFA/mois** | Tout le monde, fondateurs compris |
 | Entreprise | 20 000 FCFA/mois | Tout le monde, fondateurs compris |
 
-**Offre Fondateurs = les 100 premiers établissements : leur plan STARTER reste à
-7 000 FCFA/mois à vie, mais les trois forfaits sont affichés et souscriptibles,
-fondateurs compris.**
+**Offre Fondateurs = les 100 premiers établissements, avec cette règle :**
 
-- Un établissement fondateur (`est_fondateur = true`) voit les **trois forfaits**
-  (Starter, Pro, Entreprise) sur la page Abonnement : le Starter au tarif verrouillé
-  `tarif_verrouille = 7 000` FCFA/mois, Pro et Entreprise aux tarifs officiels.
-- Le 101ᵉ établissement créé n'est pas fondateur et garde aussi les trois forfaits.
+- **Pendant l'essai gratuit (7 jours)** : un fondateur utilise **uniquement le plan
+  Starter** (tarif verrouillé `tarif_verrouille = 7 000` FCFA/mois). Seule la carte
+  Starter est affichée sur la page Abonnement.
+- **À la fin des 7 jours** : le choix lui est donné — Starter, **Pro (10 000
+  FCFA/mois)** et **Entreprise (20 000 FCFA/mois)** sont affichés **et opérationnels**
+  (sélection + paiement Wave + activation par `valider_paiement()`).
 
 ### Où la règle est appliquée
 
-1. **`PaiementWave.jsx`** — `plansDisponibles()` renvoie toujours `["starter", "pro",
-   "entreprise"]` ; seul le tarif du plan **Starter** d'un fondateur utilise
-   `tarif_verrouille` (7 000 FCFA) ; la demande de paiement enregistre le plan choisi.
-2. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
+1. **`PaiementWave.jsx`** — `plansDisponibles(etablissement, essaiEnCours)` ne renvoie
+   que `["starter"]` pour un fondateur **en essai**, et les trois forfaits dès la fin
+   de l'essai (ou après abonnement). La demande de paiement enregistre le plan choisi
+   ; seul le tarif du plan **Starter** d'un fondateur utilise `tarif_verrouille`
+   (7 000 FCFA), Pro/Entreprise sont aux tarifs officiels.
+2. **Prop `essaiEnCours`** — passée depuis `App.jsx` (page Abonnement, `enEssai`) et
+   `PaiementEnAttente.jsx` (`!essaiTermine`), pour basculer proprement entre les deux
+   phases.
+3. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
    - `appliquer_offre_fondateur()` marque les 100 premiers établissements comme
      fondateurs, verrouille `tarif_verrouille = 7000` et les fait démarrer sur
      `starter` (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
    - **plus de** `empecher_sortie_plan_fondateur()` ni
      `forcer_plan_fondateur_demande()` : un fondateur peut passer à Pro/Entreprise,
      `valider_paiement()` applique le plan demandé.
-3. **`supabase-plans-tous-disponibles.sql`** — migration idempotente à exécuter sur une
+4. **`supabase-plans-tous-disponibles.sql`** — migration idempotente à exécuter sur une
    base déjà en place : elle supprime les deux triggers de verrouillage fondateurs.
 
 ### À faire côté Supabase

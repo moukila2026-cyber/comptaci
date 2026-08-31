@@ -1518,6 +1518,7 @@ function Abonnement({ etablissement, planEffectif, enEssai, t }) {
           t={t}
           planInitial={planEffectif || "starter"}
           planActuel={etablissement?.abonnement_actif && !enEssai ? planEffectif : null}
+          essaiEnCours={enEssai}
           compact
         />
       </div>

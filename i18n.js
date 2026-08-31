@@ -158,7 +158,8 @@ const dict = {
     fondateur_tag: "Fondateur",
     paiement_fondateur_titre: "Offre Fondateurs — 100 premiers établissements",
     paiement_fondateur_plan_nom: "Offre Fondateurs",
-    paiement_fondateur_notice: "En tant qu'établissement fondateur, votre plan Starter reste à {tarif} FCFA/mois, garanti à vie. Pro (10 000 FCFA/mois) et Entreprise (20 000 FCFA/mois) sont aussi disponibles, au tarif officiel. Offre réservée aux {limite} premiers établissements.",
+    paiement_fondateur_notice: "En tant qu'établissement fondateur, votre plan Starter reste à {tarif} FCFA/mois, garanti à vie. À la fin de l'essai, vous pouvez aussi choisir Pro (10 000 FCFA/mois) ou Entreprise (20 000 FCFA/mois), au tarif officiel. Offre réservée aux {limite} premiers établissements.",
+    paiement_fondateur_essai_notice: "Pendant votre essai gratuit de {jours} jours, vous utilisez le plan Starter à {tarif} FCFA/mois. À la fin de l'essai, vous pourrez choisir entre Starter, Pro (10 000 FCFA/mois) et Entreprise (20 000 FCFA/mois).",
     paiement_fondateur_verrouille: "Plan Starter verrouillé à vie — offre fondateurs",
 
     paiement_titre_actif: "Un dernier pas avant d'accéder à votre tableau de bord",
@@ -376,7 +377,8 @@ const dict = {
     fondateur_tag: "Founder",
     paiement_fondateur_titre: "Founders Offer — First 100 businesses",
     paiement_fondateur_plan_nom: "Founders Offer",
-    paiement_fondateur_notice: "As a founding business, your Starter plan stays at {tarif} FCFA/month, guaranteed for life. Pro (10,000 FCFA/month) and Enterprise (20,000 FCFA/month) are also available at their official price. Reserved to the first {limite} businesses.",
+    paiement_fondateur_notice: "As a founding business, your Starter plan stays at {tarif} FCFA/month, guaranteed for life. When the trial ends, you can also choose Pro (10,000 FCFA/month) or Enterprise (20,000 FCFA/month) at their official price. Reserved to the first {limite} businesses.",
+    paiement_fondateur_essai_notice: "During your {jours}-day free trial, you are on the Starter plan at {tarif} FCFA/month. When the trial ends, you will be able to choose between Starter, Pro (10,000 FCFA/month) and Enterprise (20,000 FCFA/month).",
     paiement_fondateur_verrouille: "Starter plan locked for life — Founders Offer",
 
     paiement_titre_actif: "One last step before accessing your dashboard",
@@ -592,7 +594,8 @@ const dict = {
     fondateur_tag: "مؤسس",
     paiement_fondateur_titre: "عرض المؤسسين — أول 100 منشأة",
     paiement_fondateur_plan_nom: "عرض المؤسسين",
-    paiement_fondateur_notice: "بصفتك منشأة مؤسسة، تبقى باقة Starter الخاصة بك بـ {tarif} فرنك/شهر، مضمونة مدى الحياة. باقتا Pro (10,000 فرنك/شهر) وEntreprise (20,000 فرنك/شهر) متاحتان أيضاً بالسعر الرسمي. العرض مخصص لأول {limite} منشأة.",
+    paiement_fondateur_notice: "بصفتك منشأة مؤسسة، تبقى باقة Starter الخاصة بك بـ {tarif} فرنك/شهر، مضمونة مدى الحياة. عند انتهاء التجربة، يمكنك أيضاً الاختيار بين Pro (10,000 فرنك/شهر) وEntreprise (20,000 فرنك/شهر) بالسعر الرسمي. العرض مخصص لأول {limite} منشأة.",
+    paiement_fondateur_essai_notice: "خلال تجربتك المجانية لمدة {jours} أيام، تستخدم باقة Starter بـ {tarif} فرنك/شهر. عند انتهاء التجربة، يمكنك الاختيار بين Starter وPro (10,000 فرنك/شهر) وEntreprise (20,000 فرنك/شهر).",
     paiement_fondateur_verrouille: "باقة Starter مثبّتة مدى الحياة — عرض المؤسسين",
 
     paiement_titre_actif: "خطوة أخيرة قبل الوصول إلى لوحة التحكم",

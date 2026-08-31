@@ -33,12 +33,15 @@ export function estFondateur(etablissement) {
 }
 
 /**
- * Règle métier : tous les plans (Starter, Pro, Entreprise) sont
- * proposés à tous les établissements, fondateurs compris. L'offre
- * fondateurs ne verrouille que le tarif du plan Starter (7 000 FCFA/mois).
+ * Règle métier de l'offre Fondateurs :
+ *  - Pendant l'essai gratuit (7 jours), un établissement fondateur reste
+ *    sur le plan STARTER uniquement.
+ *  - À la fin de l'essai, le choix lui est donné : Starter, Pro et
+ *    Entreprise sont affichés et souscriptibles, fondateurs compris.
+ *  - Seul le tarif du plan Starter est verrouillé à vie (7 000 FCFA/mois).
  */
-export function plansDisponibles() {
-  return PLANS;
+export function plansDisponibles(etablissement, essaiEnCours = false) {
+  return estFondateur(etablissement) && essaiEnCours ? ["starter"] : PLANS;
 }
 
 const fmt = (n) =>
@@ -114,13 +117,16 @@ export default function PaiementWave({
   planInitial = null,
   planActuel = null,
   compact = false,
+  essaiEnCours = false,
   onDemandeEnvoyee,
 }) {
-  // Tous les plans sont disponibles, fondateurs compris : l'offre fondateurs
-  // ne verrouille que le tarif du plan Starter (7 000 FCFA/mois à vie).
-  const [plan, setPlan] = useState(planInitial || planActuel || "starter");
+  // Fondateur en essai : Starter uniquement. Fondateur hors essai : les
+  // 3 forfaits, l'offre fondateurs ne verrouillant que le tarif du Starter.
+  const [plan, setPlan] = useState(
+    essaiEnCours && estFondateur(etablissement) ? "starter" : planInitial || planActuel || "starter"
+  );
   const fondateur = estFondateur(etablissement);
-  const plansChoisissables = plansDisponibles(etablissement);
+  const plansChoisissables = plansDisponibles(etablissement, essaiEnCours);
   const [telephone, setTelephone] = useState(etablissement?.telephone || "");
   const [reference, setReference] = useState("");
   const [enCours, setEnCours] = useState(false);
@@ -132,12 +138,16 @@ export default function PaiementWave({
   // Tarif verrouillé de l'offre fondateurs, toujours celui du plan Starter.
   const montantFondateur = montantDuPlan("starter", etablissement);
 
-  // Réinitialise la sélection quand on change d'établissement ou de forfait actuel.
+  // Réinitialise la sélection quand on change d'établissement, de forfait
+  // actuel ou d'état d'essai (fin des 7 jours → choix donné, Starter inclus).
   useEffect(() => {
-    setPlan(planInitial || planActuel || "starter");
+    const initial = essaiEnCours && fondateur
+      ? "starter"
+      : planInitial || planActuel || "starter";
+    setPlan(initial);
     setDemande(null);
     setErreur("");
-  }, [planInitial, planActuel, etablissement?.id]);
+  }, [essaiEnCours, fondateur, planInitial, planActuel, etablissement?.id]);
 
   const envoyerDemande = async () => {
     setErreur("");
@@ -212,15 +222,21 @@ export default function PaiementWave({
         <div style={S.fondateurBox}>
           <div style={S.fondateurTitre}>★ {t("paiement_fondateur_titre")}</div>
           <p style={S.fondateurNotice}>
-            {t("paiement_fondateur_notice", {
-              tarif: fmt(montantFondateur),
-              limite: LIMITE_FONDATEURS,
-            })}
+            {essaiEnCours
+              ? t("paiement_fondateur_essai_notice", {
+                  jours: etablissement?.essai_jours || 7,
+                  tarif: fmt(montantFondateur),
+                })
+              : t("paiement_fondateur_notice", {
+                  tarif: fmt(montantFondateur),
+                  limite: LIMITE_FONDATEURS,
+                })}
           </p>
         </div>
       )}
 
-      {/* 1. Choix du plan — les 3 forfaits, fondateurs compris */}
+      {/* 1. Choix du plan — Starter seul pendant l'essai fondateur,
+          les 3 forfaits dès la fin de l'essai */}
       <div style={S.plansRow}>
         {plansChoisissables.map((p) => {
           const actif = plan === p;
