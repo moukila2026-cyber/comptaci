@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
 import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard } from "lucide-react";
-import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
+import { supabase, configManquante, clientEnErreur, erreursConfig } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
@@ -106,9 +106,13 @@ export default function ComptaCi() {
               ? "La connexion à Supabase a échoué. Vérifie que le Project URL et la clé sont correctement collés, sans espace ni guillemet en trop."
               : (
                 <>
-                  Les variables <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code> sont
-                  absentes ou mal formées (l'URL doit ressembler à https://xxxxx.supabase.co). Vérifie-les dans
-                  Vercel → Settings → Environment Variables, puis redéploie.
+                  Les variables d'environnement nécessaires sont absentes ou mal formées.
+                  <ul style={{ margin: "8px 0 8px 18px", padding: 0 }}>
+                    {erreursConfig.map((e) => <li key={e}>{e}</li>)}
+                  </ul>
+                  Ajoute-les dans <strong>Vercel → Settings → Environment Variables</strong>
+                  (noms exacts : <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code>),
+                  puis redéploie.
                 </>
               )}
           </p>
