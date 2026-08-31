@@ -123,3 +123,49 @@ select public.refuser_paiement('<uuid_de_la_demande>', 'motif');
 
 L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 `abonnement_actif = true`, l'utilisateur entre automatiquement dans l'app.
+
+---
+
+## Tarifs & offre Fondateurs (règle définitive)
+
+| Formule | Prix | Pour qui |
+|---|---|---|
+| Starter | **7 000 FCFA/mois** | Tout le monde — **et c'est le seul plan de l'offre Fondateurs** |
+| Pro | **10 000 FCFA/mois** | Établissements non fondateurs |
+| Entreprise | 20 000 FCFA/mois | Établissements non fondateurs |
+
+**Offre Fondateurs = les 100 premiers établissements, et rien d'autre que le plan STARTER.**
+
+- Un établissement fondateur (`est_fondateur = true`) ne voit **qu'un seul bouton de
+  forfait : Starter**, au tarif verrouillé `tarif_verrouille = 7 000` FCFA/mois, à vie.
+- Le 101ᵉ établissement créé n'est pas fondateur et retrouve les trois forfaits.
+
+### Où la règle est appliquée
+
+1. **`PaiementWave.jsx`** — `plansDisponibles()` ne renvoie que `["starter"]` pour un
+   fondateur ; `planEffectifFondateur()` ramène tout choix (`pro`, `entreprise`) vers
+   `starter` ; la demande de paiement est enregistrée en `starter` quoi qu'il arrive.
+2. **`supabase-SETUP-FINAL.sql` / `supabase-MASTER-COMPLET.sql` / `supabase-fondateurs.sql`** :
+   - `appliquer_offre_fondateur()` force `plan = 'starter'` pour les 100 premiers
+     établissements (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
+   - `empecher_sortie_plan_fondateur()` (trigger `BEFORE UPDATE`) remet tout fondateur
+     sur `starter` / 7 000 FCFA — donc même `valider_paiement()` ne peut pas le sortir
+     du Starter ;
+   - `forcer_plan_fondateur_demande()` (trigger sur `demandes_paiement`) ramène toute
+     déclaration de paiement d'un fondateur à `starter` / 7 000 FCFA ;
+   - un `UPDATE` de rattrapage remet en `starter` les fondateurs déjà passés en
+     `pro` / `entreprise`.
+
+### À faire côté Supabase
+
+Relancer **`supabase-SETUP-FINAL.sql`** (idempotent) dans le SQL Editor. Le rattrapage
+des fondateurs déjà en `pro` / `entreprise` se fait tout seul au passage.
+
+```sql
+-- Vérification : aucun fondateur hors STARTER
+select id, nom, plan, tarif_verrouille from etablissements
+ where est_fondateur = true and (plan <> 'starter' or tarif_verrouille <> 7000);
+
+-- Places restantes sur l'offre Fondateurs
+select public.places_fondateurs_restantes();
+```
