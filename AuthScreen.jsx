@@ -1,5 +1,9 @@
 import React, { useState } from "react";
-import { supabase, telephoneVersEmail } from "./supabaseClient.js";
+import {
+  supabase,
+  identifiantVersEmail,
+  identifiantVersTelephone,
+} from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
 
 const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
@@ -7,12 +11,19 @@ const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
 export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [mode, setMode] = useState("connexion"); // connexion | inscription | rejoindre
   const [telephone, setTelephone] = useState("");
+  const [email, setEmail] = useState("");
+  const [identifiant, setIdentifiant] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [nomEtablissement, setNomEtablissement] = useState("");
   const [secteur, setSecteur] = useState("restauration");
   const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
+
+  // Mot de passe oublié
+  const [mdpOublieOuvert, setMdpOublieOuvert] = useState(false);
+  const [mdpOublieIdentifiant, setMdpOublieIdentifiant] = useState("");
+  const [mdpOublieEtat, setMdpOublieEtat] = useState(null); // null | envoi | envoye | erreur
 
   const traduireErreur = (msg) => {
     if (msg.includes("already registered") || msg.includes("already exists")) {
@@ -27,45 +38,83 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
     return t("auth_erreur_generique");
   };
 
+  // Enregistre (ou met à jour) les infos réelles dans la table `profiles`
+  // pour qu'elles soient consultables dans Supabase (email, téléphone,
+  // nom d'établissement). Non bloquant si la table n'existe pas encore.
+  const enregistrerProfil = async (userId, emailUtilise, tel, nom) => {
+    try {
+      await supabase.from("profiles").upsert(
+        {
+          user_id: userId,
+          email: emailUtilise,
+          telephone: tel || null,
+          nom_etablissement: nom || null,
+          maj_le: new Date().toISOString(),
+        },
+        { onConflict: "user_id" }
+      );
+    } catch (e) {
+      console.warn("Profil non enregistré (exécutez supabase-comptes.sql) :", e.message);
+    }
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setErreur("");
-    if (!telephone || !motDePasse) {
-      setErreur(t("auth_champs_requis"));
-      return;
+
+    if (mode === "connexion") {
+      if (!identifiant || !motDePasse) {
+        setErreur(t("auth_champs_requis"));
+        return;
+      }
+    } else if (mode === "inscription") {
+      if (!email || !telephone || !motDePasse) {
+        setErreur(t("auth_champs_requis"));
+        return;
+      }
+      if (!nomEtablissement) {
+        setErreur(t("auth_nom_requis"));
+        return;
+      }
+      if (!email.includes("@")) {
+        setErreur(t("auth_email_invalide"));
+        return;
+      }
+    } else if (mode === "rejoindre") {
+      if (!codeInvitation || !identifiant || !motDePasse) {
+        setErreur(t("auth_champs_requis"));
+        return;
+      }
     }
-    if (mode === "inscription" && !nomEtablissement) {
-      setErreur(t("auth_nom_requis"));
-      return;
-    }
-    if (mode === "rejoindre" && !codeInvitation) {
-      setErreur(t("auth_code_requis"));
-      return;
-    }
+
     setChargement(true);
-    const email = telephoneVersEmail(telephone);
+    // Email réel OU téléphone (→ email interne pour les anciens comptes)
+    const emailUtilise = mode === "inscription"
+      ? email.trim().toLowerCase()
+      : identifiantVersEmail(identifiant);
 
     try {
       if (mode === "inscription") {
-        const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
+        const { data, error } = await supabase.auth.signUp({
+          email: emailUtilise,
+          password: motDePasse,
+          options: { data: { nom_etablissement: nomEtablissement, telephone } },
+        });
         if (error) throw error;
         const userId = data.user?.id;
         // Si la confirmation d'email est activée côté Supabase, signUp ne
-        // renvoie pas de session (data.session === null). Comme ComptaCi
-        // utilise des emails internes (@comptaci.app, jamais consultés),
-        // il faut DÉSACTIVER la confirmation : on affiche une explication
-        // claire au lieu de rester bloqué sur un bouton sans réaction.
+        // renvoie pas de session (data.session === null).
         if (userId && !data.session) {
           setErreur(t("auth_confirmer_email"));
           setChargement(false);
           return;
         }
         if (userId) {
+          await enregistrerProfil(userId, emailUtilise, telephone, nomEtablissement);
           // Correctif définitif : la création de l'établissement (et de la
           // ligne « membres » propriétaire) passe par la fonction RPC
           // `creer_etablissement` (SECURITY DEFINER). Elle insère les deux
-          // lignes dans une seule transaction en contournant la RLS, ce qui
-          // évite l'échec circulaire qui rendait le bouton « sans réaction ».
+          // lignes dans une seule transaction en contournant la RLS.
           const { error: errRpc } = await supabase.rpc("creer_etablissement", {
             nom: nomEtablissement,
             secteur,
@@ -82,11 +131,9 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           setChargement(false);
           return;
         }
-        const { data, error } = await supabase.auth.signUp({ email, password: motDePasse });
+        const { data, error } = await supabase.auth.signUp({ email: emailUtilise, password: motDePasse });
         if (error) throw error;
         const userId = data.user?.id;
-        // Même remarque que pour l'inscription : si la confirmation d'email
-        // est activée dans Supabase, aucune session n'est renvoyée.
         if (userId && !data.session) {
           setErreur(t("auth_confirmer_email"));
           setChargement(false);
@@ -97,10 +144,12 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
             .from("membres")
             .insert({ etablissement_id: etabId, user_id: userId, role: "gerant" });
           if (errMembre) throw errMembre;
+          const tel = identifiantVersTelephone(identifiant);
+          await enregistrerProfil(userId, emailUtilise, tel, null);
         }
         onAuthenticated();
       } else {
-        const { error } = await supabase.auth.signInWithPassword({ email, password: motDePasse });
+        const { error } = await supabase.auth.signInWithPassword({ email: emailUtilise, password: motDePasse });
         if (error) throw error;
         onAuthenticated();
       }
@@ -109,6 +158,17 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
     } finally {
       setChargement(false);
     }
+  };
+
+  const envoyerMdpOublie = async () => {
+    const v = mdpOublieIdentifiant.trim();
+    if (!v) return;
+    setMdpOublieEtat("envoi");
+    const emailCible = identifiantVersEmail(v);
+    const { error } = await supabase.auth.resetPasswordForEmail(emailCible, {
+      redirectTo: `${window.location.origin}/app.html`,
+    });
+    setMdpOublieEtat(error ? "erreur" : "envoye");
   };
 
   return (
@@ -187,16 +247,44 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
             </label>
           )}
 
-          <label style={styles.field}>
-            <span style={styles.label}>{t("auth_telephone")}</span>
-            <input
-              type="tel"
-              value={telephone}
-              onChange={(e) => setTelephone(e.target.value)}
-              placeholder={t("auth_telephone_placeholder")}
-              style={styles.input}
-            />
-          </label>
+          {mode === "inscription" && (
+            <label style={styles.field}>
+              <span style={styles.label}>{t("auth_email")}</span>
+              <input
+                type="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                placeholder={t("auth_email_placeholder")}
+                style={styles.input}
+              />
+            </label>
+          )}
+
+          {mode !== "inscription" && (
+            <label style={styles.field}>
+              <span style={styles.label}>{t("auth_identifiant")}</span>
+              <input
+                type="text"
+                value={identifiant}
+                onChange={(e) => setIdentifiant(e.target.value)}
+                placeholder={t("auth_identifiant_placeholder")}
+                style={styles.input}
+              />
+            </label>
+          )}
+
+          {mode === "inscription" && (
+            <label style={styles.field}>
+              <span style={styles.label}>{t("auth_telephone")}</span>
+              <input
+                type="tel"
+                value={telephone}
+                onChange={(e) => setTelephone(e.target.value)}
+                placeholder={t("auth_telephone_placeholder")}
+                style={styles.input}
+              />
+            </label>
+          )}
 
           <label style={styles.field}>
             <span style={styles.label}>{t("auth_mdp")}</span>
@@ -215,6 +303,40 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           <button type="button" onClick={submit} disabled={chargement} style={styles.submitBtn}>
             {chargement ? t("auth_instant") : mode === "connexion" ? t("auth_connexion") : mode === "rejoindre" ? t("auth_rejoindre_btn") : t("auth_creer_compte")}
           </button>
+
+          {mode === "connexion" && !mdpOublieOuvert && (
+            <button type="button" style={styles.mdpOublieLink} onClick={() => setMdpOublieOuvert(true)}>
+              {t("auth_mdp_oublie")}
+            </button>
+          )}
+
+          {mode === "connexion" && mdpOublieOuvert && (
+            <div style={styles.mdpOublieBox}>
+              <div style={styles.mdpOublieTitre}>{t("auth_mdp_oublie_titre")}</div>
+              <div style={styles.mdpOublieTexte}>{t("auth_mdp_oublie_texte")}</div>
+              <input
+                type="text"
+                value={mdpOublieIdentifiant}
+                onChange={(e) => setMdpOublieIdentifiant(e.target.value)}
+                placeholder={t("auth_identifiant_placeholder")}
+                style={styles.input}
+                onKeyDown={(e) => { if (e.key === "Enter") envoyerMdpOublie(); }}
+              />
+              <button
+                type="button"
+                onClick={envoyerMdpOublie}
+                disabled={mdpOublieEtat === "envoi"}
+                style={styles.mdpOublieBtn}
+              >
+                {mdpOublieEtat === "envoi" ? t("auth_mdp_oublie_envoi") : t("auth_mdp_oublie_envoyer")}
+              </button>
+              {mdpOublieEtat === "envoye" && <div style={styles.success}>{t("auth_mdp_oublie_envoye")}</div>}
+              {mdpOublieEtat === "erreur" && <div style={styles.error}>{t("auth_mdp_oublie_erreur")}</div>}
+              <button type="button" style={styles.mdpOublieLink} onClick={() => setMdpOublieOuvert(false)}>
+                {t("auth_retour")}
+              </button>
+            </div>
+          )}
         </div>
       </div>
       <div style={styles.footer}>SHOPIN30 · 05 01 30 33 43</div>
@@ -254,8 +376,22 @@ const styles = {
     fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
   },
   error: { fontSize: 12.5, color: "#B4432A", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
+  success: { fontSize: 12.5, color: "#186B4E", background: "#E4F2EC", padding: "8px 10px", borderRadius: 8 },
   submitBtn: {
     padding: "12px 0", borderRadius: 9, border: "none", background: "#16213E", color: "#F3D9A0",
     fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  mdpOublieLink: {
+    background: "none", border: "none", color: "#B4801F", fontSize: 12.5, fontWeight: 600,
+    cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif",
+  },
+  mdpOublieBox: {
+    display: "flex", flexDirection: "column", gap: 10, background: "#FBF9F4", borderRadius: 10, padding: 14,
+  },
+  mdpOublieTitre: { fontSize: 13, fontWeight: 700, color: "#16213E" },
+  mdpOublieTexte: { fontSize: 12, color: "#8A8578", lineHeight: 1.5 },
+  mdpOublieBtn: {
+    padding: "10px 0", borderRadius: 8, border: "none", background: "#16213E", color: "#F3D9A0",
+    fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
 };
