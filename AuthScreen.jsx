@@ -109,20 +109,22 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           setChargement(false);
           return;
         }
+        let nouvelEtab = null;
         if (userId) {
           await enregistrerProfil(userId, emailUtilise, telephone, nomEtablissement);
           // Correctif définitif : la création de l'établissement (et de la
           // ligne « membres » propriétaire) passe par la fonction RPC
           // `creer_etablissement` (SECURITY DEFINER). Elle insère les deux
           // lignes dans une seule transaction en contournant la RLS.
-          const { error: errRpc } = await supabase.rpc("creer_etablissement", {
+          const { data: etabData, error: errRpc } = await supabase.rpc("creer_etablissement", {
             nom: nomEtablissement,
             secteur,
             telephone,
           });
           if (errRpc) throw errRpc;
+          nouvelEtab = etabData;
         }
-        onAuthenticated();
+        if (onAuthenticated) onAuthenticated(nouvelEtab?.id);
       } else if (mode === "rejoindre") {
         const { data: etabId, error: errRecherche } = await supabase
           .rpc("etablissement_par_code", { code: codeInvitation.trim() });
@@ -147,11 +149,11 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           const tel = identifiantVersTelephone(identifiant);
           await enregistrerProfil(userId, emailUtilise, tel, null);
         }
-        onAuthenticated();
+        if (onAuthenticated) onAuthenticated(etabId);
       } else {
         const { error } = await supabase.auth.signInWithPassword({ email: emailUtilise, password: motDePasse });
         if (error) throw error;
-        onAuthenticated();
+        if (onAuthenticated) onAuthenticated();
       }
     } catch (err) {
       setErreur(traduireErreur(err.message));
