@@ -156,34 +156,57 @@ function ComptaCiApp({ langue, setLangue, t }) {
         setModeRecuperation(true);
       }
       setSession(s);
+      if (!s) {
+        setMesEtablissements([]);
+        setEtablissementActifId(null);
+        setEtablissement(null);
+        setRole(null);
+        setTransactions([]);
+        setProduits([]);
+        setFournisseurs([]);
+        setListeChargee(false);
+      }
     });
     return () => listener.subscription.unsubscribe();
   }, []);
 
   // Charge la liste de tous les établissements accessibles à ce compte
+  const chargerEtablissements = async (prefereId = null) => {
+    const { data: { session: s } } = await supabase.auth.getSession();
+    const sessionActive = s || session;
+    const uId = sessionActive?.user?.id;
+    if (!uId) {
+      setChargement(false);
+      return;
+    }
+    setChargement(true);
+    try {
+      const { data: membreRows, error: errMembre } = await supabase
+        .from("membres")
+        .select("role, etablissement_id, etablissements(*)")
+        .eq("user_id", uId);
+      if (errMembre) throw errMembre;
+      const liste = (membreRows || []).filter((m) => m.etablissements);
+      setMesEtablissements(liste);
+      setEtablissementActifId((prev) => {
+        const cible = prefereId || prev;
+        return cible && liste.some((m) => m.etablissement_id === cible)
+          ? cible
+          : liste[0]?.etablissement_id || null;
+      });
+      setListeChargee(true);
+    } catch (e) {
+      console.error("Erreur chargement établissements:", e);
+      setErreur("Impossible de charger vos établissements. Vérifiez votre connexion.");
+      setListeChargee(true);
+    } finally {
+      setChargement(false);
+    }
+  };
+
   useEffect(() => {
     if (!session) return;
-    (async () => {
-      setChargement(true);
-      try {
-        const { data: membreRows, error: errMembre } = await supabase
-          .from("membres")
-          .select("role, etablissement_id, etablissements(*)")
-          .eq("user_id", session.user.id);
-        if (errMembre) throw errMembre;
-        const liste = (membreRows || []).filter((m) => m.etablissements);
-        setMesEtablissements(liste);
-        setEtablissementActifId((prev) => prev && liste.some((m) => m.etablissement_id === prev)
-          ? prev
-          : liste[0]?.etablissement_id || null);
-        setListeChargee(true);
-      } catch (e) {
-        console.error("Erreur chargement établissements:", e);
-        setErreur("Impossible de charger vos établissements. Vérifiez votre connexion.");
-        setListeChargee(true);
-        setChargement(false);
-      }
-    })();
+    chargerEtablissements();
   }, [session]);
 
   // Charge les données de l'établissement actuellement sélectionné
@@ -314,12 +337,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
       });
       if (errRpc) throw errRpc;
 
-      const { data: membreRows } = await supabase
-        .from("membres")
-        .select("role, etablissement_id, etablissements(*)")
-        .eq("user_id", session.user.id);
-      setMesEtablissements((membreRows || []).filter((m) => m.etablissements));
-      setEtablissementActifId(etab?.id);
+      await chargerEtablissements(etab?.id);
       return true;
     } catch (e) {
       setErreur("Impossible de créer ce nouvel établissement.");
@@ -501,6 +519,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
     await supabase.auth.signOut();
     setTransactions([]);
     setEtablissement(null);
+    setRole(null);
+    setMesEtablissements([]);
+    setEtablissementActifId(null);
+    setListeChargee(false);
   };
 
   // Supprime le compte de l'utilisateur connecté (auth.users + données).
@@ -539,7 +561,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
   }
 
   if (!session) {
-    return <AuthScreen onAuthenticated={() => {}} langue={langue} setLangue={setLangue} t={t} />;
+    return (
+      <AuthScreen
+        onAuthenticated={(etabId) => chargerEtablissements(etabId)}
+        langue={langue}
+        setLangue={setLangue}
+        t={t}
+      />
+    );
   }
 
   const essaiExpireLe = etablissement
