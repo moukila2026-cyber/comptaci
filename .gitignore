@@ -12,3 +12,6 @@ dist/
 # Logs & divers
 *.log
 .DS_Store
+
+# Aperçu local des composants (données fictives, non déployé)
+.scratch/

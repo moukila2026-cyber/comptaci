@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
@@ -53,6 +53,81 @@ function secteursTraduits(t) {
 
 function categoriesDuSecteur(secteur) {
   return CATEGORIES_PAR_SECTEUR[secteur] || CATEGORIES_PAR_SECTEUR.restauration;
+}
+
+/**
+ * Nature de chaque poste de dépense : achats/approvisionnements, masse
+ * salariale, charges de structure ou autre. Sert aux ratios du tableau de bord.
+ */
+const POSTES_PAR_CATEGORIE = {
+  medicaments: "achats",
+  parapharmacie: "achats",
+  materiel_medical: "achats",
+  alimentaire: "achats",
+  hygiene: "achats",
+  boissons: "achats",
+  emballages: "achats",
+  materiaux: "achats",
+  outillage: "achats",
+  plomberie: "achats",
+  electricite: "achats",
+  peinture: "achats",
+  nourriture: "achats",
+  personnel: "personnel",
+  charges_fixes: "charges",
+  autre: "autre",
+};
+
+/** Seuils de bonne gestion (en % du CA) propres à chaque secteur. */
+const SEUILS_RATIOS = {
+  pharmacie: { achats: 65, personnel: 15, charges: 15 },
+  boutique: { achats: 75, personnel: 12, charges: 12 },
+  quincaillerie: { achats: 70, personnel: 12, charges: 15 },
+  restauration: { achats: 40, personnel: 20, charges: 15 },
+};
+
+/** Objectif de marge brute indicative, par secteur. */
+const MARGE_CIBLE = {
+  pharmacie: "25 – 35 %",
+  boutique: "15 – 25 %",
+  quincaillerie: "20 – 30 %",
+  restauration: "55 – 65 %",
+};
+
+/** Montants usuels proposés en un clic à l'ouverture de la caisse. */
+const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
+
+/** Palette des barres de répartition (dépenses par poste sectoriel). */
+const COULEURS_REPARTITION = [
+  "#16213E",
+  "#D4A24C",
+  "#C1502E",
+  "#186B4E",
+  "#6B5B95",
+  "#2E7BA6",
+  "#8A8578",
+  "#B4801F",
+];
+
+/** Valeur d'une ligne de stock : quantité disponible × prix unitaire. */
+const valeurStockLigne = (p) =>
+  (parseFloat(p.quantite_stock) || 0) * (parseFloat(p.prix_unitaire) || 0);
+
+/** Quantité d'une transaction (colonne dédiée, sinon relue dans la note). */
+function quantiteTransaction(tx) {
+  const directe = parseFloat(tx.quantite);
+  if (!isNaN(directe) && directe > 0) return directe;
+  const trouve = /Qté\s*:\s*([0-9]+(?:[.,][0-9]+)?)/i.exec(tx.note || "");
+  return trouve ? parseFloat(trouve[1].replace(",", ".")) || 0 : 0;
+}
+
+/** Désignation d'une transaction (colonnes récentes, sinon début de la note). */
+function designationTransaction(tx) {
+  if (tx.designation && String(tx.designation).trim()) return String(tx.designation).trim();
+  const note = (tx.note || "").trim();
+  if (!note) return "";
+  const premiere = note.split("—")[0].trim();
+  return /^Qté/i.test(premiere) ? "" : premiere;
 }
 
 const fmt = (n) =>
@@ -347,25 +422,46 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
   const addTransaction = async (donneesTx) => {
     if (!etablissement) return false;
-    const { designation, quantite, ...champsTransaction } = donneesTx;
-    const { data, error } = await supabase
+    const { designation, quantite, prixUnitaire, ...champsTransaction } = donneesTx;
+    const quantiteNumerique = parseFloat(quantite) || 0;
+    const prixNumerique = parseFloat(prixUnitaire) || 0;
+    const champsCommuns = { ...champsTransaction, etablissement_id: etablissement.id };
+
+    // La colonne `quantite` n'existe que si la migration
+    // supabase-transactions-quantite.sql a été appliquée. On tente d'abord avec,
+    // puis on retente sans elle : un simple oubli de migration ne doit jamais
+    // empêcher l'enregistrement d'une vente.
+    let { data, error } = await supabase
       .from("transactions")
-      .insert({ ...champsTransaction, etablissement_id: etablissement.id })
+      .insert({ ...champsCommuns, quantite: quantiteNumerique })
       .select();
+    if (error && /quantite/i.test(error.message || "")) {
+      const repli = await supabase.from("transactions").insert(champsCommuns).select();
+      data = repli.data;
+      error = repli.error;
+    }
     if (error) {
       console.error("Erreur insertion transaction:", error);
       setErreur(`L'enregistrement a échoué : ${error.message}`);
       return false;
     }
-    setTransactions([data[0], ...transactions]);
+    // On garde la quantité et la désignation en mémoire même si la base ne les
+    // stocke pas encore : le tableau de bord peut ainsi valoriser la vente tout
+    // de suite (elles sont relues dans la note après rechargement).
+    const transactionCreee = {
+      ...(data?.[0] || {}),
+      quantite: quantiteNumerique,
+      designation: designation ? designation.trim() : "",
+    };
+    setTransactions([transactionCreee, ...transactions]);
 
-    if (designation && designation.trim() && quantite) {
-      await ajusterStock(designation.trim(), parseFloat(quantite) || 0, donneesTx.type);
+    if (designation && designation.trim() && quantiteNumerique > 0) {
+      await ajusterStock(designation.trim(), quantiteNumerique, donneesTx.type, prixNumerique);
     }
     return true;
   };
 
-  const ajusterStock = async (designation, quantite, type) => {
+  const ajusterStock = async (designation, quantite, type, prixUnitaire = 0) => {
     const existant = produits.find(
       (p) => p.designation.toLowerCase() === designation.toLowerCase()
     );
@@ -373,22 +469,34 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
     if (existant) {
       const nouvelleQuantite = (parseFloat(existant.quantite_stock) || 0) + variation;
+      const miseAJour = { quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() };
+      // Valorisation : si le produit n'a pas encore de prix unitaire et que la
+      // vente (ou l'achat) en indique un, on l'enregistre : la valeur en FCFA
+      // de la ligne de stock peut alors être calculée immédiatement.
+      const prixActuel = parseFloat(existant.prix_unitaire) || 0;
+      if (!prixActuel && prixUnitaire > 0) miseAJour.prix_unitaire = prixUnitaire;
+
       const { data, error } = await supabase
         .from("produits")
-        .update({ quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() })
+        .update(miseAJour)
         .eq("id", existant.id)
         .select();
       if (!error && data?.[0]) {
-        setProduits(produits.map((p) => (p.id === existant.id ? data[0] : p)));
+        setProduits((liste) => liste.map((p) => (p.id === existant.id ? data[0] : p)));
       }
     } else if (type === "depense") {
       // Une dépense sur un produit inconnu : on le crée automatiquement en stock
       const { data, error } = await supabase
         .from("produits")
-        .insert({ etablissement_id: etablissement.id, designation, quantite_stock: quantite })
+        .insert({
+          etablissement_id: etablissement.id,
+          designation,
+          quantite_stock: quantite,
+          prix_unitaire: prixUnitaire > 0 ? prixUnitaire : null,
+        })
         .select();
       if (!error && data?.[0]) {
-        setProduits([...produits, data[0]]);
+        setProduits((liste) => [...liste, data[0]]);
       }
     }
   };
@@ -409,7 +517,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
       setErreur(`Impossible d'ajouter ce produit au stock : ${error.message}`);
       return false;
     }
-    setProduits([...produits, data[0]]);
+    setProduits((liste) => [...liste, data[0]]);
     return true;
   };
 
@@ -420,13 +528,24 @@ function ComptaCiApp({ langue, setLangue, t }) {
       .eq("id", id)
       .select();
     if (!error && data?.[0]) {
-      setProduits(produits.map((p) => (p.id === id ? data[0] : p)));
+      setProduits((liste) => liste.map((p) => (p.id === id ? data[0] : p)));
+    }
+  };
+
+  const modifierSeuil = async (id, seuil) => {
+    const { data, error } = await supabase
+      .from("produits")
+      .update({ seuil_alerte: seuil, maj_le: new Date().toISOString() })
+      .eq("id", id)
+      .select();
+    if (!error && data?.[0]) {
+      setProduits((liste) => liste.map((p) => (p.id === id ? data[0] : p)));
     }
   };
 
   const supprimerProduit = async (id) => {
     const { error } = await supabase.from("produits").delete().eq("id", id);
-    if (!error) setProduits(produits.filter((p) => p.id !== id));
+    if (!error) setProduits((liste) => liste.filter((p) => p.id !== id));
   };
 
   const ajouterFournisseur = async (nom, telephone, note) => {
@@ -496,7 +615,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
       setErreur("La modification a échoué.");
       return false;
     }
-    setTransactions(transactions.map((t) => (t.id === id ? data[0] : t)));
+    // On fusionne avec la ligne précédente : la quantité et la désignation
+    // peuvent n'exister qu'en mémoire (base non encore migrée).
+    setTransactions((liste) => liste.map((t) => (t.id === id ? { ...t, ...data[0] } : t)));
     return true;
   };
 
@@ -634,6 +755,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onAdd={addProduit}
             onAjuster={ajusterQuantiteManuelle}
             onSupprimer={supprimerProduit}
+            onSeuil={modifierSeuil}
             t={t}
           />
         ) : vue === "caisse" ? (
@@ -951,6 +1073,22 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
 
   const trend = useMemo(() => buildTrend(transactions, periode), [transactions, periode]);
   const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, secteur), [transactions, secteur]);
+  // Même clé de mois que computeStats (heure locale, pas UTC) pour que le
+  // classement des produits corresponde exactement au CA affiché.
+  const maintenant = new Date();
+  const cleMois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
+  const topProduits = useMemo(() => buildTopProduits(transactions, cleMois), [transactions, cleMois]);
+
+  const secteurActif = SECTEURS_IDS.includes(secteur) ? secteur : "restauration";
+  const libelleSecteur = t(`secteur_${secteurActif}`);
+  const seuils = SEUILS_RATIOS[secteurActif] || SEUILS_RATIOS.restauration;
+
+  const totalDepenses = parCategorie.reduce((a, c) => a + c.value, 0);
+  const ratios = [
+    { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "#C1502E" },
+    { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "#D4A24C" },
+    { cle: "charges", label: t("dash_poids_charges"), montant: stats.postes.charges, seuil: seuils.charges, couleur: "#6B5B95" },
+  ].map((r) => ({ ...r, ...evaluerRatio(r.montant, stats.caMois, r.seuil) }));
 
   const copierBilan = () => {
     const moisLabel = new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" });
@@ -972,7 +1110,13 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
 
   return (
     <div style={styles.page}>
-      <div style={styles.dashboardHeader}>
+      <div style={{ ...styles.dashboardHeader, justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+        <div style={styles.secteurBadge}>
+          <Store size={13} />
+          <span>
+            {t("dash_secteur")} : <strong>{libelleSecteur}</strong>
+          </span>
+        </div>
         <button onClick={copierBilan} style={styles.copyBtn}>
           <Copy size={14} /> {copie ? t("dash_bilan_copie") : t("dash_copier_bilan")}
         </button>
@@ -1006,6 +1150,34 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
           accent="ink"
           icon={<Wallet size={16} />}
           sub={t("dash_tva_note")}
+        />
+      </div>
+
+      <div className="kpi-row-3">
+        <KpiCard
+          label={t("dash_panier_moyen")}
+          value={stats.panierMoyen}
+          accent="gold"
+          icon={<Wallet size={16} />}
+          sub={t("dash_panier_moyen_sous")}
+        />
+        <KpiCard
+          label={t("dash_nb_ventes")}
+          valeurTexte={fmt(stats.nbVentes)}
+          value={stats.nbVentes}
+          unite=""
+          accent="teal"
+          icon={<TrendingUp size={16} />}
+          sub={t("dash_secteur") + " : " + libelleSecteur}
+        />
+        <KpiCard
+          label={t("dash_nb_depenses")}
+          valeurTexte={fmt(stats.nbDepenses)}
+          value={stats.nbDepenses}
+          unite=""
+          accent="clay"
+          icon={<TrendingDown size={16} />}
+          sub={t("dash_total_depenses") + " : " + fmt(stats.depMois) + " FCFA"}
         />
       </div>
 
@@ -1071,6 +1243,152 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         </div>
       </div>
 
+      {/* Répartition détaillée des dépenses par poste sectoriel */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("dash_depenses_detail_titre")}</div>
+            <div style={styles.cardCaption}>
+              {t("dash_depenses_detail_sous")} — {libelleSecteur}
+            </div>
+          </div>
+          <div style={styles.cardMontant}>{fmt(totalDepenses)} <span style={styles.kpiUnit}>FCFA</span></div>
+        </div>
+        {totalDepenses > 0 ? (
+          <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+            {parCategorie
+              .filter((c) => c.value > 0)
+              .map((c, i) => {
+                const part = (c.value / totalDepenses) * 100;
+                return (
+                  <div key={c.id}>
+                    <div style={styles.repartitionHead}>
+                      <span style={styles.repartitionLabel}>{c.label}</span>
+                      <span style={styles.repartitionMontant}>
+                        {fmt(c.value)} FCFA · {part.toFixed(0)}%
+                      </span>
+                    </div>
+                    <BarreProgression pourcentage={part} couleur={COULEURS_REPARTITION[i % COULEURS_REPARTITION.length]} />
+                  </div>
+                );
+              })}
+          </div>
+        ) : (
+          <div style={styles.emptyText}>{t("dash_aucune_depense")}</div>
+        )}
+      </div>
+
+      <div className="grid-two">
+        {/* Classement des produits vendus ce mois-ci */}
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <div style={styles.cardTitle}>{t("dash_top_produits")}</div>
+              <div style={styles.cardCaption}>{t("dash_top_produits_sous")}</div>
+            </div>
+          </div>
+          {topProduits.length > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
+              {topProduits.map((p, i) => (
+                <div key={p.designation}>
+                  <div style={styles.repartitionHead}>
+                    <span style={styles.repartitionLabel}>
+                      {i + 1}. {p.designation}
+                    </span>
+                    <span style={styles.repartitionMontant}>
+                      {fmt(p.ca)} FCFA · {p.part.toFixed(0)}%
+                    </span>
+                  </div>
+                  <BarreProgression pourcentage={p.part} couleur="#D4A24C" />
+                  <div style={styles.repartitionDetail}>
+                    {t("dash_col_qte")} : {fmt(p.quantite)} — {fmt(p.nbVentes)} {t("dash_ventes_court")}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={styles.emptyText}>{t("dash_top_vide")}</div>
+          )}
+        </div>
+
+        {/* Ratios financiers : poids de chaque poste par rapport au CA */}
+        <div style={styles.card}>
+          <div style={styles.cardHeader}>
+            <div>
+              <div style={styles.cardTitle}>{t("dash_ratios_titre")}</div>
+              <div style={styles.cardCaption}>{t("dash_ratios_sous")}</div>
+            </div>
+          </div>
+          {stats.caMois > 0 ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+              {ratios.map((r) => (
+                <div key={r.cle}>
+                  <div style={styles.repartitionHead}>
+                    <span style={styles.repartitionLabel}>{r.label}</span>
+                    <span style={styles.repartitionMontant}>
+                      {r.poids.toFixed(0)}% {t("dash_du_ca")}
+                    </span>
+                  </div>
+                  <BarreProgression
+                    pourcentage={(r.poids / (r.seuil * 1.5)) * 100}
+                    couleur={r.couleur}
+                  />
+                  <div style={styles.repartitionDetail}>
+                    <span
+                      style={{
+                        ...styles.ratioBadge,
+                        ...(r.niveau === "sain"
+                          ? styles.ratioSain
+                          : r.niveau === "surveiller"
+                          ? styles.ratioSurveiller
+                          : r.niveau === "alerte"
+                          ? styles.ratioAlerte
+                          : {}),
+                      }}
+                    >
+                      {r.niveau === "sain"
+                        ? t("dash_ratio_sain")
+                        : r.niveau === "surveiller"
+                        ? t("dash_ratio_surveiller")
+                        : r.niveau === "alerte"
+                        ? t("dash_ratio_alerte")
+                        : t("stock_valeur_indispo")}
+                    </span>{" "}
+                    {t("dash_cible_max", { seuil: r.seuil })}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={styles.emptyText}>{t("dash_ratios_vide")}</div>
+          )}
+        </div>
+      </div>
+
+      {/* Repères & Conseils de gestion sectoriels */}
+      <div style={styles.conseilsCard}>
+        <div style={styles.conseilsHeader}>
+          <span style={styles.conseilsIcon}>
+            <Info size={15} />
+          </span>
+          <div>
+            <div style={styles.cardTitle}>{t("dash_reperes_titre")}</div>
+            <div style={styles.cardCaption}>{t("dash_reperes_sous", { secteur: libelleSecteur })}</div>
+          </div>
+        </div>
+        <div style={styles.conseilsMarge}>
+          <span>{t("dash_marge_cible")}</span>
+          <strong>{MARGE_CIBLE[secteurActif] || "—"}</strong>
+        </div>
+        <ul style={styles.conseilsListe}>
+          {[1, 2, 3].map((n) => (
+            <li key={n} style={styles.conseilItem}>
+              {t(`dash_conseil_${secteurActif}_${n}`)}
+            </li>
+          ))}
+        </ul>
+      </div>
+
       {transactions.length === 0 && (
         <div style={styles.emptyState}>
           <div style={styles.emptyTitle}>{t("dash_vide_titre")}</div>
@@ -1081,7 +1399,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
   );
 }
 
-function KpiCard({ label, value, accent, icon, sub, hero }) {
+function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "FCFA" }) {
   const colors = {
     gold: { fg: "#B4801F", bg: "#FBF3E2" },
     clay: { fg: "#B4432A", bg: "#FBEBE4" },
@@ -1095,10 +1413,27 @@ function KpiCard({ label, value, accent, icon, sub, hero }) {
         <span style={{ ...styles.kpiIcon, color: colors.fg, background: colors.bg }}>{icon}</span>
       </div>
       <div style={{ ...styles.kpiValue, color: hero ? colors.fg : "#16213E" }}>
-        {value < 0 ? "-" : ""}
-        {fmt(Math.abs(value))} <span style={styles.kpiUnit}>FCFA</span>
+        {valeurTexte !== undefined ? (
+          valeurTexte
+        ) : (
+          <>
+            {value < 0 ? "-" : ""}
+            {fmt(Math.abs(value))}
+          </>
+        )}
+        {unite ? <span style={styles.kpiUnit}> {unite}</span> : null}
       </div>
       <div style={styles.kpiSub}>{sub}</div>
+    </div>
+  );
+}
+
+/** Barre de progression utilisée par les répartitions du tableau de bord. */
+function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }) {
+  const largeur = Math.max(0, Math.min(100, pourcentage || 0));
+  return (
+    <div style={{ ...styles.barTrack, background: fond }}>
+      <div style={{ ...styles.barFill, width: `${largeur}%`, background: couleur }} />
     </div>
   );
 }
@@ -1286,6 +1621,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   const [fondCompte, setFondCompte] = useState("");
   const [modeFermeture, setModeFermeture] = useState(false);
   const [enCours, setEnCours] = useState(false);
+  const [guideOuvert, setGuideOuvert] = useState(true);
 
   const mouvementsDepuisOuverture = sessionCaisse
     ? transactions.filter((t) => new Date(t.date + "T00:00:00") >= new Date(new Date(sessionCaisse.date_ouverture).toDateString()))
@@ -1325,8 +1661,55 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
           </div>
         </div>
 
+        {/* Guide pédagogique : qu'est-ce que le fond de caisse et comment
+            ComptaCi calcule la clôture. Masquable une fois le principe acquis. */}
+        <div style={styles.guideCard}>
+          <button
+            onClick={() => setGuideOuvert((v) => !v)}
+            style={styles.guideToggle}
+            aria-expanded={guideOuvert}
+          >
+            <Info size={14} />
+            <span>{t("caisse_guide_titre")}</span>
+            <ChevronDown
+              size={15}
+              style={{
+                marginLeft: "auto",
+                transition: "transform 0.2s",
+                transform: guideOuvert ? "rotate(180deg)" : "none",
+              }}
+            />
+          </button>
+
+          {guideOuvert && (
+            <div style={styles.guideBody}>
+              <p style={styles.guideTexte}>{t("caisse_guide_def")}</p>
+
+              <div style={styles.guideFormule}>
+                <div style={styles.guideFormuleTitre}>{t("caisse_guide_formule_titre")}</div>
+                <div style={styles.guideFormuleLigne}>{t("caisse_guide_formule")}</div>
+                <div style={styles.guideFormuleNote}>{t("caisse_guide_formule_note")}</div>
+              </div>
+
+              <div style={styles.guideEtapesTitre}>{t("caisse_etapes_titre")}</div>
+              <ol style={styles.guideEtapes}>
+                {[1, 2, 3, 4].map((n) => (
+                  <li key={n} style={styles.guideEtape}>
+                    <span style={styles.guideEtapeNumero}>{n}</span>
+                    <div>
+                      <div style={styles.guideEtapeTitre}>{t(`caisse_etape${n}_titre`)}</div>
+                      <div style={styles.guideEtapeTexte}>{t(`caisse_etape${n}_texte`)}</div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+          )}
+        </div>
+
         {!sessionCaisse ? (
           <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 360 }}>
+            <div style={styles.caisseConsigne}>{t("caisse_entrez_fond")}</div>
             <label style={styles.field}>
               <span style={styles.fieldLabel}>{t("caisse_fond_ouverture")}</span>
               <input
@@ -1339,6 +1722,24 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
                 style={styles.inputBig}
               />
             </label>
+            <div style={styles.montantsRapides}>
+              <span style={styles.montantsRapidesLabel}>{t("caisse_montants_rapides")}</span>
+              <div style={styles.montantsRapidesRow}>
+                {MONTANTS_RAPIDES_CAISSE.map((montant) => (
+                  <button
+                    key={montant}
+                    type="button"
+                    onClick={() => setFondOuverture(String(montant))}
+                    style={{
+                      ...styles.montantRapideBtn,
+                      ...(parseFloat(fondOuverture) === montant ? styles.montantRapideBtnActif : {}),
+                    }}
+                  >
+                    {fmt(montant)}
+                  </button>
+                ))}
+              </div>
+            </div>
             <button onClick={ouvrir} disabled={enCours} style={styles.submitBtn}>
               <Unlock size={16} /> {enCours ? t("caisse_ouverture") : t("caisse_ouvrir")}
             </button>
@@ -1457,10 +1858,57 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
     }
   };
 
+  const quantiteSaisie = parseFloat(quantite) || 0;
+  const prixSaisi = parseFloat(prixUnitaire) || 0;
+  const valeurLotApercu = quantiteSaisie * prixSaisi;
+
+  // Valorisation en temps réel : quantité disponible × prix unitaire.
+  // Tout est recalculé à chaque changement de `produits`, donc dès qu'une
+  // vente est enregistrée dans « Saisie du jour », la valeur redescend.
+  const valeurTotaleStock = produits.reduce((a, p) => a + valeurStockLigne(p), 0);
+  const unitesTotales = produits.reduce((a, p) => a + (parseFloat(p.quantite_stock) || 0), 0);
   const produitsEnAlerte = produits.filter((p) => (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5));
 
   return (
     <div style={styles.page}>
+      <div className="kpi-row">
+        <KpiCard
+          label={t("stock_valeur_totale")}
+          value={valeurTotaleStock}
+          accent="gold"
+          icon={<Package size={16} />}
+          sub={t("stock_valeur_totale_sous")}
+          hero
+        />
+        <KpiCard
+          label={t("stock_references")}
+          valeurTexte={fmt(produits.length)}
+          value={produits.length}
+          unite=""
+          accent="ink"
+          icon={<Package size={16} />}
+          sub={t("stock_references_sous")}
+        />
+        <KpiCard
+          label={t("stock_unites_totales")}
+          valeurTexte={fmt(unitesTotales)}
+          value={unitesTotales}
+          unite=""
+          accent="teal"
+          icon={<Package size={16} />}
+          sub={t("stock_maj_auto")}
+        />
+        <KpiCard
+          label={t("stock_articles_alerte")}
+          valeurTexte={fmt(produitsEnAlerte.length)}
+          value={produitsEnAlerte.length}
+          unite=""
+          accent={produitsEnAlerte.length > 0 ? "clay" : "ink"}
+          icon={<Package size={16} />}
+          sub={t("stock_seuil_label")}
+        />
+      </div>
+
       {produitsEnAlerte.length > 0 && (
         <div style={styles.upgradeNotice}>
           ⚠️ {produitsEnAlerte.length} {t("stock_alerte")}{" "}
@@ -1510,6 +1958,24 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
               onChange={(e) => setSeuilAlerte(e.target.value)}
               style={{ ...styles.input, flex: "1 1 150px" }}
             />
+            {/* Aperçu en direct de la valeur du lot pendant la saisie */}
+            <div style={styles.stockApercu}>
+              <div style={styles.stockApercuTitre}>{t("stock_apercu_titre")}</div>
+              {valeurLotApercu > 0 ? (
+                <>
+                  <div style={styles.stockApercuValeur}>{fmt(valeurLotApercu)} FCFA</div>
+                  <div style={styles.stockApercuDetail}>
+                    {t("stock_apercu_calcul", {
+                      qte: fmt(quantiteSaisie),
+                      pu: fmt(prixSaisi),
+                      total: fmt(valeurLotApercu),
+                    })}
+                  </div>
+                </>
+              ) : (
+                <div style={styles.stockApercuDetail}>{t("stock_apercu_sans_prix")}</div>
+              )}
+            </div>
             <button onClick={submit} disabled={enCours} style={{ ...styles.submitBtn, flex: "1 1 100%" }}>
               {enCours ? t("stock_ajout_en_cours") : t("stock_ajout_btn")}
             </button>
@@ -1527,17 +1993,46 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
           <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {produits.map((p) => {
               const enAlerte = (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5);
+              const quantiteProduit = parseFloat(p.quantite_stock) || 0;
+              const prixProduit = parseFloat(p.prix_unitaire) || 0;
+              const valeurProduit = valeurStockLigne(p);
               return (
               <div key={p.id} style={styles.stockRow}>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={styles.stockLabel}>{p.designation}</div>
-                  {p.prix_unitaire && (
-                    <div style={styles.stockSub}>{fmt(p.prix_unitaire)} {t("stock_unite")} — {t("stock_seuil_label")} : {fmt(p.seuil_alerte || 5)}</div>
-                  )}
+                  <div style={styles.stockSub}>
+                    {prixProduit > 0
+                      ? `${fmt(prixProduit)} ${t("stock_unite")}`
+                      : t("stock_prix_manquant")}
+                  </div>
                 </div>
+
+                {/* Valeur en FCFA de la ligne : quantité disponible × prix unitaire */}
+                <div style={styles.stockValeur}>
+                  <div style={styles.stockValeurMontant}>
+                    {prixProduit > 0 ? `${fmt(valeurProduit)} FCFA` : t("stock_valeur_indispo")}
+                  </div>
+                  <div style={styles.stockValeurDetail}>
+                    {prixProduit > 0 ? `${fmt(quantiteProduit)} × ${fmt(prixProduit)}` : ""}
+                  </div>
+                </div>
+
+                <label style={styles.stockSeuilField} title={t("stock_seuil_label")}>
+                  <span style={styles.stockSeuilLabel}>{t("stock_seuil_label")}</span>
+                  <input
+                    type="number"
+                    min="0"
+                    value={p.seuil_alerte ?? 5}
+                    onChange={(e) => onSeuil && onSeuil(p.id, parseFloat(e.target.value) || 0)}
+                    style={styles.stockSeuilInput}
+                    aria-label={t("stock_seuil_label")}
+                  />
+                </label>
+
                 <button
-                  onClick={() => onAjuster(p.id, (parseFloat(p.quantite_stock) || 0) - 1)}
+                  onClick={() => onAjuster(p.id, quantiteProduit - 1)}
                   style={styles.stockAdjustBtn}
+                  aria-label="-1"
                 >
                   <Minus size={13} />
                 </button>
@@ -1545,8 +2040,9 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
                   {fmt(p.quantite_stock)}
                 </div>
                 <button
-                  onClick={() => onAjuster(p.id, (parseFloat(p.quantite_stock) || 0) + 1)}
+                  onClick={() => onAjuster(p.id, quantiteProduit + 1)}
                   style={styles.stockAdjustBtn}
+                  aria-label="+1"
                 >
                   <Plus size={13} />
                 </button>
@@ -2021,15 +2517,66 @@ function computeStats(transactions) {
 
   const pct = (cur, prev) => (prev > 0 ? ((cur - prev) / prev) * 100 : cur > 0 ? 100 : 0);
 
+  const duMois = transactions.filter((t) => monthKey(t.date) === curKey);
+  const nbVentes = duMois.filter((t) => t.type === "vente").length;
+  const nbDepenses = duMois.filter((t) => t.type === "depense").length;
+  const panierMoyen = nbVentes > 0 ? caMois / nbVentes : 0;
+
+  // Dépenses du mois ventilées par grande nature de poste (achats, personnel…)
+  const postes = { achats: 0, personnel: 0, charges: 0, autre: 0 };
+  duMois
+    .filter((t) => t.type === "depense")
+    .forEach((t) => {
+      const poste = POSTES_PAR_CATEGORIE[t.categorie] || "autre";
+      postes[poste] += Number(t.montant) || 0;
+    });
+
   return {
     caMois,
     depMois,
     resultatMois,
     margeMois,
     tvaMois,
+    nbVentes,
+    nbDepenses,
+    panierMoyen,
+    postes,
     caMoisPct: pct(caMois, caPrev),
     depMoisPct: pct(depMois, depPrev),
   };
+}
+
+/** Poids d'un poste de dépense par rapport au CA, avec son niveau d'alerte. */
+function evaluerRatio(montant, ca, seuil) {
+  const poids = ca > 0 ? (montant / ca) * 100 : 0;
+  let niveau = "sans";
+  if (ca > 0 && montant > 0) {
+    niveau = poids <= seuil ? "sain" : poids <= seuil * 1.25 ? "surveiller" : "alerte";
+  }
+  return { poids, niveau };
+}
+
+/** Classement des produits vendus sur une période (quantités, CA, part du CA). */
+function buildTopProduits(transactions, periodeKey, limite = 6) {
+  const totaux = new Map();
+  transactions
+    .filter((tx) => monthKey(tx.date) === periodeKey && tx.type === "vente")
+    .forEach((tx) => {
+      const nom = designationTransaction(tx);
+      if (!nom) return;
+      const cle = nom.toLowerCase();
+      const precedent = totaux.get(cle) || { designation: nom, quantite: 0, ca: 0, nbVentes: 0 };
+      precedent.quantite += quantiteTransaction(tx);
+      precedent.ca += Number(tx.montant) || 0;
+      precedent.nbVentes += 1;
+      totaux.set(cle, precedent);
+    });
+  const liste = [...totaux.values()].sort((a, b) => b.ca - a.ca);
+  const caTotal = liste.reduce((a, p) => a + p.ca, 0);
+  return liste.slice(0, limite).map((p) => ({
+    ...p,
+    part: caTotal > 0 ? (p.ca / caTotal) * 100 : 0,
+  }));
 }
 
 function buildTrend(transactions) {
@@ -2051,6 +2598,7 @@ function buildCategorieBreakdown(transactions, secteur) {
   const now = new Date();
   const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
   return categoriesDuSecteur(secteur).map((c) => ({
+    id: c.id,
     label: c.label,
     value: transactions
       .filter((t) => monthKey(t.date) === curKey && t.type === "depense" && t.categorie === c.id)
@@ -2068,6 +2616,11 @@ const GLOBAL_CSS = `
   grid-template-columns: repeat(4, 1fr);
   gap: 14px;
 }
+.kpi-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
 .grid-two {
   display: grid;
   grid-template-columns: 1.4fr 1fr;
@@ -2076,11 +2629,13 @@ const GLOBAL_CSS = `
 
 @media (max-width: 980px) {
   .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row-3 { grid-template-columns: repeat(2, 1fr); }
   .grid-two { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 560px) {
   .kpi-row { grid-template-columns: 1fr; }
+  .kpi-row-3 { grid-template-columns: 1fr; }
 }
 
 @media (max-width: 780px) {
@@ -2265,7 +2820,8 @@ const styles = {
     padding: 14, background: "#FBF9F4", borderRadius: 10,
   },
   stockRow: {
-    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9, background: "#FBF9F4",
+    display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9,
+    background: "#FBF9F4", flexWrap: "wrap",
   },
   stockLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
   stockSub: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
@@ -2321,6 +2877,107 @@ const styles = {
     fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
   },
   stockQtyLow: { color: "#B4432A" },
+  stockValeur: { minWidth: 96, textAlign: "right", flexShrink: 0 },
+  stockValeurMontant: {
+    fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "#16213E", whiteSpace: "nowrap",
+  },
+  stockValeurDetail: { fontSize: 11, color: "#8A8578", marginTop: 1, whiteSpace: "nowrap" },
+  stockSeuilField: {
+    display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0,
+  },
+  stockSeuilLabel: {
+    fontSize: 9, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", letterSpacing: "0.04em",
+  },
+  stockSeuilInput: {
+    width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid #E4DDD0",
+    fontSize: 12, fontFamily: "'Inter', sans-serif", color: "#5C5748", outline: "none", textAlign: "center",
+  },
+  stockApercu: {
+    flex: "1 1 100%", background: "#FBF3E2", borderRadius: 9, padding: "10px 14px",
+    display: "flex", flexDirection: "column", gap: 2,
+  },
+  stockApercuTitre: { fontSize: 11.5, fontWeight: 600, color: "#8A6420", textTransform: "uppercase" },
+  stockApercuValeur: { fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: "#16213E" },
+  stockApercuDetail: { fontSize: 11.5, color: "#8A6420" },
+
+  // Guide pédagogique de la caisse
+  caisseConsigne: {
+    fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E", lineHeight: 1.35,
+  },
+  guideCard: {
+    border: "1px solid #EDE7DA", borderRadius: 12, background: "#FBF9F4", marginBottom: 18, overflow: "hidden",
+  },
+  guideToggle: {
+    display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 14px",
+    background: "transparent", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    fontSize: 13.5, fontWeight: 600, color: "#16213E", textAlign: "left",
+  },
+  guideBody: { padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 14 },
+  guideTexte: { fontSize: 13, lineHeight: 1.6, color: "#5C5748", margin: 0 },
+  guideFormule: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 10, padding: "12px 14px" },
+  guideFormuleTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", marginBottom: 6 },
+  guideFormuleLigne: {
+    fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "#16213E", lineHeight: 1.45,
+  },
+  guideFormuleNote: { fontSize: 11.5, color: "#8A8578", marginTop: 6, lineHeight: 1.5 },
+  guideEtapesTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  guideEtapes: {
+    listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10,
+    gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
+  },
+  guideEtape: { display: "flex", gap: 9, alignItems: "flex-start" },
+  guideEtapeNumero: {
+    width: 21, height: 21, borderRadius: "50%", background: "#16213E", color: "#F3D9A0",
+    fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  guideEtapeTitre: { fontSize: 12.5, fontWeight: 600, color: "#16213E" },
+  guideEtapeTexte: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginTop: 2 },
+  montantsRapides: { display: "flex", flexDirection: "column", gap: 7 },
+  montantsRapidesLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", textTransform: "uppercase" },
+  montantsRapidesRow: { display: "flex", flexWrap: "wrap", gap: 7 },
+  montantRapideBtn: {
+    padding: "8px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
+    color: "#16213E", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  montantRapideBtnActif: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
+
+  // Analyse sectorielle du tableau de bord
+  secteurBadge: {
+    display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999,
+    background: "#EAECF3", color: "#16213E", fontSize: 12, fontWeight: 600,
+  },
+  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#16213E" },
+  repartitionHead: {
+    display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6,
+  },
+  repartitionLabel: { fontSize: 13, fontWeight: 500, color: "#16213E" },
+  repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "#5C5748", whiteSpace: "nowrap" },
+  repartitionDetail: { fontSize: 11.5, color: "#8A8578", marginTop: 5 },
+  barTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
+  barFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
+  ratioBadge: {
+    display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600,
+    background: "#F1ECE2", color: "#8A8578",
+  },
+  ratioSain: { background: "#E4F2EC", color: "#186B4E" },
+  ratioSurveiller: { background: "#FBF3E2", color: "#B4801F" },
+  ratioAlerte: { background: "#FBEBE4", color: "#B4432A" },
+  conseilsCard: {
+    background: "#FFFEFB", border: "1px solid #E8D9B5", borderRadius: 14, padding: 20,
+  },
+  conseilsHeader: { display: "flex", gap: 11, alignItems: "flex-start", marginBottom: 14 },
+  conseilsIcon: {
+    width: 28, height: 28, borderRadius: 8, background: "#FBF3E2", color: "#B4801F",
+    display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
+  },
+  conseilsMarge: {
+    display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
+    background: "#FBF3E2", borderRadius: 9, padding: "10px 14px", fontSize: 13, color: "#8A6420", fontWeight: 600,
+  },
+  conseilsListe: {
+    margin: "14px 0 0", padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: 9,
+  },
+  conseilItem: { fontSize: 13, lineHeight: 1.6, color: "#5C5748" },
   caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "#FBF9F4", borderRadius: 10, padding: 16, maxWidth: 360 },
   caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "#5C5748" },
   caisseSummaryTotal: { borderTop: "1px solid #EDE7DA", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "#16213E" },
