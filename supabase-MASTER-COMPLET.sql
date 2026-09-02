@@ -227,6 +227,9 @@ create table if not exists transactions (
   date date not null default current_date,
   cree_le timestamp default now()
 );
+-- Quantité vendue / achetée : alimente le classement des produits vendus
+-- et la valorisation du stock. (Idempotent, sans risque pour l'existant.)
+alter table transactions add column if not exists quantite numeric default 0;
 alter table transactions enable row level security;
 
 drop policy if exists "acces_transactions_etablissement" on transactions;
