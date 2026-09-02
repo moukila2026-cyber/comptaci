@@ -128,6 +128,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   }, []);
   const [session, setSession] = useState(null);
   const [verifSession, setVerifSession] = useState(true);
+  const [modeRecuperation, setModeRecuperation] = useState(false);
   const [vue, setVue] = useState("dashboard");
   const [transactions, setTransactions] = useState([]);
   const [produits, setProduits] = useState([]);
@@ -148,7 +149,12 @@ function ComptaCiApp({ langue, setLangue, t }) {
       setSession(data.session);
       setVerifSession(false);
     });
-    const { data: listener } = supabase.auth.onAuthStateChange((_event, s) => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event, s) => {
+      // L'utilisateur a cliqué sur le lien « réinitialiser le mot de passe »
+      // reçu par email : on affiche l'écran de choix d'un nouveau mot de passe.
+      if (event === "PASSWORD_RECOVERY") {
+        setModeRecuperation(true);
+      }
       setSession(s);
     });
     return () => listener.subscription.unsubscribe();
@@ -497,8 +503,39 @@ function ComptaCiApp({ langue, setLangue, t }) {
     setEtablissement(null);
   };
 
+  // Supprime le compte de l'utilisateur connecté (auth.users + données).
+  // Passe par la RPC `supprimer_mon_compte` (SECURITY DEFINER) : la
+  // suppression d'un compte est impossible avec la clé anon du navigateur.
+  const supprimerMonCompte = async () => {
+    try {
+      const { error } = await supabase.rpc("supprimer_mon_compte");
+      if (error) throw error;
+      try { await supabase.auth.signOut(); } catch (e) { /* déjà supprimé */ }
+      setSession(null);
+      setEtablissement(null);
+      setMesEtablissements([]);
+      setEtablissementActifId(null);
+      setTransactions([]);
+      setProduits([]);
+      setFournisseurs([]);
+      return true;
+    } catch (e) {
+      console.error("Erreur suppression du compte :", e);
+      return false;
+    }
+  };
+
   if (verifSession) {
     return <div style={styles.loading}>Chargement…</div>;
+  }
+
+  if (modeRecuperation) {
+    return (
+      <RecuperationMotDePasse
+        t={t}
+        onTermine={() => setModeRecuperation(false)}
+      />
+    );
   }
 
   if (!session) {
@@ -587,7 +624,13 @@ function ComptaCiApp({ langue, setLangue, t }) {
             t={t}
           />
         ) : vue === "abonnement" ? (
-          <Abonnement etablissement={etablissement} planEffectif={planEffectif} enEssai={enEssai} t={t} />
+          <Abonnement
+            etablissement={etablissement}
+            planEffectif={planEffectif}
+            enEssai={enEssai}
+            onSupprimerCompte={supprimerMonCompte}
+            t={t}
+          />
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={planEffectif} secteur={etablissement?.secteur} t={t} />
         )}
@@ -1559,7 +1602,7 @@ function ComparatifForfaits({ t }) {
   );
 }
 
-export function Abonnement({ etablissement, planEffectif, enEssai, t }) {
+export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, t }) {
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
 
@@ -1592,6 +1635,121 @@ export function Abonnement({ etablissement, planEffectif, enEssai, t }) {
         {/* Les 3 forfaits en détail : 9 caractéristiques × 3 colonnes */}
         <ComparatifForfaits t={t} />
       </div>
+
+      {/* Zone sensible : suppression du compte utilisateur */}
+      <SupprimerCompte onSupprimer={onSupprimerCompte} t={t} />
+    </div>
+  );
+}
+
+function SupprimerCompte({ onSupprimer, t }) {
+  const [ouvert, setOuvert] = useState(false);
+  const [enCours, setEnCours] = useState(false);
+  const [message, setMessage] = useState("");
+
+  const confirmer = async () => {
+    setEnCours(true);
+    const ok = await onSupprimer();
+    setEnCours(false);
+    if (!ok) setMessage(t("compte_supprimer_erreur"));
+  };
+
+  return (
+    <div style={styles.dangerCard}>
+      <div style={styles.dangerTitle}>{t("compte_supprimer_titre")}</div>
+      {!ouvert ? (
+        <button style={styles.dangerBtn} onClick={() => setOuvert(true)}>
+          <Trash2 size={14} /> {t("compte_supprimer")}
+        </button>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <p style={styles.dangerText}>{t("compte_supprimer_texte")}</p>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.dangerBtnConfirm} onClick={confirmer} disabled={enCours}>
+              {enCours ? t("compte_supprimer_en_cours") : t("compte_supprimer_confirmer")}
+            </button>
+            <button style={styles.dangerBtnGhost} onClick={() => { setOuvert(false); setMessage(""); }}>
+              {t("compte_supprimer_annuler")}
+            </button>
+          </div>
+          {message && <div style={styles.errorBanner}>{message}</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function RecuperationMotDePasse({ t, onTermine }) {
+  const [motDePasse, setMotDePasse] = useState("");
+  const [confirmation, setConfirmation] = useState("");
+  const [etat, setEtat] = useState(null); // null | envoi | succes | erreur
+  const [message, setMessage] = useState("");
+
+  const enregistrer = async () => {
+    setMessage("");
+    if (!motDePasse || motDePasse.length < 6) {
+      setMessage(t("auth_erreur_mdp"));
+      setEtat("erreur");
+      return;
+    }
+    if (motDePasse !== confirmation) {
+      setMessage(t("recup_mdp_different"));
+      setEtat("erreur");
+      return;
+    }
+    setEtat("envoi");
+    const { error } = await supabase.auth.updateUser({ password: motDePasse });
+    if (error) {
+      setMessage(t("recup_erreur"));
+      setEtat("erreur");
+      return;
+    }
+    setEtat("succes");
+    try { await supabase.auth.signOut(); } catch (e) { /* ignore */ }
+    setTimeout(() => onTermine(), 1800);
+  };
+
+  return (
+    <div style={styles.recupWrap}>
+      <div style={styles.recupCard}>
+        <div style={styles.recupBrand}>
+          <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
+            <path d="M2 14L7 6L12 11L18 3" stroke="#D4A24C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+          </svg>
+          <span style={styles.brandName}>ComptaCi</span>
+        </div>
+        <div style={styles.cardTitle}>{t("recup_titre")}</div>
+        <div style={styles.cardCaption}>{t("recup_sous")}</div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 12, marginTop: 16 }}>
+          <label style={styles.field}>
+            <span style={styles.fieldLabel}>{t("recup_nouveau_mdp")}</span>
+            <input
+              type="password"
+              value={motDePasse}
+              onChange={(e) => setMotDePasse(e.target.value)}
+              placeholder={t("auth_mdp_placeholder")}
+              style={styles.input}
+            />
+          </label>
+          <label style={styles.field}>
+            <span style={styles.fieldLabel}>{t("recup_confirmation")}</span>
+            <input
+              type="password"
+              value={confirmation}
+              onChange={(e) => setConfirmation(e.target.value)}
+              placeholder={t("auth_mdp_placeholder")}
+              style={styles.input}
+              onKeyDown={(e) => { if (e.key === "Enter") enregistrer(); }}
+            />
+          </label>
+          <button onClick={enregistrer} disabled={etat === "envoi"} style={styles.submitBtn}>
+            {etat === "envoi" ? t("recup_enregistrement") : t("recup_enregistrer")}
+          </button>
+          {etat === "succes" && <div style={styles.recupSucces}>{t("recup_succes")}</div>}
+          {etat === "erreur" && message && <div style={styles.errorBanner}>{message}</div>}
+        </div>
+      </div>
+      <div style={styles.appFooter}>SHOPIN30 · 05 01 30 33 43</div>
     </div>
   );
 }
@@ -2223,4 +2381,31 @@ const styles = {
     padding: "6px 12px", borderRadius: 7, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
     fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
+  dangerCard: {
+    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 20,
+  },
+  dangerTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
+  dangerText: { fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: 0 },
+  dangerBtn: {
+    display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9,
+    border: "1px solid #EABBA9", background: "#FBEBE4", color: "#B4432A", fontSize: 13, fontWeight: 600,
+    cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  dangerBtnConfirm: {
+    padding: "10px 14px", borderRadius: 9, border: "none", background: "#B4432A", color: "#FFFEFB",
+    fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  dangerBtnGhost: {
+    padding: "10px 14px", borderRadius: 9, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    fontSize: 13, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+  },
+  recupWrap: {
+    minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
+    background: "#FBF7F0", padding: 20, fontFamily: "'Inter', sans-serif",
+  },
+  recupCard: {
+    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32, width: "100%", maxWidth: 380,
+  },
+  recupBrand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 18 },
+  recupSucces: { fontSize: 13, color: "#186B4E", background: "#E4F2EC", padding: "10px 12px", borderRadius: 8 },
 };

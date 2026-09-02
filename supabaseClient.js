@@ -28,3 +28,19 @@ export function telephoneVersEmail(telephone) {
   const nettoye = telephone.replace(/\s|\+/g, "");
   return `${nettoye}@comptaci.app`;
 }
+
+// Un identifiant de connexion peut être soit un email réel, soit un
+// téléphone (anciens comptes créés avec un email interne @comptaci.app).
+export function identifiantVersEmail(identifiant) {
+  const v = (identifiant || "").trim();
+  if (!v) return "";
+  if (v.includes("@")) return v.toLowerCase();
+  return telephoneVersEmail(v);
+}
+
+// Renvoie le téléphone si l'identifiant ressemble à un numéro, sinon null.
+export function identifiantVersTelephone(identifiant) {
+  const v = (identifiant || "").trim();
+  if (!v || v.includes("@")) return null;
+  return v.replace(/\s+/g, " ");
+}
