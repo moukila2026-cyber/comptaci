@@ -498,3 +498,55 @@ fonctions `resoudre_etablissement_par_prefixe` et `traiter_paiement_saspay`,
 vue de contrôle `v_paiements_saspay`).
 
 Contrôle rapide : `select * from v_paiements_saspay limit 20;`
+
+---
+
+## MISE EN PRODUCTION — 2 actions à faire une seule fois
+
+### Étape 1 — Migrations SQL (Supabase → SQL Editor)
+
+Un seul fichier à coller, **en une fois**, dans
+**Supabase → ton projet → SQL Editor → New query → Run** :
+
+```
+supabase-MIGRATION-COMPLETE.sql
+```
+
+Il enchaîne dans le bon ordre : `supabase-types-etablissements.sql` →
+`supabase-fne.sql` → `supabase-score-credit.sql` → `supabase-paiements.sql` →
+`supabase-saspay-webhook.sql`. Toutes les instructions sont **idempotentes** :
+relancer le script ne supprime aucune donnée.
+
+Contrôle après exécution (les 4 tables doivent exister) :
+
+```sql
+select to_regclass('public.factures_fne')      as factures_fne,
+       to_regclass('public.scores_credit')     as scores_credit,
+       to_regclass('public.demandes_paiement') as demandes_paiement,
+       to_regclass('public.paiements_saspay')  as paiements_saspay;
+```
+
+### Étape 2 — Déployer le webhook SasPay
+
+```bash
+export SUPABASE_ACCESS_TOKEN=sbp_xxxxxxxxxxxxxxxx      # https://supabase.com/dashboard/account/tokens
+./deploy-webhook-saspay.sh <project-ref>               # ex. ./deploy-webhook-saspay.sh abcdefghijklmnop
+```
+
+Le script déploie `supabase/functions/webhook-saspay` et affiche l'URL à
+coller dans le tableau de bord SasPay :
+
+```
+https://<project-ref>.supabase.co/functions/v1/webhook-saspay
+```
+
+Vérification : ouvrir cette URL dans un navigateur doit renvoyer
+`{"ok":true,"secret_configure":true,"supabase_configure":true}`.
+
+Le secret `SASPAY_WEBHOOK_SECRET` est **déjà** sur le projet : l'Edge Function
+le lit directement (`Deno.env.get`). Pour le (re)définir :
+
+```bash
+supabase secrets set SASPAY_WEBHOOK_SECRET=xxxxx --project-ref <project-ref>
+supabase secrets list --project-ref <project-ref>
+```
