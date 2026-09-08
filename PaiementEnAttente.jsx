@@ -1,7 +1,8 @@
+import { dureeEssai } from "./essai.js";
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import PaiementSasPay, { JOURS_ESSAI, PRIX_FONDATEUR } from "./PaiementSasPay.jsx";
+import PaiementSasPay, { PRIX_FONDATEUR } from "./PaiementSasPay.jsx";
 import { C } from "./theme.js";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
@@ -67,14 +68,14 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 
         <div style={styles.title}>
           {essaiTermine
-            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || JOURS_ESSAI })
+            ? t("paiement_titre_expire", { jours: dureeEssai(etablissement) })
             : t("paiement_titre_actif")}
         </div>
         {etablissement?.est_fondateur && (
           <div style={styles.fondateurBadge}>
             ★ {t("paiement_fondateur_badge", {
               tarif: fmt(etablissement.tarif_verrouille || PRIX_FONDATEUR),
-              duree: etablissement?.essai_jours || JOURS_ESSAI,
+              duree: dureeEssai(etablissement),
             })}
           </div>
         )}

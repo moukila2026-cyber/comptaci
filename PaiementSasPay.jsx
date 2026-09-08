@@ -1,3 +1,5 @@
+import { JOURS_ESSAI, JOURS_FONDATEUR, dureeEssai, finEssai } from "./essai.js";
+export { JOURS_ESSAI, JOURS_FONDATEUR, finEssai } from "./essai.js";
 /**
  * PaiementSasPay.jsx — Paiement des forfaits ComptaCi par lien SasPay
  * ---------------------------------------------------------------------------
@@ -54,10 +56,10 @@ export const LIMITE_FONDATEURS = 100;
  * Pendant ces 14 jours, l'établissement ne paie rien : 0 FCFA.
  * À la fin, il choisit librement Starter, Pro ou Entreprise.
  */
-export const JOURS_FONDATEUR = 14;
+
 
 /** Alias explicite : c'est la durée d'essai, pas seulement l'offre fondateurs. */
-export const JOURS_ESSAI = 14;
+
 
 const JOUR_MS = 86400000;
 const HEURE_MS = 3600000;
@@ -99,26 +101,12 @@ export function estFondateur(etablissement) {
 }
 
 /**
- * Fin de la fenêtre « offre fondateurs » : date_creation + essai_jours (7 j par défaut).
- * Miroir exact du SQL : now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
- */
-export function finEssai(etablissement) {
-  const jours = Number(etablissement?.essai_jours) || JOURS_FONDATEUR;
-  const brut = etablissement?.date_creation;
-  if (!brut) return null;
-  const base = new Date(brut);
-  const ms = base.getTime();
-  if (!Number.isFinite(ms)) return null;
-  return new Date(ms + jours * JOUR_MS);
-}
-
-/**
  * VRAI uniquement pendant la fenêtre de l'offre : le fondateur est alors
  * bloqué pendant l'essai de 14 jours (0 FCFA). Après les 14 jours → faux, il
  * choisit librement Starter, Pro ou Entreprise.
  */
 export function fondateurVerrouille(etablissement, maintenant = Date.now()) {
-  if (!estFondateur(etablissement)) return false;
+  if (!estFondateur(etablissement) || etablissement?.abonnement_actif) return false;
   const fin = finEssai(etablissement);
   // Sans date de création exploitable, on reste prudent : l'offre est en cours.
   if (!fin) return true;
@@ -229,7 +217,7 @@ export default function PaiementSasPay({
 
   const fondateur = estFondateur(etablissement);
   const verrouille = fondateurVerrouille(etablissement, maintenant);
-  const dureeOffre = Number(etablissement?.essai_jours) || JOURS_FONDATEUR;
+  const dureeOffre = dureeEssai(etablissement);
   const plan = planEffectifFondateur(planBrut, etablissement, maintenant);
   const montant = montantDuPlan(plan, etablissement, maintenant);
   const reste = resteAvantDeblocage(etablissement, maintenant);
