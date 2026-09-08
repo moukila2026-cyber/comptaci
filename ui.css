@@ -1,0 +1,619 @@
+/* ==========================================================================
+   ComptaCi — feuille de style de l'application
+   --------------------------------------------------------------------------
+   Thème sombre élégant (bleu nuit + or). Les styles "de structure" restent
+   dans les objets JS (styles / S) mais toutes les COULEURS sont pilotées ici
+   via les variables CSS ci-dessous : pour changer l'ambiance de l'app, il
+   suffit de retoucher ce bloc `:root`.
+
+   Cette feuille ajoute en plus ce que le style inline ne sait pas faire :
+   · états :hover / :focus-visible / :active / :disabled
+   · transitions et animations d'entrée
+   · barres de défilement, sélection, autofill
+   · règles responsive et feuille d'impression
+   · classes utilitaires réutilisables (.cc-card, .cc-btn, .cc-input…)
+
+   Tout est préfixé `.cc-app` / `.cc-ecran` pour ne jamais interférer avec la
+   page d'accueil publique (index.html), qui garde sa charte claire.
+   ========================================================================== */
+
+@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap');
+
+/* --------------------------------------------------------------------------
+   1. Jetons de conception (design tokens)
+   -------------------------------------------------------------------------- */
+:root {
+  /* Fonds */
+  --cc-bg: radial-gradient(1200px 620px at 12% -10%, #182742 0%, #0B1120 55%, #080D18 100%);
+  --cc-bg-uni: #0B1120;
+  --cc-surface: #151E31;
+  --cc-surface-2: #1A2438;
+  --cc-surface-3: #22304B;
+  --cc-surface-inverse: #E9EEFA;
+
+  /* Bordures */
+  --cc-bord: #26324C;
+  --cc-bord-fort: #35435F;
+
+  /* Textes */
+  --cc-texte: #E9EEFA;
+  --cc-texte-corps: #B8C2D8;
+  --cc-texte-doux: #94A0BC;
+  --cc-texte-discret: #6B7896;
+  --cc-texte-inverse: #0B1120;
+
+  /* Or (accent principal) */
+  --cc-or: #E8B65A;
+  --cc-or-clair: #F3D9A0;
+  --cc-or-pale: #F7E6C2;
+  --cc-or-fond: rgba(232, 182, 90, 0.13);
+  --cc-or-bord: rgba(232, 182, 90, 0.34);
+  --cc-degrade-or: linear-gradient(135deg, #E8B65A 0%, #CE9B3C 100%);
+  --cc-degrade-or-hover: linear-gradient(135deg, #F2C672 0%, #DCA946 100%);
+
+  /* Accent secondaire (surfaces bleu nuit en relief) */
+  --cc-sidebar: linear-gradient(180deg, #121C2F 0%, #0C1424 100%);
+  --cc-accent: linear-gradient(135deg, #1F2C48 0%, #2C3D61 100%);
+  --cc-accent-hover: linear-gradient(135deg, #26365A 0%, #35496F 100%);
+  --cc-accent-uni: #22314F;
+
+  /* États */
+  --cc-vert: #43C79A;
+  --cc-vert-fond: rgba(67, 199, 154, 0.14);
+  --cc-vert-bord: rgba(67, 199, 154, 0.36);
+  --cc-rouge: #F08060;
+  --cc-rouge-fond: rgba(240, 128, 96, 0.14);
+  --cc-rouge-bord: rgba(240, 128, 96, 0.36);
+
+  /* Couleurs de graphiques */
+  --cc-bleu: #5AA9E6;
+  --cc-violet: #8B7BC7;
+  --cc-sable: #C9A063;
+
+  /* Ombres & rayons */
+  --cc-ombre: 0 1px 2px rgba(0, 0, 0, 0.28), 0 10px 26px -14px rgba(0, 0, 0, 0.65);
+  --cc-ombre-forte: 0 18px 44px -18px rgba(0, 0, 0, 0.8);
+  --cc-ombre-or: 0 8px 26px -12px rgba(232, 182, 90, 0.45);
+  --cc-rayon: 14px;
+  --cc-rayon-petit: 9px;
+
+  /* Voile sombre posé sur les photos de bandeau */
+  --cc-voile-banniere: linear-gradient(90deg, rgba(6, 11, 22, 0.92) 0%, rgba(6, 11, 22, 0.55) 55%, rgba(6, 11, 22, 0.12) 100%);
+}
+
+/* --------------------------------------------------------------------------
+   2. Base
+   -------------------------------------------------------------------------- */
+.cc-app,
+.cc-ecran {
+  color: var(--cc-texte);
+  font-family: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* Halos d'ambiance : deux lueurs très discrètes posées derrière le contenu.
+   `isolation` garde le pseudo-élément (z-index -1) au-dessus du fond mais
+   sous le contenu, sans ever déborder sur la page d'accueil. */
+.cc-app,
+.cc-ecran {
+  position: relative;
+  isolation: isolate;
+}
+.cc-app::before,
+.cc-ecran::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background:
+    radial-gradient(900px 520px at 18% -5%, rgba(232, 182, 90, 0.13), transparent 60%),
+    radial-gradient(800px 520px at 92% 105%, rgba(90, 169, 230, 0.11), transparent 60%);
+  pointer-events: none;
+}
+
+.cc-app *,
+.cc-ecran * {
+  box-sizing: border-box;
+}
+
+/* Titres : la serif "Fraunces" donne le relief haut de gamme */
+.cc-app [style*="Fraunces"],
+.cc-ecran [style*="Fraunces"] {
+  letter-spacing: -0.01em;
+}
+
+/* Sélection de texte */
+.cc-app ::selection,
+.cc-ecran ::selection {
+  background: rgba(232, 182, 90, 0.32);
+  color: #FFF;
+}
+
+/* Barres de défilement */
+.cc-app *,
+.cc-ecran * {
+  scrollbar-width: thin;
+  scrollbar-color: var(--cc-bord-fort) transparent;
+}
+.cc-app ::-webkit-scrollbar,
+.cc-ecran ::-webkit-scrollbar {
+  width: 9px;
+  height: 9px;
+}
+.cc-app ::-webkit-scrollbar-track,
+.cc-ecran ::-webkit-scrollbar-track {
+  background: transparent;
+}
+.cc-app ::-webkit-scrollbar-thumb,
+.cc-ecran ::-webkit-scrollbar-thumb {
+  background: #2C3A57;
+  border: 2px solid transparent;
+  border-radius: 99px;
+  background-clip: content-box;
+}
+.cc-app ::-webkit-scrollbar-thumb:hover,
+.cc-ecran ::-webkit-scrollbar-thumb:hover {
+  background: #3C4C6E;
+  background-clip: content-box;
+}
+
+/* --------------------------------------------------------------------------
+   3. Boutons — états et micro-interactions
+   -------------------------------------------------------------------------- */
+.cc-app button,
+.cc-ecran button {
+  transition: transform 0.16s ease, box-shadow 0.16s ease, background 0.16s ease,
+    border-color 0.16s ease, color 0.16s ease, filter 0.16s ease;
+  will-change: transform;
+}
+
+.cc-app button:hover:not(:disabled),
+.cc-ecran button:hover:not(:disabled) {
+  filter: brightness(1.16) saturate(1.05);
+  transform: translateY(-1px);
+  box-shadow: var(--cc-ombre);
+}
+
+.cc-app button:active:not(:disabled),
+.cc-ecran button:active:not(:disabled) {
+  transform: translateY(0) scale(0.985);
+  box-shadow: none;
+}
+
+.cc-app button:disabled,
+.cc-ecran button:disabled {
+  opacity: 0.48;
+  cursor: not-allowed;
+  filter: none;
+  transform: none;
+}
+
+.cc-app button:focus-visible,
+.cc-ecran button:focus-visible,
+.cc-app input:focus-visible,
+.cc-ecran input:focus-visible,
+.cc-app select:focus-visible,
+.cc-ecran select:focus-visible,
+.cc-app textarea:focus-visible,
+.cc-ecran textarea:focus-visible,
+.cc-app [role="button"]:focus-visible,
+.cc-ecran [role="button"]:focus-visible {
+  outline: 2px solid var(--cc-or);
+  outline-offset: 2px;
+}
+
+/* Bouton principal : dégradé or, texte bleu nuit */
+.cc-btn-or {
+  background: var(--cc-degrade-or) !important;
+  color: var(--cc-texte-inverse) !important;
+  border: none !important;
+  font-weight: 600 !important;
+  box-shadow: var(--cc-ombre-or) !important;
+}
+.cc-btn-or:hover:not(:disabled) {
+  background: var(--cc-degrade-or-hover) !important;
+  filter: none !important;
+}
+
+/* Bouton fantôme / secondaire */
+.cc-btn-fantome {
+  background: transparent !important;
+  color: var(--cc-texte-doux) !important;
+  border: 1px solid var(--cc-bord) !important;
+}
+.cc-btn-fantome:hover:not(:disabled) {
+  color: var(--cc-texte) !important;
+  border-color: var(--cc-bord-fort) !important;
+  background: var(--cc-surface-2) !important;
+}
+
+/* --------------------------------------------------------------------------
+   4. Champs de saisie
+   -------------------------------------------------------------------------- */
+.cc-app input,
+.cc-app select,
+.cc-app textarea,
+.cc-ecran input,
+.cc-ecran select,
+.cc-ecran textarea {
+  transition: border-color 0.16s ease, box-shadow 0.16s ease, background 0.16s ease;
+  caret-color: var(--cc-or);
+}
+
+/* Les champs n'ont pas de fond dans les styles inline : on leur donne le
+   « creux » caractéristique des formulaires sombres. */
+.cc-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.cc-app select,
+.cc-app textarea,
+.cc-ecran input:not([type="checkbox"]):not([type="radio"]):not([type="range"]),
+.cc-ecran select,
+.cc-ecran textarea {
+  background: var(--cc-surface-2);
+  border: 1px solid var(--cc-bord);
+}
+
+.cc-app input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.cc-app select:focus,
+.cc-app textarea:focus,
+.cc-ecran input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):focus,
+.cc-ecran select:focus,
+.cc-ecran textarea:focus {
+  border-color: var(--cc-or) !important;
+  box-shadow: 0 0 0 3px rgba(232, 182, 90, 0.18);
+}
+
+.cc-app input:not([type="checkbox"]):not([type="radio"]):hover,
+.cc-app select:hover,
+.cc-app textarea:hover,
+.cc-ecran input:not([type="checkbox"]):not([type="radio"]):hover,
+.cc-ecran select:hover,
+.cc-ecran textarea:hover {
+  border-color: var(--cc-bord-fort) !important;
+}
+
+.cc-app ::placeholder,
+.cc-ecran ::placeholder {
+  color: var(--cc-texte-discret);
+  opacity: 1;
+}
+
+/* Correction du fond blanc imposé par Chrome sur les champs autocomplétés */
+.cc-app input:-webkit-autofill,
+.cc-app input:-webkit-autofill:focus,
+.cc-ecran input:-webkit-autofill,
+.cc-ecran input:-webkit-autofill:focus {
+  -webkit-text-fill-color: var(--cc-texte);
+  -webkit-box-shadow: 0 0 0 1000px var(--cc-surface-2) inset;
+  caret-color: var(--cc-texte);
+}
+
+/* Les listes déroulantes natives s'ouvrent en sombre */
+.cc-app select option,
+.cc-ecran select option {
+  background: var(--cc-surface-2);
+  color: var(--cc-texte);
+}
+
+/* --------------------------------------------------------------------------
+   5. Cartes, tableaux, listes
+   -------------------------------------------------------------------------- */
+.cc-card {
+  transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+  box-shadow: var(--cc-ombre);
+}
+.cc-card:hover {
+  border-color: var(--cc-bord-fort);
+  box-shadow: var(--cc-ombre-forte);
+}
+
+.cc-app table,
+.cc-ecran table {
+  border-collapse: collapse;
+  width: 100%;
+}
+
+.cc-app tbody tr,
+.cc-ecran tbody tr {
+  transition: background 0.15s ease;
+}
+.cc-app tbody tr:hover,
+.cc-ecran tbody tr:hover {
+  background: var(--cc-surface-3);
+}
+
+/* Liens et textes copies d'un clic */
+.cc-app span[title],
+.cc-ecran span[title] {
+  cursor: help;
+}
+
+/* --------------------------------------------------------------------------
+   6. Bandeau de page (photo + voile doré)
+   -------------------------------------------------------------------------- */
+.cc-banner {
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 12px 30px -18px rgba(0, 0, 0, 0.9);
+  animation: cc-fondu 0.5s ease both;
+}
+.cc-banner::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(600px 120px at 88% 120%, rgba(232, 182, 90, 0.28), transparent 70%);
+}
+
+/* --------------------------------------------------------------------------
+   7. Barre latérale & barre du haut
+   -------------------------------------------------------------------------- */
+.cc-sidebar {
+  box-shadow: 2px 0 24px -12px rgba(0, 0, 0, 0.9);
+  border-right: 1px solid var(--cc-bord);
+}
+
+/* Élément de menu : une barre dorée marque la page active */
+.cc-nav-item {
+  position: relative;
+}
+.cc-nav-item-actif::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 99px;
+  background: var(--cc-or);
+  box-shadow: 0 0 12px rgba(232, 182, 90, 0.55);
+}
+/* Version mobile (onglets horizontaux) : la barre devient un soulignement */
+.cc-nav-item-mobile.cc-nav-item-actif::before {
+  left: 8px;
+  right: 8px;
+  top: auto;
+  bottom: 2px;
+  width: auto;
+  height: 2px;
+  border-radius: 99px;
+}
+.cc-sidebar-mobile {
+  box-shadow: 0 8px 24px -12px rgba(0, 0, 0, 0.9);
+  border-bottom: 1px solid var(--cc-bord);
+}
+.cc-topbar {
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--cc-bord) !important;
+}
+
+/* --------------------------------------------------------------------------
+   8. Grilles & mise en page (conservées de l'ancien GLOBAL_CSS)
+   -------------------------------------------------------------------------- */
+.kpi-row {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+.kpi-row-3 {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 14px;
+}
+.grid-two {
+  display: grid;
+  grid-template-columns: 1.4fr 1fr;
+  gap: 14px;
+}
+
+@media (max-width: 980px) {
+  .kpi-row { grid-template-columns: repeat(2, 1fr); }
+  .kpi-row-3 { grid-template-columns: repeat(2, 1fr); }
+  .grid-two { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 560px) {
+  .kpi-row { grid-template-columns: 1fr; }
+  .kpi-row-3 { grid-template-columns: 1fr; }
+}
+
+@media (max-width: 780px) {
+  .page-banner { margin: 12px 16px 0 !important; height: 96px !important; }
+}
+
+@media (max-width: 760px) {
+  .comparatif-row { grid-template-columns: 1.5fr repeat(3, 1fr) !important; gap: 4px !important; font-size: 11px !important; }
+}
+
+/* --------------------------------------------------------------------------
+   9. Animations d'entrée
+   -------------------------------------------------------------------------- */
+@keyframes cc-fondu {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes cc-monte {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: none; }
+}
+
+.cc-main > * {
+  animation: cc-monte 0.34s cubic-bezier(0.22, 0.68, 0.35, 1) both;
+}
+.cc-main > *:nth-child(2) { animation-delay: 0.03s; }
+.cc-main > *:nth-child(3) { animation-delay: 0.06s; }
+.cc-main > *:nth-child(4) { animation-delay: 0.09s; }
+.cc-main > *:nth-child(5) { animation-delay: 0.12s; }
+.cc-main > *:nth-child(n + 6) { animation-delay: 0.15s; }
+
+.kpi-row > *,
+.kpi-row-3 > * {
+  animation: cc-monte 0.4s cubic-bezier(0.22, 0.68, 0.35, 1) both;
+}
+.kpi-row > *:nth-child(2),
+.kpi-row-3 > *:nth-child(2) { animation-delay: 0.05s; }
+.kpi-row > *:nth-child(3),
+.kpi-row-3 > *:nth-child(3) { animation-delay: 0.1s; }
+.kpi-row > *:nth-child(4),
+.kpi-row-3 > *:nth-child(4) { animation-delay: 0.15s; }
+
+/* Respect des préférences d'accessibilité */
+@media (prefers-reduced-motion: reduce) {
+  .cc-app *, .cc-ecran * {
+    animation-duration: 0.001s !important;
+    animation-delay: 0s !important;
+    transition-duration: 0.001s !important;
+  }
+  .cc-app button:hover, .cc-ecran button:hover { transform: none; }
+}
+
+/* --------------------------------------------------------------------------
+   10. Classes utilitaires
+   -------------------------------------------------------------------------- */
+.cc-titre {
+  font-family: 'Fraunces', Georgia, serif;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+.cc-or { color: var(--cc-or); }
+.cc-doux { color: var(--cc-texte-doux); }
+.cc-discret { color: var(--cc-texte-discret); }
+.cc-vert { color: var(--cc-vert); }
+.cc-rouge { color: var(--cc-rouge); }
+.cc-gras { font-weight: 600; }
+.cc-centre { text-align: center; }
+.cc-espace { display: flex; gap: 10px; align-items: center; }
+.cc-espace-col { display: flex; flex-direction: column; gap: 10px; }
+.cc-grille-2 { display: grid; grid-template-columns: repeat(2, 1fr); gap: 14px; }
+.cc-grille-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; }
+.cc-separateur { height: 1px; background: var(--cc-bord); margin: 14px 0; }
+
+.cc-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 99px;
+  font-size: 11px;
+  font-weight: 600;
+  background: var(--cc-or-fond);
+  color: var(--cc-or-clair);
+  border: 1px solid var(--cc-or-bord);
+}
+.cc-badge-vert {
+  background: var(--cc-vert-fond);
+  color: var(--cc-vert);
+  border-color: var(--cc-vert-bord);
+}
+.cc-badge-rouge {
+  background: var(--cc-rouge-fond);
+  color: var(--cc-rouge);
+  border-color: var(--cc-rouge-bord);
+}
+
+@media (max-width: 760px) {
+  .cc-grille-2, .cc-grille-3 { grid-template-columns: 1fr; }
+}
+
+/* --------------------------------------------------------------------------
+   11. Infobulles des graphiques (Recharts)
+   -------------------------------------------------------------------------- */
+.cc-app .recharts-default-tooltip,
+.cc-ecran .recharts-default-tooltip {
+  background: var(--cc-surface-2) !important;
+  border: 1px solid var(--cc-bord-fort) !important;
+  border-radius: 10px !important;
+  box-shadow: var(--cc-ombre-forte);
+  color: var(--cc-texte) !important;
+  font-family: 'Inter', sans-serif !important;
+  font-size: 12.5px !important;
+}
+.cc-app .recharts-tooltip-label,
+.cc-ecran .recharts-tooltip-label {
+  color: var(--cc-texte-doux) !important;
+}
+.cc-app .recharts-cartesian-axis-tick text,
+.cc-ecran .recharts-cartesian-axis-tick text {
+  fill: var(--cc-texte-doux);
+}
+.cc-app .recharts-cartesian-grid line,
+.cc-ecran .recharts-cartesian-grid line {
+  stroke: var(--cc-bord);
+}
+
+/* --------------------------------------------------------------------------
+   12. Écrans pleine page (connexion, paiement en attente…)
+   Le halo d'ambiance et le positionnement sont définis plus haut (section 2) ;
+   ces écrans reprennent simplement la classe `.cc-ecran`.
+   -------------------------------------------------------------------------- */
+
+/* --------------------------------------------------------------------------
+   13. Par page
+   Chaque page pose `className="cc-page cc-page-<vue>"` ; quelques touches
+   spécifiques, le reste du style venant des sections précédentes.
+   -------------------------------------------------------------------------- */
+.cc-page {
+  position: relative;
+}
+
+/* Filet doré en haut de chaque carte de contenu (signature visuelle) */
+.cc-page .cc-card {
+  position: relative;
+  overflow: hidden;
+}
+.cc-page .cc-card::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, rgba(232, 182, 90, 0.5), transparent);
+  pointer-events: none;
+}
+
+/* Libellés de formulaire : une nuance plus douce que le texte courant */
+.cc-page label,
+.cc-ecran label {
+  color: var(--cc-texte-doux);
+}
+
+/* Tableau de bord : indicateurs plus aérés */
+.cc-page-dashboard .kpi-row > *,
+.cc-page-dashboard .kpi-row-3 > * {
+  min-height: 110px;
+}
+
+/* Score de crédit & facturation : esprit « document », cartes mises en avant */
+.cc-page-score .cc-card:hover,
+.cc-page-fne .cc-card:hover {
+  border-color: var(--cc-or-bord);
+  box-shadow: var(--cc-ombre-forte), var(--cc-ombre-or);
+}
+
+/* --------------------------------------------------------------------------
+   14. Impression (factures, attestations, rapports)
+   -------------------------------------------------------------------------- */
+@media print {
+  .cc-app, .cc-ecran, .cc-app *, .cc-ecran * {
+    background: #fff !important;
+    color: #000 !important;
+    box-shadow: none !important;
+    animation: none !important;
+    text-shadow: none !important;
+  }
+  .cc-app .cc-sidebar,
+  .cc-app .cc-topbar,
+  .cc-app .cc-sidebar-mobile,
+  .cc-app button,
+  .cc-ecran button {
+    display: none !important;
+  }
+  .cc-app .cc-card,
+  .cc-ecran .cc-card {
+    border: 1px solid #ccc !important;
+    break-inside: avoid;
+  }
+  body { margin: 0; }
+}

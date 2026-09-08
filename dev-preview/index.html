@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ComptaCi — aperçu des nouveaux écrans (données fictives)</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      /* Mêmes jetons que ui.css : l'aperçu est aux couleurs de l'application. */
+      :root {
+        --cc-bg: #0B1120;
+        --cc-surface: #151E31;
+        --cc-surface-2: #1A2438;
+        --cc-bord: #26324C;
+        --cc-bord-fort: #35435F;
+        --cc-texte: #E9EEFA;
+        --cc-texte-doux: #94A0BC;
+        --cc-texte-discret: #6B7896;
+        --cc-or: #E8B65A;
+        --cc-or-clair: #F3D9A0;
+        --cc-degrade-or: linear-gradient(135deg, #E8B65A 0%, #CE9B3C 100%);
+      }
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        font-family: "Inter", sans-serif;
+        background: var(--cc-bg);
+        color: var(--cc-texte);
+      }
+      .bandeau {
+        background: linear-gradient(180deg, #121C2F 0%, #0C1424 100%);
+        color: var(--cc-or-clair);
+        border-bottom: 1px solid var(--cc-bord);
+        padding: 12px 20px;
+        font-size: 12.5px;
+        letter-spacing: 0.02em;
+      }
+      .conteneur { max-width: 1080px; margin: 0 auto; padding: 18px 20px 60px; }
+      .onglets { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+      .onglets button {
+        padding: 9px 15px;
+        border-radius: 20px;
+        border: 1px solid var(--cc-bord);
+        background: var(--cc-surface);
+        color: var(--cc-texte-doux);
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: "Inter", sans-serif;
+        transition: transform 0.16s ease, box-shadow 0.16s ease, color 0.16s ease, border-color 0.16s ease;
+      }
+      .onglets button:hover { color: var(--cc-texte); border-color: var(--cc-bord-fort); transform: translateY(-1px); }
+      .onglets button.actif {
+        background: var(--cc-degrade-or);
+        color: #0B1120;
+        border-color: transparent;
+        box-shadow: 0 8px 26px -12px rgba(232, 182, 90, 0.45);
+      }
+      footer { font-size: 11.5px; color: var(--cc-texte-discret); margin-top: 30px; line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <div class="bandeau">
+      APERÇU — données fictives. Aucune connexion Supabase requise (page non incluse dans le build de production).
+    </div>
+    <div class="conteneur">
+      <div class="onglets" id="onglets"></div>
+      <div id="root"></div>
+      <footer>
+        Lancez <code>npm run dev</code> puis ouvrez <code>/dev-preview/index.html</code>.
+        Pour l'application réelle : <code>/index.html</code> (landing) et <code>/app.html</code> (application,
+        nécessite <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code>).
+      </footer>
+    </div>
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>

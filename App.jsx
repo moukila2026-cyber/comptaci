@@ -1,113 +1,39 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info } from "lucide-react";
+import {
+  AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info, Award, FileText } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
-import PaiementWave, { PRIX_PLANS } from "./PaiementWave.jsx";
+import PaiementSasPay, { PRIX_PLANS, JOURS_ESSAI } from "./PaiementSasPay.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
-
-const CATEGORIES_PAR_SECTEUR = {
-  restauration: [
-    { id: "boissons", label: "Boissons" },
-    { id: "nourriture", label: "Nourriture" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  quincaillerie: [
-    { id: "materiaux", label: "Matériaux de construction" },
-    { id: "outillage", label: "Outillage" },
-    { id: "plomberie", label: "Plomberie" },
-    { id: "electricite", label: "Électricité" },
-    { id: "peinture", label: "Peinture & finitions" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  boutique: [
-    { id: "alimentaire", label: "Produits alimentaires" },
-    { id: "hygiene", label: "Produits d'hygiène" },
-    { id: "boissons", label: "Boissons" },
-    { id: "emballages", label: "Emballages" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  pharmacie: [
-    { id: "medicaments", label: "Médicaments" },
-    { id: "parapharmacie", label: "Parapharmacie" },
-    { id: "materiel_medical", label: "Matériel médical" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-};
-
-const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
-function secteursTraduits(t) {
-  return SECTEURS_IDS.map((id) => ({ id, label: t(`secteur_${id}`) }));
-}
-
-function categoriesDuSecteur(secteur) {
-  return CATEGORIES_PAR_SECTEUR[secteur] || CATEGORIES_PAR_SECTEUR.restauration;
-}
-
-/**
- * Nature de chaque poste de dépense : achats/approvisionnements, masse
- * salariale, charges de structure ou autre. Sert aux ratios du tableau de bord.
- */
-const POSTES_PAR_CATEGORIE = {
-  medicaments: "achats",
-  parapharmacie: "achats",
-  materiel_medical: "achats",
-  alimentaire: "achats",
-  hygiene: "achats",
-  boissons: "achats",
-  emballages: "achats",
-  materiaux: "achats",
-  outillage: "achats",
-  plomberie: "achats",
-  electricite: "achats",
-  peinture: "achats",
-  nourriture: "achats",
-  personnel: "personnel",
-  charges_fixes: "charges",
-  autre: "autre",
-};
-
-/** Seuils de bonne gestion (en % du CA) propres à chaque secteur. */
-const SEUILS_RATIOS = {
-  pharmacie: { achats: 65, personnel: 15, charges: 15 },
-  boutique: { achats: 75, personnel: 12, charges: 12 },
-  quincaillerie: { achats: 70, personnel: 12, charges: 15 },
-  restauration: { achats: 40, personnel: 20, charges: 15 },
-};
-
-/** Objectif de marge brute indicative, par secteur. */
-const MARGE_CIBLE = {
-  pharmacie: "25 – 35 %",
-  boutique: "15 – 25 %",
-  quincaillerie: "20 – 30 %",
-  restauration: "55 – 65 %",
-};
+import {
+  SECTEURS_IDS,
+  SECTEUR_PAR_DEFAUT,
+  secteurNormalise,
+  secteursTraduits,
+  categoriesDuSecteur,
+  postesDuSecteur,
+  posteDeDesignation,
+  categorieSuggeree,
+  seuilsDuSecteur,
+  margeCibleDuSecteur,
+  natureCategorie,
+} from "./secteurs.js";
+import { calculerScoreCredit } from "./creditScoring.js";
+import { C, COULEURS_GRAPH } from "./theme.js";
+import ScoreCredit from "./ScoreCredit.jsx";
+import FacturationFNE from "./FacturationFNE.jsx";
 
 /** Montants usuels proposés en un clic à l'ouverture de la caisse. */
 const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
 
 /** Palette des barres de répartition (dépenses par poste sectoriel). */
-const COULEURS_REPARTITION = [
-  "#16213E",
-  "#D4A24C",
-  "#C1502E",
-  "#186B4E",
-  "#6B5B95",
-  "#2E7BA6",
-  "#8A8578",
-  "#B4801F",
-];
+/** Palette des barres : reprise de `theme.js` (miroir de `ui.css`). */
+const COULEURS_REPARTITION = COULEURS_GRAPH;
 
 /** Valeur d'une ligne de stock : quantité disponible × prix unitaire. */
 const valeurStockLigne = (p) =>
@@ -212,6 +138,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const [sessionCaisse, setSessionCaisse] = useState(null);
   const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
+  const [demandesPaiement, setDemandesPaiement] = useState([]);
   const [role, setRole] = useState(null);
   const [mesEtablissements, setMesEtablissements] = useState([]);
   const [listeChargee, setListeChargee] = useState(false);
@@ -236,6 +163,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
         setEtablissementActifId(null);
         setEtablissement(null);
         setRole(null);
+        setDemandesPaiement([]);
         setTransactions([]);
         setProduits([]);
         setFournisseurs([]);
@@ -359,6 +287,21 @@ function ComptaCiApp({ langue, setLangue, t }) {
       }
 
       try {
+        const { data: demandes, error: errDemandes } = await supabase
+          .from("demandes_paiement")
+          .select("id, plan, montant, statut, created_at")
+          .eq("etablissement_id", etab.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (errDemandes) throw errDemandes;
+        setDemandesPaiement(demandes || []);
+      } catch (e) {
+        // Table optionnelle : son absence ne doit rien bloquer.
+        console.error("Erreur chargement demandes de paiement:", e);
+        setDemandesPaiement([]);
+      }
+
+      try {
         const { data: sessions, error: errSessions } = await supabase
           .from("sessions_caisse")
           .select("*")
@@ -420,22 +363,67 @@ function ComptaCiApp({ langue, setLangue, t }) {
     }
   };
 
+  /**
+   * Change le type d'établissement (restaurant, bar, maquis, hôtel…).
+   * Effet immédiat : la répartition des dépenses et les suggestions de saisie
+   * utilisent les postes réels du nouveau métier.
+   */
+  const changerSecteur = async (secteur) => {
+    if (!etablissement?.id) return false;
+    const secteurPropre = secteurNormalise(secteur);
+    try {
+      const { error } = await supabase
+        .from("etablissements")
+        .update({ secteur: secteurPropre })
+        .eq("id", etablissement.id);
+      if (error) throw error;
+      setEtablissement({ ...etablissement, secteur: secteurPropre });
+      setMesEtablissements((liste) =>
+        liste.map((m) =>
+          m.etablissement_id === etablissement.id
+            ? { ...m, etablissements: { ...m.etablissements, secteur: secteurPropre } }
+            : m
+        )
+      );
+      return true;
+    } catch (e) {
+      console.error("Erreur changement de type d'établissement:", e);
+      return false;
+    }
+  };
+
   const addTransaction = async (donneesTx) => {
     if (!etablissement) return false;
-    const { designation, quantite, prixUnitaire, ...champsTransaction } = donneesTx;
+    const { designation, quantite, prixUnitaire, poste_id, ...champsTransaction } = donneesTx;
     const quantiteNumerique = parseFloat(quantite) || 0;
     const prixNumerique = parseFloat(prixUnitaire) || 0;
     const champsCommuns = { ...champsTransaction, etablissement_id: etablissement.id };
 
-    // La colonne `quantite` n'existe que si la migration
-    // supabase-transactions-quantite.sql a été appliquée. On tente d'abord avec,
-    // puis on retente sans elle : un simple oubli de migration ne doit jamais
-    // empêcher l'enregistrement d'une vente.
+    // Les colonnes `quantite` et `poste_id` n'existent que si les migrations
+    // correspondantes ont été appliquées. On tente d'abord avec toutes, puis on
+    // retire progressivement celles que la base refuse : un simple oubli de
+    // migration ne doit jamais empêcher l'enregistrement d'une vente.
     let { data, error } = await supabase
       .from("transactions")
-      .insert({ ...champsCommuns, quantite: quantiteNumerique })
+      .insert({ ...champsCommuns, quantite: quantiteNumerique, poste_id: poste_id || null })
       .select();
     if (error && /quantite/i.test(error.message || "")) {
+      const repli = await supabase
+        .from("transactions")
+        .insert({ ...champsCommuns, poste_id: poste_id || null })
+        .select();
+      data = repli.data;
+      error = repli.error;
+    }
+    if (error && /poste_id/i.test(error.message || "")) {
+      const repli = await supabase
+        .from("transactions")
+        .insert({ ...champsCommuns, quantite: quantiteNumerique })
+        .select();
+      data = repli.data;
+      error = repli.error;
+    }
+    if (error && /quantite|poste_id/i.test(error.message || "")) {
       const repli = await supabase.from("transactions").insert(champsCommuns).select();
       data = repli.data;
       error = repli.error;
@@ -451,6 +439,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
     const transactionCreee = {
       ...(data?.[0] || {}),
       quantite: quantiteNumerique,
+      poste_id: poste_id || null,
       designation: designation ? designation.trim() : "",
     };
     setTransactions([transactionCreee, ...transactions]);
@@ -499,6 +488,43 @@ function ComptaCiApp({ langue, setLangue, t }) {
         setProduits((liste) => [...liste, data[0]]);
       }
     }
+  };
+
+  /**
+   * Importe les postes de dépense de l'activité dans le stock.
+   * Un nouvel établissement démarre sinon avec un stock vide : importer les
+   * 20+ postes de son métier (biscuits, eau de javel… pour une boutique) lui
+   * donne une liste prête à l'emploi, à compléter avec les quantités réelles.
+   * Les postes déjà présents ne sont jamais dupliqués.
+   */
+  const importerPostesStock = async () => {
+    if (!etablissement?.id) return { ok: false, ajoutes: 0 };
+    const secteurActif = secteurNormalise(etablissement?.secteur);
+    const existants = new Set(
+      produits.map((p) => String(p.designation || "").trim().toLowerCase())
+    );
+    const aCreer = postesDuSecteur(secteurActif)
+      .filter((p) => !existants.has(p.label.toLowerCase()))
+      .map((p) => ({
+        etablissement_id: etablissement.id,
+        designation: p.label,
+        quantite_stock: 0,
+        prix_unitaire: null,
+        seuil_alerte: 5,
+      }));
+
+    if (aCreer.length === 0) return { ok: true, ajoutes: 0 };
+
+    const { data, error } = await supabase
+      .from("produits")
+      .insert(aCreer)
+      .select();
+    if (error) {
+      console.error("Erreur import postes dans le stock:", error);
+      return { ok: false, ajoutes: 0 };
+    }
+    setProduits((liste) => [...liste, ...(data || [])]);
+    return { ok: true, ajoutes: (data || []).length };
   };
 
   const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
@@ -669,7 +695,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   if (verifSession) {
-    return <div style={styles.loading}>Chargement…</div>;
+    return <div className="cc-ecran" style={styles.loading}>Chargement…</div>;
   }
 
   if (modeRecuperation) {
@@ -693,7 +719,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   }
 
   const essaiExpireLe = etablissement
-    ? new Date(new Date(etablissement.date_creation).getTime() + (etablissement.essai_jours || 7) * 24 * 60 * 60 * 1000)
+    ? new Date(new Date(etablissement.date_creation).getTime() + (Number(etablissement.essai_jours) || JOURS_ESSAI) * 24 * 60 * 60 * 1000)
     : null;
   const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
   const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
@@ -721,10 +747,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const planEffectif = enEssai ? "starter" : etablissement?.plan;
 
   return (
-    <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
+    <div className="cc-app" style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
       <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} t={t} />
-      <div style={styles.main}>
+      <div className="cc-main" style={styles.main}>
         <TopBar
           etablissement={etablissement?.nom || "Mon établissement"}
           onRename={renameEtablissement}
@@ -744,18 +770,27 @@ function ComptaCiApp({ langue, setLangue, t }) {
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {!chargement && <PageBanner vue={vue} t={t} />}
         {chargement ? (
-          <div style={styles.loading}>{t("chargement")}</div>
+          <div className="cc-ecran" style={styles.loading}>{t("chargement")}</div>
         ) : vue === "dashboard" ? (
-          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
+          <Dashboard
+            transactions={transactions}
+            isMobile={isMobile}
+            secteur={etablissement?.secteur}
+            etablissement={etablissement}
+            demandes={demandesPaiement}
+            t={t}
+          />
         ) : vue === "saisie" ? (
           <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
         ) : vue === "stock" ? (
           <Stock
             produits={produits}
+            secteur={etablissement?.secteur}
             onAdd={addProduit}
             onAjuster={ajusterQuantiteManuelle}
             onSupprimer={supprimerProduit}
             onSeuil={modifierSeuil}
+            onImporterPostes={importerPostesStock}
             t={t}
           />
         ) : vue === "caisse" ? (
@@ -774,12 +809,30 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onSupprimer={supprimerFournisseur}
             t={t}
           />
+        ) : vue === "score" ? (
+          <ScoreCredit
+            transactions={transactions}
+            etablissement={etablissement}
+            demandes={demandesPaiement}
+            langue={langue}
+            t={t}
+          />
+        ) : vue === "fne" ? (
+          <FacturationFNE
+            etablissement={etablissement}
+            transactions={transactions}
+            planEffectif={planEffectif}
+            enEssai={enEssai}
+            t={t}
+            onRafraichirEtablissement={chargerEtablissements}
+          />
         ) : vue === "abonnement" ? (
           <Abonnement
             etablissement={etablissement}
             planEffectif={planEffectif}
             enEssai={enEssai}
             onSupprimerCompte={supprimerMonCompte}
+            onChangerSecteur={changerSecteur}
             t={t}
           />
         ) : (
@@ -806,6 +859,8 @@ const PAGE_BANNERS = {
   historique: { src: "/images/photo-boutique.jpg", position: "center 20%" },
   fournisseurs: { src: "/images/photo-marche.jpg", position: "center 40%" },
   abonnement: { src: "/images/promo-controle.png", position: "center 10%" },
+  score: { src: "/images/promo-dashboard.png", position: "center 20%" },
+  fne: { src: "/images/photo-marche.jpg", position: "center 25%" },
 };
 
 function PageBanner({ vue, t }) {
@@ -813,7 +868,7 @@ function PageBanner({ vue, t }) {
   if (!banner) return null;
   const label = t(`nav_${vue}`);
   return (
-    <div className="page-banner" style={styles.pageBanner}>
+    <div className="page-banner cc-banner" style={styles.pageBanner}>
       <img src={banner.src} alt={label} style={{ ...styles.pageBannerImg, objectPosition: banner.position }} />
       <div style={styles.pageBannerOverlay} />
       <div style={styles.pageBannerLabel}>{label}</div>
@@ -828,18 +883,20 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
     { id: "caisse", label: t("nav_caisse"), icon: Lock },
     { id: "stock", label: t("nav_stock"), icon: Package },
     { id: "historique", label: t("nav_historique"), icon: History },
+    { id: "score", label: t("nav_score"), icon: Award },
+    { id: "fne", label: t("nav_fne"), icon: FileText },
     { id: "fournisseurs", label: t("nav_fournisseurs"), icon: Phone },
     { id: "abonnement", label: t("nav_abonnement"), icon: CreditCard },
   ];
 
   if (isMobile) {
     return (
-      <aside style={styles.sidebarMobile}>
+      <aside className="cc-sidebar cc-sidebar-mobile" style={styles.sidebarMobile}>
         <div style={styles.brandRowMobile}>
           <div style={styles.brand}>
             <div style={styles.brandMark}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div style={styles.brandName}>ComptaCi</div>
@@ -856,6 +913,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
               <button
                 key={it.id}
                 onClick={() => setVue(it.id)}
+                className={active ? "cc-nav-item cc-nav-item-mobile cc-nav-item-actif" : "cc-nav-item cc-nav-item-mobile"}
                 style={{ ...styles.navItemMobile, ...(active ? styles.navItemActive : {}) }}
               >
                 <Icon size={16} strokeWidth={2} />
@@ -869,11 +927,11 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
   }
 
   return (
-    <aside style={styles.sidebar}>
+    <aside className="cc-sidebar" style={styles.sidebar}>
       <div style={styles.brand}>
         <div style={styles.brandMark}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         <div>
@@ -889,6 +947,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
             <button
               key={it.id}
               onClick={() => setVue(it.id)}
+              className={active ? "cc-nav-item cc-nav-item-actif" : "cc-nav-item"}
               style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
             >
               <Icon size={17} strokeWidth={2} />
@@ -915,7 +974,7 @@ function EssaiBanner({ msRestant, estFondateur, essaiJours, t }) {
   return (
     <div style={{ ...styles.essaiBanner, ...(urgent ? styles.essaiBannerUrgent : {}) }}>
       {estFondateur && <span style={styles.fondateurTag}>★ {t("fondateur_tag")}</span>}
-      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || 7} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
+      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || JOURS_ESSAI} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
     </div>
   );
 }
@@ -951,14 +1010,14 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   };
 
   return (
-    <header style={styles.topbar}>
+    <header className="cc-topbar" style={styles.topbar}>
       <div style={styles.topbarLeft}>
-        <Building2 size={16} color="#8A8578" />
+        <Building2 size={16} color="var(--cc-texte-doux)" />
         {mesEtablissements && mesEtablissements.length > 0 ? (
           <div style={{ position: "relative" }}>
             <button style={styles.topbarNameBtn} onClick={() => setSelecteurOuvert((v) => !v)}>
               {etablissement}{role === "gerant" ? ` · ${t("nav_gerant")}` : ""}
-              <ChevronDown size={14} color="#B5AF9E" />
+              <ChevronDown size={14} color="var(--cc-texte-discret)" />
             </button>
             {selecteurOuvert && (
               <div style={styles.etabPopover}>
@@ -1019,7 +1078,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
         ) : estProprietaire ? (
           <button style={styles.topbarNameBtn} onClick={() => setEditing(true)}>
             {etablissement}
-            <ChevronDown size={14} color="#B5AF9E" />
+            <ChevronDown size={14} color="var(--cc-texte-discret)" />
           </button>
         ) : (
           <span style={styles.topbarNameBtn}>{etablissement} · {t("nav_gerant")}</span>
@@ -1066,10 +1125,14 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   );
 }
 
-function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
+export function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = [], t }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
   const [copie, setCopie] = useState(false);
+  // Le graphique de répartition affiche par défaut les POSTES RÉELS de
+  // l'activité (« biscuits », « eau de javel »…) ; on peut revenir aux
+  // grandes catégories d'un clic.
+  const [modeRepartition, setModeRepartition] = useState("postes");
 
   const trend = useMemo(() => buildTrend(transactions, periode), [transactions, periode]);
   const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, secteur), [transactions, secteur]);
@@ -1079,15 +1142,46 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
   const cleMois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
   const topProduits = useMemo(() => buildTopProduits(transactions, cleMois), [transactions, cleMois]);
 
-  const secteurActif = SECTEURS_IDS.includes(secteur) ? secteur : "restauration";
+  const secteurActif = secteurNormalise(secteur);
   const libelleSecteur = t(`secteur_${secteurActif}`);
-  const seuils = SEUILS_RATIOS[secteurActif] || SEUILS_RATIOS.restauration;
+  const seuils = seuilsDuSecteur(secteurActif);
+
+  // Répartition par POSTE RÉEL (les 20+ dépenses types du métier) :
+  // chaque gérant ne voit que les postes de son activité.
+  const parPoste = useMemo(
+    () => buildPosteBreakdown(transactions, secteurActif),
+    [transactions, secteurActif]
+  );
+
+  // Score de crédit calculé en direct (aperçu affiché sur le tableau de bord).
+  const scoreApercu = useMemo(
+    () =>
+      calculerScoreCredit({
+        transactions,
+        etablissement,
+        demandes: demandes,
+        seuilDepenses: (seuils.achats + seuils.personnel + seuils.charges) / 100,
+      }),
+    [transactions, etablissement, demandes, seuils]
+  );
 
   const totalDepenses = parCategorie.reduce((a, c) => a + c.value, 0);
+
+  // Top 8 des postes réels pour le graphique (les autres restent visibles
+  // dans la grille détaillée juste en dessous).
+  const donneesGraphique = useMemo(() => {
+    if (modeRepartition === "categories") {
+      return parCategorie.filter((c) => c.value > 0);
+    }
+    return parPoste
+      .filter((p) => p.value > 0)
+      .slice(0, 8)
+      .map((p) => ({ ...p, label: p.label.length > 22 ? `${p.label.slice(0, 20)}…` : p.label }));
+  }, [modeRepartition, parCategorie, parPoste]);
   const ratios = [
-    { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "#C1502E" },
-    { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "#D4A24C" },
-    { cle: "charges", label: t("dash_poids_charges"), montant: stats.postes.charges, seuil: seuils.charges, couleur: "#6B5B95" },
+    { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "var(--cc-rouge)" },
+    { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "var(--cc-or)" },
+    { cle: "charges", label: t("dash_poids_charges"), montant: stats.postes.charges, seuil: seuils.charges, couleur: "var(--cc-violet)" },
   ].map((r) => ({ ...r, ...evaluerRatio(r.montant, stats.caMois, r.seuil) }));
 
   const copierBilan = () => {
@@ -1109,7 +1203,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-dashboard" style={styles.page}>
       <div style={{ ...styles.dashboardHeader, justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={styles.secteurBadge}>
           <Store size={13} />
@@ -1121,6 +1215,35 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
           <Copy size={14} /> {copie ? t("dash_bilan_copie") : t("dash_copier_bilan")}
         </button>
       </div>
+      <div
+        style={{
+          ...styles.scoreApercuCard,
+          borderColor: scoreApercu.palier.couleur,
+          background: scoreApercu.palier.couleurFond,
+        }}
+      >
+        <div style={styles.scoreApercuGauche}>
+          <div style={styles.scoreApercuTitre}>{t("score_titre")}</div>
+          <div style={styles.scoreApercuSous}>
+            {t("score_objectifs_atteints")} : {scoreApercu.objectifsAtteints}/{scoreApercu.objectifsTotal}
+          </div>
+        </div>
+        <div style={styles.scoreApercuDroite}>
+          <span style={{ ...styles.scoreApercuValeur, color: scoreApercu.palier.couleur }}>
+            {scoreApercu.score}
+          </span>
+          <span style={styles.scoreApercuSur100}>/100</span>
+          <span
+            style={{
+              ...styles.scorePalierBadge,
+              background: scoreApercu.palier.couleur,
+            }}
+          >
+            {t(`score_palier_${scoreApercu.palier.id}`)}
+          </span>
+        </div>
+      </div>
+
       <div className="kpi-row">
         <KpiCard
           label={t("dash_ca")}
@@ -1182,7 +1305,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
       </div>
 
       <div className="grid-two">
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_evolution")}</div>
@@ -1194,49 +1317,77 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
               <AreaChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <defs>
                   <linearGradient id="ca" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#D4A24C" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#D4A24C" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.or} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={C.or} stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="dep" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#C1502E" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#C1502E" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.rouge} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={C.rouge} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="#EDE7DA" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8A8578" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#8A8578" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <CartesianGrid stroke={C.bord} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.texteDoux }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: C.texteDoux }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
                 <Tooltip
                   formatter={(v) => `${fmt(v)} FCFA`}
-                  contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }}
+                  contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid var(--cc-bord)", borderRadius: 8 }}
                 />
-                <Area type="monotone" dataKey="ca" stroke="#D4A24C" strokeWidth={2} fill="url(#ca)" name={t("dash_ca")} />
-                <Area type="monotone" dataKey="dep" stroke="#C1502E" strokeWidth={2} fill="url(#dep)" name={t("dash_depenses")} />
+                <Area type="monotone" dataKey="ca" stroke={C.or} strokeWidth={2} fill="url(#ca)" name={t("dash_ca")} />
+                <Area type="monotone" dataKey="dep" stroke={C.rouge} strokeWidth={2} fill="url(#dep)" name={t("dash_depenses")} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_repartition")}</div>
-              <div style={styles.cardCaption}>{t("dash_repartition_sous")}</div>
+              <div style={styles.cardCaption}>
+                {modeRepartition === "postes" ? t("dash_repartition_sous_postes") : t("dash_repartition_sous")}
+              </div>
             </div>
+          </div>
+          <div style={styles.basculeRepartition}>
+            <button
+              type="button"
+              onClick={() => setModeRepartition("postes")}
+              style={{
+                ...styles.basculeBtn,
+                ...(modeRepartition === "postes" ? styles.basculeBtnActif : {}),
+              }}
+            >
+              {t("dash_repartition_mode_postes")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setModeRepartition("categories")}
+              style={{
+                ...styles.basculeBtn,
+                ...(modeRepartition === "categories" ? styles.basculeBtnActif : {}),
+              }}
+            >
+              {t("dash_repartition_mode_categories")}
+            </button>
           </div>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={parCategorie} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+              <BarChart data={donneesGraphique} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="label"
                   type="category"
-                  tick={{ fontSize: 12, fill: "#3A3628" }}
+                  tick={{ fontSize: 12, fill: C.texte }}
                   axisLine={false}
                   tickLine={false}
-                  width={100}
+                  width={modeRepartition === "postes" ? 130 : 100}
                 />
-                <Tooltip formatter={(v) => `${fmt(v)} FCFA`} contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }} />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#16213E" barSize={16} />
+                <Tooltip formatter={(v) => `${fmt(v)} FCFA`} contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid var(--cc-bord)", borderRadius: 8 }} />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
+                  {donneesGraphique.map((_, i) => (
+                    <Cell key={i} fill={COULEURS_GRAPH[i % COULEURS_GRAPH.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1244,7 +1395,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
       </div>
 
       {/* Répartition détaillée des dépenses par poste sectoriel */}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("dash_depenses_detail_titre")}</div>
@@ -1278,9 +1429,45 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         )}
       </div>
 
+      {/* Dépenses réelles par poste d'activité : la liste des 20+ dépenses
+          types du métier, filtrée automatiquement sur le type d'établissement */}
+      <div style={styles.card} className="cc-card">
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("dash_postes_titre")}</div>
+            <div style={styles.cardCaption}>
+              {t("dash_postes_sous")} — {libelleSecteur} ({postesDuSecteur(secteurActif).length} {t("dash_postes_unites")})
+            </div>
+          </div>
+          <div style={styles.cardMontant}>{fmt(totalDepenses)} <span style={styles.kpiUnit}>FCFA</span></div>
+        </div>
+        <div style={styles.postesGrid}>
+          {parPoste.map((p) => {
+            const actif = p.value > 0;
+            const part = totalDepenses > 0 ? (p.value / totalDepenses) * 100 : 0;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  ...styles.posteChip,
+                  ...(actif ? styles.posteChipActif : {}),
+                }}
+                title={`${p.label} — ${fmt(p.value)} FCFA`}
+              >
+                <span style={styles.posteChipLabel}>{p.label}</span>
+                <span style={{ ...styles.posteChipMontant, ...(actif ? styles.posteChipMontantActif : {}) }}>
+                  {actif ? `${fmt(p.value)} F · ${part.toFixed(0)}%` : "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p style={styles.postesNote}>{t("dash_postes_note")}</p>
+      </div>
+
       <div className="grid-two">
         {/* Classement des produits vendus ce mois-ci */}
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_top_produits")}</div>
@@ -1299,7 +1486,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
                       {fmt(p.ca)} FCFA · {p.part.toFixed(0)}%
                     </span>
                   </div>
-                  <BarreProgression pourcentage={p.part} couleur="#D4A24C" />
+                  <BarreProgression pourcentage={p.part} couleur="var(--cc-or)" />
                   <div style={styles.repartitionDetail}>
                     {t("dash_col_qte")} : {fmt(p.quantite)} — {fmt(p.nbVentes)} {t("dash_ventes_court")}
                   </div>
@@ -1312,7 +1499,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         </div>
 
         {/* Ratios financiers : poids de chaque poste par rapport au CA */}
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_ratios_titre")}</div>
@@ -1378,7 +1565,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         </div>
         <div style={styles.conseilsMarge}>
           <span>{t("dash_marge_cible")}</span>
-          <strong>{MARGE_CIBLE[secteurActif] || "—"}</strong>
+          <strong>{margeCibleDuSecteur(secteurActif)}</strong>
         </div>
         <ul style={styles.conseilsListe}>
           {[1, 2, 3].map((n) => (
@@ -1401,10 +1588,10 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
 
 function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "FCFA" }) {
   const colors = {
-    gold: { fg: "#B4801F", bg: "#FBF3E2" },
-    clay: { fg: "#B4432A", bg: "#FBEBE4" },
-    teal: { fg: "#186B4E", bg: "#E4F2EC" },
-    ink: { fg: "#16213E", bg: "#EAECF3" },
+    gold: { fg: "var(--cc-or)", bg: "var(--cc-surface-3)" },
+    clay: { fg: "var(--cc-rouge)", bg: "var(--cc-rouge-fond)" },
+    teal: { fg: "var(--cc-vert)", bg: "var(--cc-vert-fond)" },
+    ink: { fg: "var(--cc-texte)", bg: "var(--cc-surface-3)" },
   }[accent];
   return (
     <div style={{ ...styles.kpiCard, ...(hero ? styles.kpiCardHero : {}) }}>
@@ -1412,7 +1599,7 @@ function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "
         <span style={styles.kpiLabel}>{label}</span>
         <span style={{ ...styles.kpiIcon, color: colors.fg, background: colors.bg }}>{icon}</span>
       </div>
-      <div style={{ ...styles.kpiValue, color: hero ? colors.fg : "#16213E" }}>
+      <div style={{ ...styles.kpiValue, color: hero ? colors.fg : "var(--cc-texte)" }}>
         {valeurTexte !== undefined ? (
           valeurTexte
         ) : (
@@ -1429,7 +1616,7 @@ function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "
 }
 
 /** Barre de progression utilisée par les répartitions du tableau de bord. */
-function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }) {
+function BarreProgression({ pourcentage, couleur = "var(--cc-accent)", fond = "var(--cc-surface-2)" }) {
   const largeur = Math.max(0, Math.min(100, pourcentage || 0));
   return (
     <div style={{ ...styles.barTrack, background: fond }}>
@@ -1438,13 +1625,18 @@ function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }
   );
 }
 
-function Saisie({ onAdd, secteur, etablissement, t }) {
-  const categories = categoriesDuSecteur(secteur);
+export function Saisie({ onAdd, secteur, etablissement, t }) {
+  const secteurActif = secteurNormalise(secteur);
+  const categories = categoriesDuSecteur(secteurActif);
+  // Les dépenses types du métier (20 minimum) : elles alimentent les
+  // suggestions de saisie et la répartition du tableau de bord.
+  const postes = postesDuSecteur(secteurActif);
   const [type, setType] = useState("vente");
   const [designation, setDesignation] = useState("");
   const [quantite, setQuantite] = useState("1");
   const [prixUnitaire, setPrixUnitaire] = useState("");
   const [categorie, setCategorie] = useState(categories[0].id);
+  const [posteId, setPosteId] = useState("");
   const [date, setDate] = useState(todayISO());
   const [confirme, setConfirme] = useState(false);
   const [erreurLocale, setErreurLocale] = useState("");
@@ -1459,10 +1651,14 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
     setErreurLocale("");
     setEnCours(true);
     const infosRecu = { type, designation: designation.trim(), quantite, prixUnitaire, total: totalCalcule, date };
+    // Une dépense rattachée à un poste connu garde son poste : la répartition
+    // du tableau de bord est alors exacte, même après rechargement.
+    const posteDetecte = type === "depense" ? posteId || posteDeDesignation(secteurActif, designation)?.id || null : null;
     const succes = await onAdd({
       type,
       montant: totalCalcule,
-      categorie: type === "depense" ? categorie : "vente",
+      categorie: type === "depense" ? (postes.find((p) => p.id === posteDetecte)?.categorie || categorie) : "vente",
+      poste_id: posteDetecte,
       note: [designation.trim(), `Qté: ${quantite || 0}`, `PU: ${fmt(parseFloat(prixUnitaire) || 0)} FCFA`].filter(Boolean).join(" — "),
       date,
       designation: designation.trim(),
@@ -1472,6 +1668,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
     if (succes) {
       if (type === "vente") setDernierRecu(infosRecu);
       setDesignation("");
+      setPosteId("");
       setQuantite("1");
       setPrixUnitaire("");
       setConfirme(true);
@@ -1501,7 +1698,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-saisie" style={styles.page}>
       {dernierRecu && (
         <div style={styles.recuBox}>
           <div style={styles.recuBoxText}>{t("saisie_recu_question")}</div>
@@ -1548,12 +1745,58 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
             </span>
             <input
               type="text"
+              list={type === "depense" ? "comptaci-postes" : undefined}
               placeholder={type === "vente" ? t("saisie_designation_placeholder_vente") : t("saisie_designation_placeholder_depense")}
               value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
+              onChange={(e) => {
+                setDesignation(e.target.value);
+                // Saisie libre : on retrouve le poste correspondant pour
+                // classer la dépense automatiquement.
+                const trouve = posteDeDesignation(secteurActif, e.target.value);
+                if (trouve) {
+                  setPosteId(trouve.id);
+                  setCategorie(trouve.categorie);
+                } else {
+                  setPosteId("");
+                }
+              }}
               style={styles.input}
             />
+            {type === "depense" && (
+              <datalist id="comptaci-postes">
+                {postes.map((p) => (
+                  <option key={p.id} value={p.label} />
+                ))}
+              </datalist>
+            )}
           </label>
+
+          {type === "depense" && (
+            <div style={styles.field}>
+              <span style={styles.fieldLabel}>
+                {t("saisie_poste_rapide")} — {t(`secteur_${secteurActif}`)}
+              </span>
+              <div style={styles.postesRapides}>
+                {postes.slice(0, 8).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setDesignation(p.label);
+                      setPosteId(p.id);
+                      setCategorie(p.categorie);
+                    }}
+                    style={{
+                      ...styles.posteRapideBtn,
+                      ...(posteId === p.id ? styles.posteRapideBtnActif : {}),
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {type === "depense" && (
             <label style={styles.field}>
@@ -1616,7 +1859,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
   );
 }
 
-function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer, t }) {
+export function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer, t }) {
   const [fondOuverture, setFondOuverture] = useState("");
   const [fondCompte, setFondCompte] = useState("");
   const [modeFermeture, setModeFermeture] = useState(false);
@@ -1650,8 +1893,8 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-caisse" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("caisse_titre")}</div>
@@ -1753,11 +1996,11 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
               </div>
               <div style={styles.caisseSummaryRow}>
                 <span>{t("caisse_ventes_depuis")}</span>
-                <strong style={{ color: "#186B4E" }}>{fmt(ventesSession)} FCFA</strong>
+                <strong style={{ color: "var(--cc-vert)" }}>{fmt(ventesSession)} FCFA</strong>
               </div>
               <div style={styles.caisseSummaryRow}>
                 <span>{t("caisse_depenses_depuis")}</span>
-                <strong style={{ color: "#B4432A" }}>{fmt(depensesSession)} FCFA</strong>
+                <strong style={{ color: "var(--cc-rouge)" }}>{fmt(depensesSession)} FCFA</strong>
               </div>
               <div style={{ ...styles.caisseSummaryRow, ...styles.caisseSummaryTotal }}>
                 <span>{t("caisse_solde_attendu")}</span>
@@ -1808,7 +2051,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
       </div>
 
       {historiqueCaisse.length > 0 && (
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("caisse_historique_titre")}</div>
@@ -1824,7 +2067,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
                   </div>
                   <div style={styles.txNote}>{t("caisse_fond_depart")} : {fmt(s.fond_ouverture)} FCFA · {t("caisse_compte")} : {fmt(s.fond_fermeture_reel)} FCFA</div>
                 </div>
-                <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "#186B4E" : Math.abs(s.ecart) > 0 ? "#B4432A" : "#16213E" }}>
+                <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "var(--cc-vert)" : Math.abs(s.ecart) > 0 ? "var(--cc-rouge)" : "var(--cc-accent)" }}>
                   {s.ecart >= 0 ? "+" : ""}{fmt(s.ecart)}
                 </div>
               </div>
@@ -1836,8 +2079,34 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   );
 }
 
-function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
+export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeuil, onImporterPostes, t }) {
   const [designation, setDesignation] = useState("");
+  const [importEnCours, setImportEnCours] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+
+  const secteurActif = secteurNormalise(secteur);
+  const postes = postesDuSecteur(secteurActif);
+  const existants = new Set(
+    produits.map((p) => String(p.designation || "").trim().toLowerCase())
+  );
+  const postesManquants = postes.filter((p) => !existants.has(p.label.toLowerCase())).length;
+
+  const importerPostes = async () => {
+    if (!onImporterPostes) return;
+    setImportEnCours(true);
+    setImportMsg(null);
+    const res = await onImporterPostes();
+    setImportEnCours(false);
+    setImportMsg({
+      type: res?.ok ? "ok" : "ko",
+      texte:
+        res?.ok && res.ajoutes > 0
+          ? t("stock_import_ok", { nb: res.ajoutes })
+          : res?.ok
+          ? t("stock_import_rien")
+          : t("stock_import_ko"),
+    });
+  };
   const [quantite, setQuantite] = useState("");
   const [prixUnitaire, setPrixUnitaire] = useState("");
   const [seuilAlerte, setSeuilAlerte] = useState("5");
@@ -1870,7 +2139,7 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
   const produitsEnAlerte = produits.filter((p) => (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5));
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-stock" style={styles.page}>
       <div className="kpi-row">
         <KpiCard
           label={t("stock_valeur_totale")}
@@ -1915,7 +2184,7 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
           {produitsEnAlerte.map((p) => p.designation).join(", ")}
         </div>
       )}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("stock_titre")}</div>
@@ -1923,10 +2192,35 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
               {produits.length} — {t("stock_sous")}
             </div>
           </div>
-          <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
-            {ouvert ? t("stock_annuler") : t("stock_ajouter")}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
+              {ouvert ? t("stock_annuler") : t("stock_ajouter")}
+            </button>
+          </div>
+        </div>
+
+        {/* Import en un clic des postes de dépense de l'activité */}
+        <div style={styles.importPostes}>
+          <div style={{ flex: "1 1 260px" }}>
+            <div style={styles.importTitre}>{t("stock_import_titre")}</div>
+            <div style={styles.importSous}>
+              {t("stock_import_sous", { nb: postesManquants, secteur: t(`secteur_${secteurActif}`) })}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={importerPostes}
+            disabled={importEnCours || postesManquants === 0}
+            style={styles.importBtn}
+          >
+            {importEnCours ? t("stock_import_encours") : t("stock_import_btn")}
           </button>
         </div>
+        {importMsg && (
+          <div style={{ ...styles.importMsg, ...(importMsg.type === "ko" ? styles.erreurLocale : {}) }}>
+            {importMsg.texte}
+          </div>
+        )}
 
         {ouvert && (
           <div style={styles.stockForm}>
@@ -2127,13 +2421,76 @@ function ComparatifForfaits({ t }) {
   );
 }
 
-export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, t }) {
+export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, onChangerSecteur, t }) {
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
 
+  const secteurActif = secteurNormalise(etablissement?.secteur);
+  const [secteurChoisi, setSecteurChoisi] = useState(secteurActif);
+  const [secteurMsg, setSecteurMsg] = useState(null);
+  const [secteurEnCours, setSecteurEnCours] = useState(false);
+
+  useEffect(() => {
+    setSecteurChoisi(secteurNormalise(etablissement?.secteur));
+  }, [etablissement?.secteur]);
+
+  const enregistrerSecteur = async () => {
+    setSecteurMsg(null);
+    if (!onChangerSecteur) return;
+    setSecteurEnCours(true);
+    const ok = await onChangerSecteur(secteurChoisi);
+    setSecteurEnCours(false);
+    setSecteurMsg({
+      type: ok ? "ok" : "ko",
+      texte: ok ? t("etab_secteur_ok") : t("etab_secteur_ko"),
+    });
+  };
+
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-abonnement" style={styles.page}>
+      {/* Type d'établissement : conditionne les dépenses affichées.
+          Les comptes créés avant le découpage restaurant/bar/maquis/hôtel
+          peuvent ici choisir leur vrai métier. */}
+      <div style={styles.card} className="cc-card">
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("etab_type_titre")}</div>
+            <div style={styles.cardCaption}>{t("etab_type_sous")}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ ...styles.field, flex: "1 1 240px", margin: 0 }}>
+            <span style={styles.fieldLabel}>{t("auth_secteur")}</span>
+            <select
+              value={secteurChoisi}
+              onChange={(e) => setSecteurChoisi(e.target.value)}
+              style={{ ...styles.select, cursor: "pointer" }}
+            >
+              {SECTEURS_IDS.map((id) => (
+                <option key={id} value={id}>{t(`secteur_${id}`)}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={enregistrerSecteur}
+            disabled={secteurEnCours || secteurChoisi === secteurActif}
+            style={styles.submitBtn}
+          >
+            {secteurEnCours ? t("etab_secteur_enregistrement") : t("etab_secteur_enregistrer")}
+          </button>
+        </div>
+        <p style={styles.postesNote}>
+          {t("etab_type_note", { nb: postesDuSecteur(secteurChoisi).length, secteur: t(`secteur_${secteurChoisi}`) })}
+        </p>
+        {secteurMsg && (
+          <div style={{ ...styles.confirmMsg, ...(secteurMsg.type === "ko" ? styles.erreurLocale : {}) }}>
+            {secteurMsg.texte}
+          </div>
+        )}
+      </div>
+
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("nav_abonnement")}</div>
@@ -2149,7 +2506,7 @@ export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCo
 
         <p style={styles.aboIntro}>{t("abo_notice")}</p>
 
-        <PaiementWave
+        <PaiementSasPay
           etablissement={etablissement}
           t={t}
           planInitial={planEffectif || "starter"}
@@ -2239,7 +2596,7 @@ function RecuperationMotDePasse({ t, onTermine }) {
       <div style={styles.recupCard}>
         <div style={styles.recupBrand}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M2 14L7 6L12 11L18 3" stroke="#D4A24C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span style={styles.brandName}>ComptaCi</span>
         </div>
@@ -2302,8 +2659,8 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   const telephoneNettoye = (tel) => tel.replace(/\s|\+/g, "");
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-fournisseurs" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("four_titre")}</div>
@@ -2380,8 +2737,10 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   );
 }
 
-function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
-  const categories = categoriesDuSecteur(secteur);
+export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
+  const secteurActif = secteurNormalise(secteur);
+  const categories = categoriesDuSecteur(secteurActif);
+  const postes = postesDuSecteur(secteurActif);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const transactionsVisibles = limite30j
@@ -2414,8 +2773,8 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   }, [transactionsVisibles]);
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-historique" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("hist_titre")}</div>
@@ -2467,16 +2826,21 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
                       </div>
                     ) : (
                       <div key={tx.id} style={styles.txRow}>
-                        <div style={{ ...styles.txDot, background: tx.type === "vente" ? "#186B4E" : "#B4432A" }} />
+                        <div style={{ ...styles.txDot, background: tx.type === "vente" ? "var(--cc-vert)" : "var(--cc-rouge)" }} />
                         <div style={styles.txInfo}>
                           <div style={styles.txLabel}>
-                            {tx.type === "vente" ? t("hist_vente") : categories.find((c) => c.id === tx.categorie)?.label || t("hist_depense")}
+                            {tx.type === "vente"
+                              ? t("hist_vente")
+                              : postes.find((p) => p.id === tx.poste_id)?.label ||
+                                posteDeDesignation(secteurActif, designationTransaction(tx))?.label ||
+                                categories.find((c) => c.id === tx.categorie)?.label ||
+                                t("hist_depense")}
                           </div>
                           {tx.note && <div style={styles.txNote}>{tx.note}</div>}
                         </div>
                         <button
                           onClick={() => commencerEdition(tx)}
-                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: tx.type === "vente" ? "#186B4E" : "#B4432A" }}
+                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: tx.type === "vente" ? "var(--cc-vert)" : "var(--cc-rouge)" }}
                         >
                           {tx.type === "vente" ? "+" : "-"}{fmt(tx.montant)}
                         </button>
@@ -2527,7 +2891,7 @@ function computeStats(transactions) {
   duMois
     .filter((t) => t.type === "depense")
     .forEach((t) => {
-      const poste = POSTES_PAR_CATEGORIE[t.categorie] || "autre";
+      const poste = natureCategorie(t.categorie);
       postes[poste] += Number(t.montant) || 0;
     });
 
@@ -2606,9 +2970,51 @@ function buildCategorieBreakdown(transactions, secteur) {
   })).sort((a, b) => b.value - a.value);
 }
 
-const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
+/**
+ * Répartition des dépenses par POSTE RÉEL de l'activité (les 20+ dépenses
+ * types du métier : « biscuits », « eau de javel », « faux ongles »…).
+ *
+ * Une dépense est rattachée à son poste :
+ *   1. par l'identifiant de poste enregistré (`poste_id`) si la colonne existe,
+ *   2. sinon par analyse de la désignation saisie (libellé ou mot-clé).
+ *
+ * Les dépenses non rattachées tombent dans « Autre / non classé ».
+ */
+function buildPosteBreakdown(transactions, secteur) {
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const postes = postesDuSecteur(secteur);
+  const totaux = new Map(postes.map((p) => [p.id, 0]));
+  let nonClasse = 0;
 
+  (transactions || [])
+    .filter((t) => monthKey(t.date) === curKey && t.type === "depense")
+    .forEach((t) => {
+      const valeur = Number(t.montant) || 0;
+      const idStocke = t.poste_id && totaux.has(t.poste_id) ? t.poste_id : null;
+      const trouve = idStocke || posteDeDesignation(secteur, designationTransaction(t))?.id;
+      if (trouve) totaux.set(trouve, (totaux.get(trouve) || 0) + valeur);
+      else nonClasse += valeur;
+    });
+
+  const lignes = postes
+    .map((p) => ({
+      id: p.id,
+      label: p.label,
+      categorie: p.categorie,
+      value: totaux.get(p.id) || 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  if (nonClasse > 0) {
+    lignes.push({ id: "__non_classe", label: "Autre / non classé", categorie: "autre", value: nonClasse });
+  }
+  return lignes;
+}
+
+/* Règles globales injectées avec l'app. Les polices et le thème complet
+   (couleurs, états, animations) vivent dans `ui.css`, importé par `main.jsx`. */
+const GLOBAL_CSS = `
 * { box-sizing: border-box; }
 
 .kpi-row {
@@ -2651,14 +3057,14 @@ const styles = {
   app: {
     display: "flex",
     minHeight: "100vh",
-    background: "#FBF7F0",
+    background: "var(--cc-bg)",
     fontFamily: "'Inter', sans-serif",
-    color: "#16213E",
+    color: "var(--cc-texte)",
   },
   sidebar: {
     width: 220,
-    background: "#16213E",
-    color: "#FBF7F0",
+    background: "var(--cc-sidebar)",
+    color: "var(--cc-texte)",
     display: "flex",
     flexDirection: "column",
     padding: "24px 16px",
@@ -2670,100 +3076,100 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" },
-  brandSub: { fontSize: 10.5, color: "#9AA4C4", marginTop: 1 },
+  brandSub: { fontSize: 10.5, color: "var(--cc-texte-discret)", marginTop: 1 },
   nav: { display: "flex", flexDirection: "column", gap: 2 },
   navItem: {
     display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8,
-    background: "transparent", border: "none", color: "#B7BFDA", fontSize: 13.5, fontWeight: 500,
+    background: "transparent", border: "none", color: "var(--cc-texte-discret)", fontSize: 13.5, fontWeight: 500,
     cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif",
   },
-  navItemActive: { background: "rgba(232,182,90,0.14)", color: "#F3D9A0" },
+  navItemActive: { background: "rgba(232,182,90,0.14)", color: "var(--cc-or-clair)" },
   sidebarMobile: {
-    width: "100%", background: "#16213E", color: "#FBF7F0",
+    width: "100%", background: "var(--cc-sidebar)", color: "var(--cc-texte)",
     padding: "14px 16px", flexShrink: 0,
   },
   brandRowMobile: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   logoutBtnMobile: {
     display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#F3D9A0", fontSize: 12,
+    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "var(--cc-or-clair)", fontSize: 12,
     fontWeight: 600, cursor: "pointer", padding: "7px 10px", fontFamily: "'Inter', sans-serif",
   },
   navMobile: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" },
   navItemMobile: {
     display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8,
-    background: "transparent", border: "none", color: "#B7BFDA", fontSize: 12.5, fontWeight: 500,
+    background: "transparent", border: "none", color: "var(--cc-texte-discret)", fontSize: 12.5, fontWeight: 500,
     cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif", flexShrink: 0,
   },
   sidebarFooter: { marginTop: "auto", paddingTop: 20 },
   sidebarFooterPattern: {
-    height: 2, background: "linear-gradient(90deg, #E8B65A 0%, transparent 100%)", marginBottom: 12, opacity: 0.5,
+    height: 2, background: "linear-gradient(90deg, var(--cc-or) 0%, transparent 100%)", marginBottom: 12, opacity: 0.5,
   },
-  sidebarFooterText: { fontSize: 11, color: "#7C87AC", lineHeight: 1.5 },
+  sidebarFooterText: { fontSize: 11, color: "var(--cc-texte-discret)", lineHeight: 1.5 },
   logoutBtn: {
     display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
-    color: "#9AA4C4", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
+    color: "var(--cc-texte-discret)", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
   },
   main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%", ...wallpaperStyle },
   topbar: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6,
-    padding: "14px 20px", borderBottom: "1px solid #EDE7DA", background: "#FFFEFB",
+    padding: "14px 20px", borderBottom: "1px solid var(--cc-bord)", background: "rgba(17,25,41,0.78)",
   },
   topbarLeft: { display: "flex", alignItems: "center", gap: 8 },
   topbarNameBtn: {
     display: "flex", alignItems: "center", gap: 4, background: "none", border: "none",
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "#16213E", cursor: "pointer", padding: 0,
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "var(--cc-texte)", cursor: "pointer", padding: 0,
   },
   topbarInput: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "#16213E",
-    border: "none", borderBottom: "1px solid #D4A24C", outline: "none", background: "transparent",
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "var(--cc-texte)",
+    border: "none", borderBottom: "1px solid var(--cc-or)", outline: "none", background: "transparent",
   },
-  topbarDate: { fontSize: 12.5, color: "#8A8578", textTransform: "capitalize" },
+  topbarDate: { fontSize: 12.5, color: "var(--cc-texte-doux)", textTransform: "capitalize" },
   inviteBtn: {
-    padding: "7px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 12, fontWeight: 600, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    padding: "7px 12px", borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    fontSize: 12, fontWeight: 600, color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  upgradeHint: { fontSize: 11.5, color: "#B4801F", background: "#FBF3E2", padding: "6px 10px", borderRadius: 8 },
+  upgradeHint: { fontSize: 11.5, color: "var(--cc-or)", background: "var(--cc-surface-3)", padding: "6px 10px", borderRadius: 8 },
   etabPopover: {
-    position: "absolute", top: "calc(100% + 8px)", left: 0, background: "#FFFEFB",
-    border: "1px solid #EDE7DA", borderRadius: 12, padding: 8, width: 260,
-    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 20,
+    position: "absolute", top: "calc(100% + 8px)", left: 0, background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, padding: 8, width: 260,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.45)", zIndex: 20,
   },
   etabPopoverItem: {
     display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
     padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
-    fontSize: 13, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+    fontSize: 13, color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
   },
-  etabPopoverItemActive: { background: "#FBF3E2", fontWeight: 600 },
-  etabPopoverRole: { fontSize: 10.5, color: "#8A8578" },
-  etabPopoverDivider: { height: 1, background: "#EDE7DA", margin: "6px 4px" },
+  etabPopoverItemActive: { background: "var(--cc-surface-3)", fontWeight: 600 },
+  etabPopoverRole: { fontSize: 10.5, color: "var(--cc-texte-doux)" },
+  etabPopoverDivider: { height: 1, background: "var(--cc-bord)", margin: "6px 4px" },
   etabPopoverAdd: {
     width: "100%", padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
-    fontSize: 13, color: "#B4801F", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+    fontSize: 13, color: "var(--cc-or)", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
   },
   etabPopoverInput: {
-    padding: "8px 10px", borderRadius: 8, border: "1px solid #E4DDD0", fontSize: 12.5,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+    padding: "8px 10px", borderRadius: 8, border: "1px solid var(--cc-bord)", fontSize: 12.5,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none",
   },
   invitePopover: {
-    position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#FFFEFB",
-    border: "1px solid #EDE7DA", borderRadius: 12, padding: 16, width: 260,
-    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 10,
+    position: "absolute", top: "calc(100% + 8px)", right: 0, background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, padding: 16, width: 260,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.45)", zIndex: 10,
   },
-  invitePopoverLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", marginBottom: 8 },
+  invitePopoverLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)", marginBottom: 8 },
   inviteCode: {
-    fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: "#16213E",
-    letterSpacing: "0.08em", textAlign: "center", background: "#FBF3E2", borderRadius: 8, padding: "10px 0", marginBottom: 10,
+    fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: "var(--cc-texte)",
+    letterSpacing: "0.08em", textAlign: "center", background: "var(--cc-surface-3)", borderRadius: 8, padding: "10px 0", marginBottom: 10,
   },
-  invitePopoverText: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginBottom: 10 },
+  invitePopoverText: { fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.5, marginBottom: 10 },
   inviteCopyBtn: {
-    width: "100%", padding: "8px 0", borderRadius: 8, border: "none", background: "#16213E",
-    color: "#F3D9A0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    width: "100%", padding: "8px 0", borderRadius: 8, border: "none", background: "var(--cc-accent)",
+    color: "var(--cc-or-clair)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBEBE4", color: "#8A3420", borderRadius: 8, fontSize: 13 },
-  essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBF3E2", color: "#8A6420", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
-  essaiBannerUrgent: { background: "#FBEBE4", color: "#B4432A", fontWeight: 700 },
+  errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", borderRadius: 8, fontSize: 13 },
+  essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "var(--cc-surface-3)", color: "var(--cc-or-clair)", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
+  essaiBannerUrgent: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", fontWeight: 700 },
   fondateurTag: {
-    display: "inline-block", background: "#16213E", color: "#F3D9A0", fontSize: 10.5, fontWeight: 700,
+    display: "inline-block", background: "var(--cc-accent)", color: "var(--cc-or-clair)", fontSize: 10.5, fontWeight: 700,
     padding: "2px 8px", borderRadius: 20, marginRight: 8, letterSpacing: "0.02em",
   },
   pageBanner: {
@@ -2773,79 +3179,80 @@ const styles = {
   pageBannerImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
   pageBannerOverlay: {
     position: "absolute", inset: 0,
-    background: "linear-gradient(90deg, rgba(22,33,62,0.72) 0%, rgba(22,33,62,0.28) 55%, rgba(22,33,62,0.05) 100%)",
+    background: "var(--cc-voile-banniere)",
   },
   pageBannerLabel: {
-    position: "absolute", left: 20, bottom: 14, color: "#FBF7F0",
-    fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, letterSpacing: "-0.01em",
+    position: "absolute", left: 20, bottom: 14, color: "var(--cc-or-pale)",
+    textShadow: "0 2px 14px rgba(0,0,0,0.85)",
+    fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, letterSpacing: "-0.01em",
   },
-  loading: { padding: 40, color: "#8A8578", fontSize: 14 },
-  appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "#B5AF9E" },
+  loading: { padding: 40, color: "var(--cc-texte-doux)", fontSize: 14 },
+  appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "var(--cc-texte-discret)" },
   configError: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", padding: 20,
+    background: "var(--cc-bg)", padding: 20,
   },
   configErrorCard: {
-    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 26, maxWidth: 440,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-rouge-bord)", borderRadius: 14, padding: 26, maxWidth: 440,
   },
-  configErrorTitle: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
-  configErrorText: { fontSize: 13.5, color: "#5C5748", lineHeight: 1.6 },
+  configErrorTitle: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "var(--cc-rouge)", marginBottom: 10 },
+  configErrorText: { fontSize: 13.5, color: "var(--cc-texte-corps)", lineHeight: 1.6 },
   page: { padding: "20px 20px 40px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 },
   kpiRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 },
   kpiCard: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: "18px 18px 16px",
+    background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: "18px 18px 16px",
     display: "flex", flexDirection: "column", gap: 10,
   },
-  kpiCardHero: { borderColor: "#E8D9B5", boxShadow: "0 2px 14px rgba(212,162,76,0.10)" },
+  kpiCardHero: { borderColor: "var(--cc-or-bord)", boxShadow: "0 2px 14px rgba(232,182,90,0.22)" },
   kpiTop: { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  kpiLabel: { fontSize: 12, color: "#8A8578", fontWeight: 500 },
+  kpiLabel: { fontSize: 12, color: "var(--cc-texte-doux)", fontWeight: 500 },
   kpiIcon: { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" },
   kpiValue: { fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, letterSpacing: "-0.01em" },
-  kpiUnit: { fontSize: 13, fontWeight: 400, color: "#8A8578" },
-  kpiSub: { fontSize: 11.5, color: "#8A8578" },
+  kpiUnit: { fontSize: 13, fontWeight: 400, color: "var(--cc-texte-doux)" },
+  kpiSub: { fontSize: 11.5, color: "var(--cc-texte-doux)" },
   gridTwo: { display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14 },
-  card: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: 20 },
+  card: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: 20 },
   cardHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#16213E" },
-  cardCaption: { fontSize: 12, color: "#8A8578", marginTop: 2 },
-  emptyState: { padding: "36px 20px", textAlign: "center", border: "1px dashed #E4DDD0", borderRadius: 12 },
+  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "var(--cc-texte)" },
+  cardCaption: { fontSize: 12, color: "var(--cc-texte-doux)", marginTop: 2 },
+  emptyState: { padding: "36px 20px", textAlign: "center", border: "1px dashed var(--cc-bord)", borderRadius: 12 },
   emptyTitle: { fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, marginBottom: 4 },
-  emptyText: { fontSize: 12.5, color: "#8A8578" },
+  emptyText: { fontSize: 12.5, color: "var(--cc-texte-doux)" },
   upgradeNotice: {
-    fontSize: 12, color: "#B4801F", background: "#FBF3E2", padding: "10px 12px",
+    fontSize: 12, color: "var(--cc-or)", background: "var(--cc-surface-3)", padding: "10px 12px",
     borderRadius: 9, marginBottom: 16,
   },
   stockForm: {
     display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18,
-    padding: 14, background: "#FBF9F4", borderRadius: 10,
+    padding: 14, background: "var(--cc-surface-2)", borderRadius: 10,
   },
   stockRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9,
-    background: "#FBF9F4", flexWrap: "wrap",
+    background: "var(--cc-surface-2)", flexWrap: "wrap",
   },
-  stockLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
-  stockSub: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
+  stockLabel: { fontSize: 13.5, fontWeight: 500, color: "var(--cc-texte)" },
+  stockSub: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 1 },
   stockAdjustBtn: {
-    width: 26, height: 26, borderRadius: 7, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#16213E",
+    width: 26, height: 26, borderRadius: 7, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--cc-texte)",
   },
   fourActionBtn: {
-    width: 30, height: 30, borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#186B4E",
+    width: 30, height: 30, borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--cc-vert)",
     textDecoration: "none", flexShrink: 0,
   },
   aboIntro: {
-    fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
+    fontSize: 13, color: "var(--cc-texte-corps)", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
   },
   comparatifCard: {
     marginTop: 18,
-    border: "1px solid #EDE7DA",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 14,
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
     padding: "14px 14px 8px",
   },
   comparatifTitre: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", marginBottom: 10,
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "var(--cc-texte)", marginBottom: 10,
   },
   comparatifTable: { display: "flex", flexDirection: "column" },
   comparatifRow: {
@@ -2854,9 +3261,9 @@ const styles = {
     gap: 6,
     alignItems: "center",
     padding: "8px 4px",
-    borderTop: "1px solid #F1ECE2",
+    borderTop: "1px solid var(--cc-surface-2)",
     fontSize: 12,
-    color: "#5C5748",
+    color: "var(--cc-texte-corps)",
   },
   comparatifHead: {
     display: "grid",
@@ -2866,232 +3273,376 @@ const styles = {
     padding: "4px 4px 8px",
     borderTop: "none",
   },
-  comparatifLabel: { fontSize: 11.5, lineHeight: 1.35, color: "#5C5748" },
-  comparatifLabelHead: { fontSize: 10.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  comparatifLabel: { fontSize: 11.5, lineHeight: 1.35, color: "var(--cc-texte-corps)" },
+  comparatifLabelHead: { fontSize: 10.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   comparatifColHead: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, textAlign: "center" },
-  comparatifColNom: { fontFamily: "'Fraunces', serif", fontSize: 12.5, fontWeight: 600, color: "#16213E" },
-  comparatifColPrix: { fontSize: 10.5, fontWeight: 700, color: "#B4801F" },
+  comparatifColNom: { fontFamily: "'Fraunces', serif", fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)" },
+  comparatifColPrix: { fontSize: 10.5, fontWeight: 700, color: "var(--cc-or)" },
   comparatifCell: { display: "flex", alignItems: "center", justifyContent: "center" },
   comparatifCheck: { fontSize: 11, lineHeight: 1 },
   stockQty: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "var(--cc-texte)", minWidth: 40, textAlign: "center",
   },
-  stockQtyLow: { color: "#B4432A" },
+  stockQtyLow: { color: "var(--cc-rouge)" },
   stockValeur: { minWidth: 96, textAlign: "right", flexShrink: 0 },
   stockValeurMontant: {
-    fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "#16213E", whiteSpace: "nowrap",
+    fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "var(--cc-texte)", whiteSpace: "nowrap",
   },
-  stockValeurDetail: { fontSize: 11, color: "#8A8578", marginTop: 1, whiteSpace: "nowrap" },
+  stockValeurDetail: { fontSize: 11, color: "var(--cc-texte-doux)", marginTop: 1, whiteSpace: "nowrap" },
   stockSeuilField: {
     display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0,
   },
   stockSeuilLabel: {
-    fontSize: 9, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", letterSpacing: "0.04em",
+    fontSize: 9, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase", letterSpacing: "0.04em",
   },
   stockSeuilInput: {
-    width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid #E4DDD0",
-    fontSize: 12, fontFamily: "'Inter', sans-serif", color: "#5C5748", outline: "none", textAlign: "center",
+    width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid var(--cc-bord)",
+    fontSize: 12, fontFamily: "'Inter', sans-serif", color: "var(--cc-texte-corps)", outline: "none", textAlign: "center",
   },
   stockApercu: {
-    flex: "1 1 100%", background: "#FBF3E2", borderRadius: 9, padding: "10px 14px",
+    flex: "1 1 100%", background: "var(--cc-surface-3)", borderRadius: 9, padding: "10px 14px",
     display: "flex", flexDirection: "column", gap: 2,
   },
-  stockApercuTitre: { fontSize: 11.5, fontWeight: 600, color: "#8A6420", textTransform: "uppercase" },
-  stockApercuValeur: { fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: "#16213E" },
-  stockApercuDetail: { fontSize: 11.5, color: "#8A6420" },
+  stockApercuTitre: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-or-clair)", textTransform: "uppercase" },
+  stockApercuValeur: { fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: "var(--cc-texte)" },
+  stockApercuDetail: { fontSize: 11.5, color: "var(--cc-or-clair)" },
 
   // Guide pédagogique de la caisse
   caisseConsigne: {
-    fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E", lineHeight: 1.35,
+    fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--cc-texte)", lineHeight: 1.35,
   },
   guideCard: {
-    border: "1px solid #EDE7DA", borderRadius: 12, background: "#FBF9F4", marginBottom: 18, overflow: "hidden",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, background: "var(--cc-surface-2)", marginBottom: 18, overflow: "hidden",
   },
   guideToggle: {
     display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 14px",
     background: "transparent", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif",
-    fontSize: 13.5, fontWeight: 600, color: "#16213E", textAlign: "left",
+    fontSize: 13.5, fontWeight: 600, color: "var(--cc-texte)", textAlign: "left",
   },
   guideBody: { padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 14 },
-  guideTexte: { fontSize: 13, lineHeight: 1.6, color: "#5C5748", margin: 0 },
-  guideFormule: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 10, padding: "12px 14px" },
-  guideFormuleTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", marginBottom: 6 },
+  guideTexte: { fontSize: 13, lineHeight: 1.6, color: "var(--cc-texte-corps)", margin: 0 },
+  guideFormule: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 10, padding: "12px 14px" },
+  guideFormuleTitre: { fontSize: 11.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase", marginBottom: 6 },
   guideFormuleLigne: {
-    fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "#16213E", lineHeight: 1.45,
+    fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "var(--cc-texte)", lineHeight: 1.45,
   },
-  guideFormuleNote: { fontSize: 11.5, color: "#8A8578", marginTop: 6, lineHeight: 1.5 },
-  guideEtapesTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  guideFormuleNote: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 6, lineHeight: 1.5 },
+  guideEtapesTitre: { fontSize: 11.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   guideEtapes: {
     listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10,
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
   },
   guideEtape: { display: "flex", gap: 9, alignItems: "flex-start" },
   guideEtapeNumero: {
-    width: 21, height: 21, borderRadius: "50%", background: "#16213E", color: "#F3D9A0",
+    width: 21, height: 21, borderRadius: "50%", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  guideEtapeTitre: { fontSize: 12.5, fontWeight: 600, color: "#16213E" },
-  guideEtapeTexte: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginTop: 2 },
+  guideEtapeTitre: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)" },
+  guideEtapeTexte: { fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.5, marginTop: 2 },
   montantsRapides: { display: "flex", flexDirection: "column", gap: 7 },
-  montantsRapidesLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", textTransform: "uppercase" },
+  montantsRapidesLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   montantsRapidesRow: { display: "flex", flexWrap: "wrap", gap: 7 },
   montantRapideBtn: {
-    padding: "8px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    color: "#16213E", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    padding: "8px 12px", borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    color: "var(--cc-texte)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  montantRapideBtnActif: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
+  montantRapideBtnActif: { background: "var(--cc-accent)", borderColor: "var(--cc-or-bord)", color: "var(--cc-or-clair)" },
 
   // Analyse sectorielle du tableau de bord
   secteurBadge: {
     display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999,
-    background: "#EAECF3", color: "#16213E", fontSize: 12, fontWeight: 600,
+    background: "var(--cc-bord)", color: "var(--cc-texte)", fontSize: 12, fontWeight: 600,
   },
-  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#16213E" },
+  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "var(--cc-texte)" },
   repartitionHead: {
     display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6,
   },
-  repartitionLabel: { fontSize: 13, fontWeight: 500, color: "#16213E" },
-  repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "#5C5748", whiteSpace: "nowrap" },
-  repartitionDetail: { fontSize: 11.5, color: "#8A8578", marginTop: 5 },
+  repartitionLabel: { fontSize: 13, fontWeight: 500, color: "var(--cc-texte)" },
+  repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)", whiteSpace: "nowrap" },
+  repartitionDetail: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 5 },
+
+  /* --- Aperçu du score de crédit (haut du tableau de bord) --- */
+  scoreApercuCard: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    flexWrap: "wrap",
+    margin: "0 0 16px",
+    padding: "14px 18px",
+    border: "1.5px solid var(--cc-bord)",
+    borderRadius: 14,
+    background: "var(--cc-surface)",
+  },
+  scoreApercuGauche: { display: "flex", flexDirection: "column", gap: 3 },
+  scoreApercuTitre: {
+    fontFamily: "'Fraunces', serif",
+    fontSize: 15,
+    fontWeight: 600,
+    color: "var(--cc-texte)",
+  },
+  scoreApercuSous: { fontSize: 12, color: "var(--cc-texte-corps)" },
+  scoreApercuDroite: { display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" },
+  scoreApercuValeur: {
+    fontFamily: "'Fraunces', serif",
+    fontSize: 30,
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  scoreApercuSur100: { fontSize: 13, color: "var(--cc-texte-doux)", fontWeight: 600 },
+  scorePalierBadge: {
+    marginLeft: 6,
+    color: "var(--cc-surface)",
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 10px",
+    borderRadius: 20,
+  },
+
+  /* --- Dépenses réelles par poste d'activité --- */
+  basculeRepartition: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" },
+  basculeBtn: {
+    padding: "6px 11px",
+    borderRadius: 20,
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte-corps)",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  basculeBtnActif: {
+    background: "var(--cc-accent)",
+    borderColor: "var(--cc-or-bord)",
+    color: "var(--cc-or-clair)",
+  },
+  postesGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: 8,
+    marginTop: 12,
+  },
+  posteChip: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "8px 10px",
+    borderRadius: 9,
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+  },
+  posteChipActif: {
+    borderColor: "var(--cc-or)",
+    background: "var(--cc-surface-2)",
+  },
+  posteChipLabel: {
+    fontSize: 12,
+    color: "var(--cc-texte)",
+    lineHeight: 1.3,
+  },
+  posteChipMontant: {
+    fontSize: 11.5,
+    fontWeight: 600,
+    color: "var(--cc-texte-discret)",
+    whiteSpace: "nowrap",
+  },
+  posteChipMontantActif: { color: "var(--cc-texte)" },
+  importPostes: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    marginTop: 12,
+    padding: "12px 14px",
+    background: "var(--cc-surface-2)",
+    border: "1px dashed var(--cc-or)",
+    borderRadius: 12,
+  },
+  importTitre: { fontSize: 13, fontWeight: 700, color: "var(--cc-texte)" },
+  importSous: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 3, lineHeight: 1.45 },
+  importBtn: {
+    padding: "9px 14px",
+    borderRadius: 9,
+    border: "none",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+    whiteSpace: "nowrap",
+  },
+  importMsg: { marginTop: 8, fontSize: 12, color: "var(--cc-vert)", fontWeight: 600 },
+  postesRapides: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  posteRapideBtn: {
+    padding: "6px 10px",
+    borderRadius: 20,
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte-corps)",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  posteRapideBtnActif: {
+    borderColor: "var(--cc-or)",
+    background: "var(--cc-surface-3)",
+    color: "var(--cc-or-clair)",
+    fontWeight: 700,
+  },
+  postesNote: {
+    margin: "12px 0 0",
+    fontSize: 11.5,
+    color: "var(--cc-texte-doux)",
+    lineHeight: 1.5,
+  },
   barTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
   ratioBadge: {
     display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600,
-    background: "#F1ECE2", color: "#8A8578",
+    background: "var(--cc-surface-2)", color: "var(--cc-texte-doux)",
   },
-  ratioSain: { background: "#E4F2EC", color: "#186B4E" },
-  ratioSurveiller: { background: "#FBF3E2", color: "#B4801F" },
-  ratioAlerte: { background: "#FBEBE4", color: "#B4432A" },
+  ratioSain: { background: "var(--cc-vert-fond)", color: "var(--cc-vert)" },
+  ratioSurveiller: { background: "var(--cc-surface-3)", color: "var(--cc-or)" },
+  ratioAlerte: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)" },
   conseilsCard: {
-    background: "#FFFEFB", border: "1px solid #E8D9B5", borderRadius: 14, padding: 20,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-or-bord)", borderRadius: 14, padding: 20,
   },
   conseilsHeader: { display: "flex", gap: 11, alignItems: "flex-start", marginBottom: 14 },
   conseilsIcon: {
-    width: 28, height: 28, borderRadius: 8, background: "#FBF3E2", color: "#B4801F",
+    width: 28, height: 28, borderRadius: 8, background: "var(--cc-surface-3)", color: "var(--cc-or)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   conseilsMarge: {
     display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-    background: "#FBF3E2", borderRadius: 9, padding: "10px 14px", fontSize: 13, color: "#8A6420", fontWeight: 600,
+    background: "var(--cc-surface-3)", borderRadius: 9, padding: "10px 14px", fontSize: 13, color: "var(--cc-or-clair)", fontWeight: 600,
   },
   conseilsListe: {
     margin: "14px 0 0", padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: 9,
   },
-  conseilItem: { fontSize: 13, lineHeight: 1.6, color: "#5C5748" },
-  caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "#FBF9F4", borderRadius: 10, padding: 16, maxWidth: 360 },
-  caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "#5C5748" },
-  caisseSummaryTotal: { borderTop: "1px solid #EDE7DA", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "#16213E" },
+  conseilItem: { fontSize: 13, lineHeight: 1.6, color: "var(--cc-texte-corps)" },
+  caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "var(--cc-surface-2)", borderRadius: 10, padding: 16, maxWidth: 360 },
+  caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "var(--cc-texte-corps)" },
+  caisseSummaryTotal: { borderTop: "1px solid var(--cc-bord)", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "var(--cc-texte)" },
   ecartBox: { padding: "10px 14px", borderRadius: 9, fontSize: 13.5, fontWeight: 600, textAlign: "center" },
-  ecartOk: { background: "#E4F2EC", color: "#186B4E" },
-  ecartPositif: { background: "#FBF3E2", color: "#B4801F" },
-  ecartNegatif: { background: "#FBEBE4", color: "#B4432A" },
+  ecartOk: { background: "var(--cc-vert-fond)", color: "var(--cc-vert)" },
+  ecartPositif: { background: "var(--cc-surface-3)", color: "var(--cc-or)" },
+  ecartNegatif: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)" },
   recuBox: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
-    background: "#E4F2EC", border: "1px solid #B7DBCA", borderRadius: 10, padding: "12px 16px",
+    background: "var(--cc-vert-fond)", border: "1px solid var(--cc-vert-bord)", borderRadius: 10, padding: "12px 16px",
   },
-  recuBoxText: { fontSize: 13, fontWeight: 600, color: "#186B4E" },
+  recuBoxText: { fontSize: 13, fontWeight: 600, color: "var(--cc-vert)" },
   recuBtn: {
-    padding: "8px 14px", borderRadius: 8, border: "none", background: "#186B4E", color: "#FFFEFB",
+    padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--cc-vert)", color: "var(--cc-surface)",
     fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   recuBtnGhost: {
     display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8,
-    border: "1px solid #B7DBCA", background: "transparent", color: "#186B4E", fontSize: 12.5,
+    border: "1px solid var(--cc-vert-bord)", background: "transparent", color: "var(--cc-vert)", fontSize: 12.5,
     fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dashboardHeader: { display: "flex", justifyContent: "flex-end" },
   copyBtn: {
     display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9,
-    border: "1px solid #E4DDD0", background: "#FFFEFB", fontSize: 12.5, fontWeight: 600,
-    color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    border: "1px solid var(--cc-bord)", background: "var(--cc-surface)", fontSize: 12.5, fontWeight: 600,
+    color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   toggleRow: { display: "flex", gap: 8 },
   toggleBtn: {
-    flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 13.5, fontWeight: 600, color: "#8A8578", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    fontSize: 13.5, fontWeight: 600, color: "var(--cc-texte-doux)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  toggleBtnActiveVente: { background: "#E4F2EC", borderColor: "#B7DBCA", color: "#186B4E" },
-  toggleBtnActiveDepense: { background: "#FBEBE4", borderColor: "#EABBA9", color: "#B4432A" },
+  toggleBtnActiveVente: { background: "var(--cc-vert-fond)", borderColor: "var(--cc-vert-bord)", color: "var(--cc-vert)" },
+  toggleBtnActiveDepense: { background: "var(--cc-rouge-fond)", borderColor: "var(--cc-rouge-bord)", color: "var(--cc-rouge)" },
   field: { display: "flex", flexDirection: "column", gap: 6 },
-  fieldLabel: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
+  fieldLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)" },
   input: {
-    padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+    padding: "10px 12px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 14,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none",
   },
   inputBig: {
-    padding: "12px 14px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 22,
-    fontFamily: "'Fraunces', serif", fontWeight: 600, color: "#16213E", outline: "none",
+    padding: "12px 14px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 22,
+    fontFamily: "'Fraunces', serif", fontWeight: 600, color: "var(--cc-texte)", outline: "none",
   },
   select: {
-    padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none", background: "#FFFEFB",
+    padding: "10px 12px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 14,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none", background: "var(--cc-surface)",
   },
   submitBtn: {
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-    padding: "12px 0", borderRadius: 9, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "12px 0", borderRadius: 10, border: "none", background: "var(--cc-degrade-or)", color: "var(--cc-texte-inverse)",
     fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    boxShadow: "var(--cc-ombre-or)",
   },
-  confirmMsg: { fontSize: 12.5, color: "#186B4E", textAlign: "center" },
-  erreurLocale: { fontSize: 12.5, color: "#B4432A", textAlign: "center", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
+  confirmMsg: { fontSize: 12.5, color: "var(--cc-vert)", textAlign: "center" },
+  erreurLocale: { fontSize: 12.5, color: "var(--cc-rouge)", textAlign: "center", background: "var(--cc-rouge-fond)", padding: "8px 10px", borderRadius: 8 },
   qtyRow: { display: "flex", gap: 12 },
   totalBox: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FBF3E2",
+    display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--cc-surface-3)",
     borderRadius: 9, padding: "12px 14px",
   },
-  totalLabel: { fontSize: 12.5, fontWeight: 600, color: "#8A6420" },
-  totalValue: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },
-  dateHeader: { fontSize: 12.5, fontWeight: 600, color: "#8A8578", textTransform: "capitalize", marginBottom: 8 },
+  totalLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-or-clair)" },
+  totalValue: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "var(--cc-texte)" },
+  dateHeader: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-doux)", textTransform: "capitalize", marginBottom: 8 },
   txRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9,
-    background: "#FBF9F4",
+    background: "var(--cc-surface-2)",
   },
   txDot: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0 },
   txInfo: { flex: 1, minWidth: 0 },
-  txLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
-  txNote: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
+  txLabel: { fontSize: 13.5, fontWeight: 500, color: "var(--cc-texte)" },
+  txNote: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 1 },
   txAmount: { fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600 },
   txAmountBtn: { background: "none", border: "none", cursor: "pointer", fontFamily: "'Fraunces', serif" },
-  txDelete: { background: "none", border: "none", color: "#B5AF9E", cursor: "pointer", padding: 4 },
+  txDelete: { background: "none", border: "none", color: "var(--cc-texte-discret)", cursor: "pointer", padding: 4 },
   txRowEdit: {
-    display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: "#FBF3E2",
+    display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: "var(--cc-surface-3)",
   },
   txEditInput: {
-    padding: "6px 8px", borderRadius: 7, border: "1px solid #E4DDD0", fontSize: 13,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none", width: 100,
+    padding: "6px 8px", borderRadius: 7, border: "1px solid var(--cc-bord)", fontSize: 13,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none", width: 100,
   },
   txSaveBtn: {
-    padding: "6px 12px", borderRadius: 7, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "6px 12px", borderRadius: 7, border: "none", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   txCancelBtn: {
-    padding: "6px 12px", borderRadius: 7, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    padding: "6px 12px", borderRadius: 7, border: "1px solid var(--cc-bord)", background: "transparent", color: "var(--cc-texte-doux)",
     fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerCard: {
-    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 20,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-rouge-bord)", borderRadius: 14, padding: 20,
   },
-  dangerTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
-  dangerText: { fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: 0 },
+  dangerTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "var(--cc-rouge)", marginBottom: 10 },
+  dangerText: { fontSize: 13, color: "var(--cc-texte-corps)", lineHeight: 1.55, margin: 0 },
   dangerBtn: {
     display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9,
-    border: "1px solid #EABBA9", background: "#FBEBE4", color: "#B4432A", fontSize: 13, fontWeight: 600,
+    border: "1px solid var(--cc-rouge-bord)", background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", fontSize: 13, fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerBtnConfirm: {
-    padding: "10px 14px", borderRadius: 9, border: "none", background: "#B4432A", color: "#FFFEFB",
+    padding: "10px 14px", borderRadius: 9, border: "none", background: "var(--cc-rouge)", color: "var(--cc-surface)",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerBtnGhost: {
-    padding: "10px 14px", borderRadius: 9, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    padding: "10px 14px", borderRadius: 9, border: "1px solid var(--cc-bord)", background: "transparent", color: "var(--cc-texte-doux)",
     fontSize: 13, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   recupWrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", padding: 20, fontFamily: "'Inter', sans-serif",
+    background: "var(--cc-bg)", padding: 20, fontFamily: "'Inter', sans-serif",
   },
   recupCard: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32, width: "100%", maxWidth: 380,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 380,
   },
   recupBrand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 18 },
-  recupSucces: { fontSize: 13, color: "#186B4E", background: "#E4F2EC", padding: "10px 12px", borderRadius: 8 },
+  recupSucces: { fontSize: 13, color: "var(--cc-vert)", background: "var(--cc-vert-fond)", padding: "10px 12px", borderRadius: 8 },
 };

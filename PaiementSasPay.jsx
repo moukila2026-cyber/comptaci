@@ -1,16 +1,38 @@
+/**
+ * PaiementSasPay.jsx — Paiement des forfaits ComptaCi par lien SasPay
+ * ---------------------------------------------------------------------------
+ * Remplace l'ancienne page « Paiement Wave » (supprimée). SasPay est un
+ * agrégateur : un seul lien encaisse Wave, Orange Money, MTN MoMo, Moov et la
+ * carte bancaire. Chaque forfait a son lien dédié (voir saspay.js) :
+ *
+ *   Starter    → https://link.saspay.me/vmtjcwrgafk
+ *   Pro        → https://link.saspay.me/vrgqoaut3ba
+ *   Entreprise → https://link.saspay.me/zszja0kudmy
+ *
+ * Parcours : choix du forfait → « Payer maintenant » (ouvre le lien SasPay du
+ * forfait) → confirmation → activation automatique par le webhook SasPay
+ * (`supabase/functions/webhook-saspay`) ou validation manuelle par l'admin.
+ */
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
-import { WAVE_QR_SRC, WAVE_QR_DATA_URI } from "./WaveQR.js";
+import {
+  SASPAY_CONFIGURE,
+  SASPAY_MOYENS,
+  LIENS_PAIEMENT,
+  lienPlanConfigure,
+  lienPaiementSasPay,
+  refPaiement,
+  ouvrirPaiementSasPay,
+  WHATSAPP_SUPPORT,
+} from "./saspay.js";
 
-/** Coordonnées Wave / WhatsApp ComptaCi (CI). */
-export const WAVE_NUMERO = "05 46 69 74 78";
-export const WAVE_NUMERO_CLEAN = "0546697478";
-export const WHATSAPP_SUPPORT = "2250501303343";
+/** Paiement : lien SasPay (Mobile Money + carte). Aucun QR code. */
+export { WHATSAPP_SUPPORT, LIENS_PAIEMENT };
 
 /**
  * Tarifs officiels ComptaCi (FCFA / mois / établissement) :
  *  - Starter  : 7 000  → c'est aussi le tarif fondateur verrouillé
- *  - Pro      : 10 000 (prix de référence Wave)
+ *  - Pro      : 10 000 (prix public)
  *  - Entreprise : 20 000
  */
 export const PRIX_PLANS = {
@@ -27,8 +49,15 @@ export const PRIX_FONDATEUR = 7000;
 /** Nombre d'établissements pouvant bénéficier de l'offre fondateurs. */
 export const LIMITE_FONDATEURS = 100;
 
-/** Durée de l'offre fondateurs : 7 jours d'essai en plan STARTER. */
-export const JOURS_FONDATEUR = 7;
+/**
+ * Durée de l'essai gratuit : 14 jours pour tous (offre fondateurs comprise).
+ * Pendant ces 14 jours, l'établissement ne paie rien : 0 FCFA.
+ * À la fin, il choisit librement Starter, Pro ou Entreprise.
+ */
+export const JOURS_FONDATEUR = 14;
+
+/** Alias explicite : c'est la durée d'essai, pas seulement l'offre fondateurs. */
+export const JOURS_ESSAI = 14;
 
 const JOUR_MS = 86400000;
 const HEURE_MS = 3600000;
@@ -85,7 +114,7 @@ export function finEssai(etablissement) {
 
 /**
  * VRAI uniquement pendant la fenêtre de l'offre : le fondateur est alors
- * bloqué sur le plan STARTER à 7 000 FCFA. Après les 7 jours → faux, il
+ * bloqué pendant l'essai de 14 jours (0 FCFA). Après les 14 jours → faux, il
  * choisit librement Starter, Pro ou Entreprise.
  */
 export function fondateurVerrouille(etablissement, maintenant = Date.now()) {
@@ -96,7 +125,7 @@ export function fondateurVerrouille(etablissement, maintenant = Date.now()) {
   return maintenant < fin.getTime();
 }
 
-/** Le tarif fondateur verrouillé (7 000 FCFA) s'applique-t-il ? */
+/** Le tarif fondateur verrouillé (tarif Starter) s'applique-t-il ? */
 export function tarifFondateurActif(etablissement, maintenant = Date.now()) {
   return estFondateur(etablissement) && fondateurVerrouille(etablissement, maintenant);
 }
@@ -144,32 +173,6 @@ export function montantDuPlan(plan, etablissement, maintenant = Date.now()) {
 const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
-/** Image QR scannable : fichier statique d'abord, data-URI en repli. */
-export function WaveQrImage({ size = 200, style }) {
-  const [src, setSrc] = useState(WAVE_QR_SRC);
-  return (
-    <img
-      src={src}
-      alt="Code QR de paiement Wave"
-      width={size}
-      height={size}
-      onError={() => {
-        if (src !== WAVE_QR_DATA_URI) setSrc(WAVE_QR_DATA_URI);
-      }}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: 12,
-        border: "1px solid #EDE7DA",
-        objectFit: "contain",
-        background: "#FFFFFF",
-        display: "block",
-        ...style,
-      }}
-    />
-  );
-}
-
 function nomPlan(t, p) {
   if (p === "pro") return t("paiement_plan_pro");
   if (p === "entreprise") return t("paiement_plan_entreprise");
@@ -184,25 +187,25 @@ function notePlan(t, p) {
 
 function messageWhatsApp({ t, etablissement, plan, montant, reference, telephone }) {
   const lignes = [
-    `Bonjour ComptaCi, je confirme mon paiement Wave.`,
+    `Bonjour ComptaCi, je confirme mon paiement SasPay.`,
     `Établissement : ${etablissement?.nom || "—"}`,
     `Plan : ${nomPlan(t, plan)} (${fmt(montant)} FCFA/mois)`,
     telephone ? `Téléphone payeur : ${telephone}` : null,
-    reference ? `Référence Wave : ${reference}` : null,
+    reference ? `Référence SasPay : ${reference}` : null,
     etablissement?.id ? `ID : ${etablissement.id}` : null,
   ].filter(Boolean);
   return lignes.join("\n");
 }
 
 /**
- * Bloc complet : choix du plan → QR Wave → formulaire « j'ai payé ».
+ * Bloc complet : choix du plan → lien SasPay du forfait → « j'ai payé ».
  * Utilisé par l'écran de blocage (essai expiré) et la page Abonnement.
  *
  * Les 3 forfaits sont TOUJOURS affichés. Pendant l'offre fondateurs,
  * Pro et Entreprise sont cadenassés (aria-disabled, clic = explication) ;
- * un minuteur interne les débloque à la fin des 7 jours sans rechargement.
+ * un minuteur interne les débloque à la fin des 14 jours sans rechargement.
  */
-export default function PaiementWave({
+export default function PaiementSasPay({
   etablissement,
   t,
   planInitial = null,
@@ -220,6 +223,9 @@ export default function PaiementWave({
   const [erreur, setErreur] = useState("");
   const [demande, setDemande] = useState(null);
   const [copieOk, setCopieOk] = useState(false);
+  // Lien SasPay ouvert : on bascule alors sur le bloc « j'ai payé ».
+  const [paiementLance, setPaiementLance] = useState(false);
+  const [lienCopie, setLienCopie] = useState(false);
 
   const fondateur = estFondateur(etablissement);
   const verrouille = fondateurVerrouille(etablissement, maintenant);
@@ -227,6 +233,18 @@ export default function PaiementWave({
   const plan = planEffectifFondateur(planBrut, etablissement, maintenant);
   const montant = montantDuPlan(plan, etablissement, maintenant);
   const reste = resteAvantDeblocage(etablissement, maintenant);
+  // Référence affichée AVANT paiement : elle est reprise dans la demande.
+  const referencePaiement = refPaiement(etablissement, plan);
+  // Lien SasPay du forfait sélectionné (avec la référence en paramètre).
+  const lienDuPlanChoisi =
+    lienPaiementSasPay({
+      montant,
+      plan,
+      etablissement,
+      reference: referencePaiement,
+      telephone: (telephone || "").trim() || null,
+    }) || "";
+  const lienConfigure = lienPlanConfigure(plan);
 
   // Minuteur : rafraîchit l'horloge tant que l'offre fondateurs est en cours.
   useEffect(() => {
@@ -315,9 +333,38 @@ export default function PaiementWave({
     window.open(url, "_blank", "noopener,noreferrer");
   };
 
-  const copierNumero = async () => {
+  /** Ouvre le lien de paiement SasPay (Wave, Orange Money, MTN, Moov, carte). */
+  const payerAvecSasPay = () => {
+    const ouvert = ouvrirPaiementSasPay({
+      montant,
+      plan,
+      etablissement,
+      reference: referencePaiement,
+      telephone: (telephone || "").trim() || null,
+    });
+    if (!ouvert) {
+      setErreur(t("paiement_saspay_erreur"));
+      return;
+    }
+    setErreur("");
+    setPaiementLance(true);
+  };
+
+  /** Copie le lien de paiement du forfait (utile pour le payer sur un autre appareil). */
+  const copierLien = async () => {
     try {
-      await navigator.clipboard.writeText(WAVE_NUMERO_CLEAN);
+      await navigator.clipboard.writeText(lienDuPlanChoisi);
+      setLienCopie(true);
+      setTimeout(() => setLienCopie(false), 2000);
+    } catch (_) {
+      setLienCopie(false);
+    }
+  };
+
+  /** Copie la référence de paiement (utile pour le support). */
+  const copierReference = async () => {
+    try {
+      await navigator.clipboard.writeText(referencePaiement);
       setCopieOk(true);
       setTimeout(() => setCopieOk(false), 2000);
     } catch (_) {
@@ -415,8 +462,8 @@ export default function PaiementWave({
 
       {messageVerrou && <div style={S.verrouAvertissement}>{messageVerrou}</div>}
 
-      {/* 2. QR + montant */}
-      <div style={S.qrBlock}>
+      {/* 2. Paiement sécurisé SasPay (Mobile Money + carte) */}
+      <div style={S.payBlock}>
         <div style={S.montantHint}>
           {t("paiement_a_envoyer")}{" "}
           <strong>
@@ -424,16 +471,67 @@ export default function PaiementWave({
           </strong>{" "}
           — {nomPlan(t, plan)}
         </div>
-        <WaveQrImage size={compact ? 180 : 220} />
-        <div style={S.waveLine}>
-          <span>
-            {t("paiement_numero_wave")} <strong>{WAVE_NUMERO}</strong>
-          </span>
-          <button type="button" onClick={copierNumero} style={S.copyBtn}>
-            {copieOk ? t("paiement_numero_copie") : t("paiement_copier_numero")}
-          </button>
-        </div>
-        <p style={S.scanHint}>{t("paiement_scan_hint")}</p>
+
+        {lienConfigure ? (
+          <>
+            {/* Lien SasPay du forfait : copiable / partageable */}
+            <div style={S.lienBox}>
+              <span style={S.lienLabel}>{t("paiement_saspay_lien")}</span>
+              <a
+                href={lienDuPlanChoisi}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={S.lienValeur}
+              >
+                {lienDuPlanChoisi.replace(/^https?:\/\//, "")}
+              </a>
+              <button type="button" onClick={copierLien} style={S.copyBtn}>
+                {lienCopie ? t("paiement_saspay_lien_copie") : t("paiement_saspay_copier_lien")}
+              </button>
+            </div>
+
+            <button
+              type="button"
+              onClick={payerAvecSasPay}
+              style={S.saspayBtn}
+              aria-label={t("paiement_saspay_cta")}
+            >
+              {t("paiement_saspay_cta")}
+            </button>
+
+            <div style={S.saspayMoyens}>
+              {SASPAY_MOYENS.map((m) => (
+                <span key={m} style={S.saspayChip}>
+                  {m}
+                </span>
+              ))}
+            </div>
+
+            <div style={S.saspayRef}>
+              <span>
+                {t("paiement_reference")} : <strong>{referencePaiement}</strong>
+              </span>
+              <button type="button" onClick={copierReference} style={S.copyBtn}>
+                {copieOk ? t("paiement_numero_copie") : t("paiement_copier_reference")}
+              </button>
+            </div>
+
+            <p style={S.scanHint}>
+              {paiementLance
+                ? t("paiement_saspay_apres_paiement")
+                : t("paiement_saspay_hint")}
+            </p>
+          </>
+        ) : (
+          <>
+            <div style={S.saspayIndispo}>{t("paiement_saspay_indispo_titre")}</div>
+            <p style={S.scanHint}>{t("paiement_saspay_indispo_texte")}</p>
+          </>
+        )}
+
+        <button type="button" onClick={ouvrirWhatsApp} style={S.whatsappGhost}>
+          {t("paiement_contacter_whatsapp")}
+        </button>
       </div>
 
       {/* 3. Formulaire de confirmation */}
@@ -468,7 +566,7 @@ export default function PaiementWave({
               type="text"
               value={reference}
               onChange={(e) => setReference(e.target.value)}
-              placeholder={t("paiement_reference_placeholder")}
+              placeholder={referencePaiement}
               style={S.input}
             />
           </label>
@@ -495,36 +593,36 @@ const S = {
   wrap: { display: "flex", flexDirection: "column", gap: 18, width: "100%" },
   wrapCompact: { gap: 14 },
   fondateurBox: {
-    background: "#FBF3E2",
-    border: "1px solid #E5C88C",
+    background: "var(--cc-surface-3)",
+    border: "1px solid var(--cc-or-pale)",
     borderRadius: 12,
     padding: "10px 12px",
   },
   fondateurTitre: {
     fontSize: 13,
     fontWeight: 700,
-    color: "#8A6420",
+    color: "var(--cc-or-clair)",
     fontFamily: "'Inter', sans-serif",
   },
   fondateurNotice: {
     margin: "4px 0 0",
     fontSize: 12,
     lineHeight: 1.45,
-    color: "#8A6420",
+    color: "var(--cc-or-clair)",
   },
   fondateurVerrou: {
     marginTop: 6,
     fontSize: 11.5,
     fontWeight: 700,
-    color: "#8A6420",
+    color: "var(--cc-or-clair)",
   },
   fondateurBadge: {
     marginTop: 6,
     display: "inline-block",
     fontSize: 11,
     fontWeight: 600,
-    color: "#186B4E",
-    background: "#E7F5EF",
+    color: "var(--cc-vert)",
+    background: "var(--cc-vert-fond)",
     padding: "3px 9px",
     borderRadius: 20,
   },
@@ -532,22 +630,22 @@ const S = {
     marginTop: 6,
     fontSize: 12,
     fontWeight: 700,
-    color: "#B4801F",
+    color: "var(--cc-or)",
   },
   verrouAvertissement: {
     fontSize: 12,
     lineHeight: 1.45,
-    color: "#8A6420",
-    background: "#FBF3E2",
-    border: "1px solid #E5C88C",
+    color: "var(--cc-or-clair)",
+    background: "var(--cc-surface-3)",
+    border: "1px solid var(--cc-or-pale)",
     borderRadius: 10,
     padding: "9px 11px",
   },
   plansRow: { display: "flex", gap: 10, flexWrap: "wrap" },
   planBox: {
     flex: "1 1 160px",
-    background: "#FBF9F4",
-    border: "1.5px solid #EDE7DA",
+    background: "var(--cc-surface-2)",
+    border: "1.5px solid var(--cc-bord)",
     borderRadius: 12,
     padding: "12px 10px",
     textAlign: "center",
@@ -556,24 +654,24 @@ const S = {
     color: "inherit",
   },
   planBoxActive: {
-    background: "#FBF3E2",
-    borderColor: "#D4A24C",
-    boxShadow: "0 0 0 1px #D4A24C",
+    background: "var(--cc-surface-3)",
+    borderColor: "var(--cc-or)",
+    boxShadow: "0 0 0 1px var(--cc-or)",
   },
   planBoxLocked: {
-    background: "#F4F2ED",
+    background: "var(--cc-surface-2)",
     borderStyle: "dashed",
     cursor: "not-allowed",
     opacity: 0.72,
   },
-  planName: { fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "#16213E" },
-  planPrice: { fontSize: 13.5, color: "#B4801F", fontWeight: 700, margin: "4px 0" },
-  planUnit: { fontSize: 11, fontWeight: 500, color: "#8A8578" },
-  planNote: { fontSize: 10.5, color: "#8A8578", lineHeight: 1.35 },
+  planName: { fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "var(--cc-texte)" },
+  planPrice: { fontSize: 13.5, color: "var(--cc-or)", fontWeight: 700, margin: "4px 0" },
+  planUnit: { fontSize: 11, fontWeight: 500, color: "var(--cc-texte-doux)" },
+  planNote: { fontSize: 10.5, color: "var(--cc-texte-doux)", lineHeight: 1.35 },
   planLocked: {
     fontSize: 11,
     fontWeight: 700,
-    color: "#8A8578",
+    color: "var(--cc-texte-doux)",
     margin: "4px 0",
   },
   planFeatures: {
@@ -591,7 +689,7 @@ const S = {
     gap: 5,
     fontSize: 10.5,
     lineHeight: 1.35,
-    color: "#5C5748",
+    color: "var(--cc-texte-corps)",
   },
   check: { fontSize: 9, lineHeight: 1.5 },
   planUpgrade: {
@@ -599,8 +697,8 @@ const S = {
     display: "inline-block",
     fontSize: 9.5,
     fontWeight: 700,
-    color: "#186B4E",
-    background: "#E7F5EF",
+    color: "var(--cc-vert)",
+    background: "var(--cc-vert-fond)",
     padding: "2px 7px",
     borderRadius: 20,
   },
@@ -609,22 +707,94 @@ const S = {
     display: "inline-block",
     fontSize: 10,
     fontWeight: 700,
-    color: "#186B4E",
-    background: "#E7F5EF",
+    color: "var(--cc-vert)",
+    background: "var(--cc-vert-fond)",
     padding: "2px 8px",
     borderRadius: 20,
   },
-  qrBlock: {
+  payBlock: {
     display: "flex",
     flexDirection: "column",
     alignItems: "center",
     gap: 10,
-    padding: "14px 10px",
-    background: "#FFFEFB",
-    border: "1px solid #EDE7DA",
+    padding: "16px 14px",
+    background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 14,
   },
-  montantHint: { fontSize: 13.5, color: "#5C5748", textAlign: "center" },
+  montantHint: { fontSize: 13.5, color: "var(--cc-texte-corps)", textAlign: "center" },
+  saspayBtn: {
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    width: "100%",
+    maxWidth: 340,
+    padding: "14px 18px",
+    borderRadius: 12,
+    border: "none",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
+    boxShadow: "var(--cc-ombre-or)",
+    fontSize: 14.5,
+    fontWeight: 700,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  lienBox: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+    maxWidth: 420,
+    justifyContent: "center",
+    background: "var(--cc-surface-2)",
+    border: "1px dashed var(--cc-bord-fort)",
+    borderRadius: 10,
+    padding: "9px 11px",
+  },
+  lienLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)" },
+  lienValeur: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "var(--cc-or)",
+    textDecoration: "none",
+    wordBreak: "break-all",
+  },
+  saspayMoyens: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+    justifyContent: "center",
+  },
+  saspayChip: {
+    fontSize: 11,
+    fontWeight: 600,
+    color: "var(--cc-texte-corps)",
+    background: "var(--cc-surface-2)",
+    border: "1px solid var(--cc-bord)",
+    padding: "3px 9px",
+    borderRadius: 20,
+  },
+  saspayRef: {
+    display: "flex",
+    alignItems: "center",
+    gap: 8,
+    flexWrap: "wrap",
+    justifyContent: "center",
+    fontSize: 12,
+    color: "var(--cc-texte-corps)",
+  },
+  saspayIndispo: {
+    fontSize: 13,
+    fontWeight: 700,
+    color: "var(--cc-or-clair)",
+    background: "var(--cc-surface-3)",
+    border: "1px solid var(--cc-or-pale)",
+    borderRadius: 9,
+    padding: "9px 12px",
+    textAlign: "center",
+  },
   waveLine: {
     display: "flex",
     alignItems: "center",
@@ -632,27 +802,27 @@ const S = {
     flexWrap: "wrap",
     justifyContent: "center",
     fontSize: 13,
-    color: "#5C5748",
+    color: "var(--cc-texte-corps)",
   },
   copyBtn: {
-    border: "1px solid #E4DDD0",
-    background: "#FFFEFB",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
     borderRadius: 8,
     padding: "5px 10px",
     fontSize: 12,
     fontWeight: 600,
-    color: "#16213E",
+    color: "var(--cc-texte)",
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
-  scanHint: { fontSize: 12, color: "#8A8578", textAlign: "center", margin: 0, maxWidth: 320, lineHeight: 1.45 },
+  scanHint: { fontSize: 12, color: "var(--cc-texte-doux)", textAlign: "center", margin: 0, maxWidth: 320, lineHeight: 1.45 },
   form: {
     display: "flex",
     flexDirection: "column",
     gap: 12,
     textAlign: "left",
-    background: "#FBF9F4",
-    border: "1px solid #EDE7DA",
+    background: "var(--cc-surface-2)",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 14,
     padding: 16,
   },
@@ -660,36 +830,36 @@ const S = {
     fontFamily: "'Fraunces', serif",
     fontSize: 15,
     fontWeight: 600,
-    color: "#16213E",
+    color: "var(--cc-texte)",
     textAlign: "center",
   },
   field: { display: "flex", flexDirection: "column", gap: 5 },
-  label: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
-  optionnel: { fontWeight: 400, color: "#8A8578" },
+  label: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)" },
+  optionnel: { fontWeight: 400, color: "var(--cc-texte-doux)" },
   input: {
     padding: "10px 12px",
     borderRadius: 9,
-    border: "1px solid #E4DDD0",
+    border: "1px solid var(--cc-bord)",
     fontSize: 14,
     fontFamily: "'Inter', sans-serif",
-    color: "#16213E",
+    color: "var(--cc-texte)",
     outline: "none",
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
   },
   error: {
     fontSize: 12.5,
-    color: "#B4432A",
-    background: "#FBEBE4",
+    color: "var(--cc-rouge)",
+    background: "var(--cc-rouge-fond)",
     padding: "8px 10px",
     borderRadius: 8,
     lineHeight: 1.4,
   },
   submitBtn: {
     padding: "12px 0",
-    borderRadius: 9,
+    borderRadius: 10,
     border: "none",
-    background: "#16213E",
-    color: "#F3D9A0",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
     fontSize: 14,
     fontWeight: 600,
     cursor: "pointer",
@@ -701,8 +871,8 @@ const S = {
     justifyContent: "center",
     padding: "11px 16px",
     borderRadius: 9,
-    background: "#186B4E",
-    color: "#FFFEFB",
+    background: "var(--cc-vert)",
+    color: "var(--cc-surface)",
     fontSize: 13.5,
     fontWeight: 600,
     border: "none",
@@ -717,16 +887,16 @@ const S = {
     padding: "10px 0",
     borderRadius: 9,
     background: "transparent",
-    color: "#186B4E",
+    color: "var(--cc-vert)",
     fontSize: 13,
     fontWeight: 600,
-    border: "1px solid #186B4E",
+    border: "1px solid var(--cc-vert)",
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
   notice: {
     fontSize: 12,
-    color: "#8A8578",
+    color: "var(--cc-texte-doux)",
     lineHeight: 1.5,
     margin: 0,
     textAlign: "center",
@@ -736,8 +906,8 @@ const S = {
     flexDirection: "column",
     alignItems: "center",
     gap: 12,
-    background: "#E7F5EF",
-    border: "1px solid #B7E0CC",
+    background: "var(--cc-vert-fond)",
+    border: "1px solid var(--cc-vert-bord)",
     borderRadius: 14,
     padding: 18,
     textAlign: "center",
@@ -746,14 +916,14 @@ const S = {
     fontFamily: "'Fraunces', serif",
     fontSize: 16,
     fontWeight: 600,
-    color: "#186B4E",
+    color: "var(--cc-vert)",
   },
-  successText: { fontSize: 13, color: "#2F5B48", lineHeight: 1.5, margin: 0 },
+  successText: { fontSize: 13, color: "var(--cc-vert)", lineHeight: 1.5, margin: 0 },
   statutBadge: {
     fontSize: 12,
     fontWeight: 700,
-    color: "#8A6420",
-    background: "#FBF3E2",
+    color: "var(--cc-or-clair)",
+    background: "var(--cc-surface-3)",
     padding: "6px 12px",
     borderRadius: 20,
   },

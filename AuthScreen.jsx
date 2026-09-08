@@ -5,8 +5,8 @@ import {
   identifiantVersTelephone,
 } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-
-const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
+import { SECTEURS_IDS } from "./secteurs.js";
+import { C } from "./theme.js";
 
 export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [mode, setMode] = useState("connexion"); // connexion | inscription | rejoindre
@@ -15,7 +15,7 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [identifiant, setIdentifiant] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [nomEtablissement, setNomEtablissement] = useState("");
-  const [secteur, setSecteur] = useState("restauration");
+  const [secteur, setSecteur] = useState("restaurant");
   const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
@@ -174,15 +174,15 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   };
 
   return (
-    <div style={styles.wrap}>
+    <div className="cc-ecran" style={styles.wrap}>
       <div style={styles.photoOverlay} />
       <div style={styles.langRow}>
         <LanguageSelector langue={langue} onChange={setLangue} />
       </div>
-      <div style={styles.card}>
+      <div className="cc-card" style={styles.card}>
         <div style={styles.brand}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M2 14L7 6L12 11L18 3" stroke="#D4A24C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span style={styles.brandName}>ComptaCi</span>
         </div>
@@ -228,11 +228,18 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           {mode === "inscription" && (
             <label style={styles.field}>
               <span style={styles.label}>{t("auth_secteur")}</span>
-              <select value={secteur} onChange={(e) => setSecteur(e.target.value)} style={styles.input}>
+              <select
+                value={secteur}
+                onChange={(e) => setSecteur(e.target.value)}
+                style={{ ...styles.input, cursor: "pointer" }}
+              >
                 {SECTEURS_IDS.map((id) => (
                   <option key={id} value={id}>{t(`secteur_${id}`)}</option>
                 ))}
               </select>
+              <span style={styles.aideSecteur}>
+                {t("auth_secteur_aide", { nb: 20 })}
+              </span>
             </label>
           )}
 
@@ -347,53 +354,56 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
 }
 
 const styles = {
-  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "#B5AF9E", position: "relative", zIndex: 1 },
+  footer: { textAlign: "center", marginTop: 16, fontSize: 11, color: "var(--cc-texte-discret)", position: "relative", zIndex: 1 },
   wrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
     fontFamily: "'Inter', sans-serif", padding: 20, position: "relative", overflow: "hidden",
     backgroundImage: "url(/images/photo-boutique.jpg)",
-    backgroundSize: "cover", backgroundPosition: "center 30%", backgroundColor: "#16213E",
+    backgroundSize: "cover", backgroundPosition: "center 30%", backgroundColor: "var(--cc-accent-uni)",
   },
   photoOverlay: {
     position: "absolute", inset: 0,
-    background: "linear-gradient(160deg, rgba(22,33,62,0.92) 0%, rgba(22,33,62,0.86) 45%, rgba(22,33,62,0.72) 100%)",
+    background: "linear-gradient(160deg, rgba(0,0,0,0.9) 0%, rgba(0,0,0,0.84) 45%, rgba(0,0,0,0.78) 100%)",
   },
   langRow: { marginBottom: 12, position: "relative", zIndex: 1 },
   card: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32,
-    width: "100%", maxWidth: 380, position: "relative", zIndex: 1,
+    background: "rgba(21,30,49,0.92)", backdropFilter: "blur(14px)", border: "1px solid var(--cc-bord)",
+    borderRadius: 18, padding: 32, width: "100%", maxWidth: 380, position: "relative", zIndex: 1,
+    boxShadow: "var(--cc-ombre-forte)",
   },
   brand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 24 },
-  brandName: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "#16213E" },
+  brandName: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "var(--cc-texte)" },
   toggleRow: { display: "flex", gap: 6, marginBottom: 20, flexWrap: "wrap" },
   toggleBtn: {
-    flex: "1 1 30%", padding: "9px 4px", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 11.5, fontWeight: 600, color: "#8A8578", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    flex: "1 1 30%", padding: "9px 4px", borderRadius: 9, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  toggleActive: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
+  toggleActive: { background: "var(--cc-accent)", borderColor: "var(--cc-or-bord)", color: "var(--cc-or-clair)" },
   field: { display: "flex", flexDirection: "column", gap: 6 },
-  label: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
+  aideSecteur: { fontSize: 11, color: "var(--cc-texte-doux)", lineHeight: 1.45 },
+  label: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)" },
   input: {
-    padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+    padding: "10px 12px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 14,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none",
   },
-  error: { fontSize: 12.5, color: "#B4432A", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
-  success: { fontSize: 12.5, color: "#186B4E", background: "#E4F2EC", padding: "8px 10px", borderRadius: 8 },
+  error: { fontSize: 12.5, color: "var(--cc-rouge)", background: "var(--cc-rouge-fond)", padding: "8px 10px", borderRadius: 8 },
+  success: { fontSize: 12.5, color: "var(--cc-vert)", background: "var(--cc-vert-fond)", padding: "8px 10px", borderRadius: 8 },
   submitBtn: {
-    padding: "12px 0", borderRadius: 9, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "12px 0", borderRadius: 10, border: "none", background: "var(--cc-degrade-or)", color: "var(--cc-texte-inverse)",
     fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    boxShadow: "var(--cc-ombre-or)",
   },
   mdpOublieLink: {
-    background: "none", border: "none", color: "#B4801F", fontSize: 12.5, fontWeight: 600,
+    background: "none", border: "none", color: "var(--cc-or)", fontSize: 12.5, fontWeight: 600,
     cursor: "pointer", padding: 0, fontFamily: "'Inter', sans-serif",
   },
   mdpOublieBox: {
-    display: "flex", flexDirection: "column", gap: 10, background: "#FBF9F4", borderRadius: 10, padding: 14,
+    display: "flex", flexDirection: "column", gap: 10, background: "var(--cc-surface-2)", borderRadius: 10, padding: 14,
   },
-  mdpOublieTitre: { fontSize: 13, fontWeight: 700, color: "#16213E" },
-  mdpOublieTexte: { fontSize: 12, color: "#8A8578", lineHeight: 1.5 },
+  mdpOublieTitre: { fontSize: 13, fontWeight: 700, color: "var(--cc-texte)" },
+  mdpOublieTexte: { fontSize: 12, color: "var(--cc-texte-doux)", lineHeight: 1.5 },
   mdpOublieBtn: {
-    padding: "10px 0", borderRadius: 8, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "10px 0", borderRadius: 8, border: "none", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
 };
