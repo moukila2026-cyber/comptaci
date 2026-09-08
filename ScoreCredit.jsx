@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import {
   Area,
   AreaChart,
@@ -8,7 +8,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { Award, Target, TrendingUp, Copy, MessageCircle, Info, Printer } from "lucide-react";
+import { Award, Target, TrendingUp, Copy, MessageCircle, Info, Printer, History } from "lucide-react";
+import { supabase } from "./supabaseClient.js";
 import { calculerScoreCredit, attestationScore, PALIERS } from "./creditScoring.js";
 import { secteurNormalise, seuilsDuSecteur } from "./secteurs.js";
 
@@ -66,8 +67,21 @@ function Jauge({ score, palier }) {
  * Transforme les données de gestion en un score présentable à une banque ou à
  * une institution de microfinance.
  */
-export default function ScoreCredit({ transactions, etablissement, t, langue }) {
+/** Clé de mois « AAAA-MM » utilisée par l'historique. */
+const cleMois = (d) =>
+  `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}`;
+
+const libelleMois = (periode) => {
+  const [a, m] = String(periode || "").split("-");
+  if (!a || !m) return periode || "—";
+  const d = new Date(Number(a), Number(m) - 1, 1);
+  return d.toLocaleDateString("fr-FR", { month: "short", year: "numeric" });
+};
+
+export default function ScoreCredit({ transactions, etablissement, demandes = [], t, langue }) {
   const [copie, setCopie] = useState(false);
+  const [historique, setHistorique] = useState([]);
+  const [historiqueIndispo, setHistoriqueIndispo] = useState(false);
   const secteurActif = secteurNormalise(etablissement?.secteur);
   const seuils = seuilsDuSecteur(secteurActif);
   const seuilDepenses = (seuils.achats + seuils.personnel + seuils.charges) / 100;
@@ -77,12 +91,73 @@ export default function ScoreCredit({ transactions, etablissement, t, langue }) 
       calculerScoreCredit({
         transactions,
         etablissement,
+        demandes,
         seuilDepenses,
       }),
-    [transactions, etablissement, seuilDepenses]
+    [transactions, etablissement, demandes, seuilDepenses]
   );
 
   const m = resultat.meta;
+
+  // Charge l'historique mensuel (preuve de progression pour un prêteur).
+  useEffect(() => {
+    if (!supabase || !etablissement?.id) {
+      setHistoriqueIndispo(true);
+      return;
+    }
+    let annule = false;
+    (async () => {
+      try {
+        const { data, error } = await supabase
+          .from("scores_credit")
+          .select("periode, score, palier, objectifs_atteints, objectifs_total")
+          .eq("etablissement_id", etablissement.id)
+          .order("periode", { ascending: false })
+          .limit(12);
+        if (error) throw error;
+        if (!annule) {
+          setHistorique(data || []);
+          setHistoriqueIndispo(false);
+        }
+      } catch (e) {
+        // Table absente (migration non appliquée) : on prévient sans bloquer.
+        if (!annule) setHistoriqueIndispo(true);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [etablissement?.id]);
+
+  // Enregistre le point du mois en cours (un seul point par mois : upsert).
+  useEffect(() => {
+    if (!supabase || !etablissement?.id) return;
+    let annule = false;
+    (async () => {
+      try {
+        const { error } = await supabase.rpc("enregistrer_score_credit", {
+          p_etablissement_id: etablissement.id,
+          p_periode: cleMois(new Date()),
+          p_score: resultat.score,
+          p_palier: resultat.palier.id,
+          p_objectifs_atteints: resultat.objectifsAtteints,
+          p_objectifs_total: resultat.objectifsTotal,
+          p_ca_90j: Math.round(m.caFenetre),
+          p_depenses_90j: Math.round(m.depFenetre),
+          p_regularite_pct: Math.round(m.regularitePct * 100) / 100,
+          p_anciennete_jours: m.joursAnciennete,
+          p_detail: JSON.stringify(resultat.criteres),
+        });
+        if (error) throw error;
+        if (!annule) setHistoriqueIndispo(false);
+      } catch (e) {
+        if (!annule) setHistoriqueIndispo(true);
+      }
+    })();
+    return () => {
+      annule = true;
+    };
+  }, [etablissement?.id, resultat.score, resultat.objectifsAtteints, m.caFenetre, m.depFenetre]);
 
   const texteAttestation = () =>
     attestationScore({
@@ -334,6 +409,49 @@ export default function ScoreCredit({ transactions, etablissement, t, langue }) 
         </div>
       </div>
 
+      {/* Historique du score : une progression vaut mieux qu'un chiffre isolé */}
+      <div style={S.card}>
+        <div style={S.cardHeader}>
+          <div>
+            <div style={S.cardTitle}>
+              <History size={15} style={{ verticalAlign: "-2px", marginRight: 6 }} />
+              {t("score_historique_titre")}
+            </div>
+            <div style={S.cardCaption}>{t("score_historique_sous")}</div>
+          </div>
+        </div>
+        {historiqueIndispo ? (
+          <div style={S.vide}>{t("score_historique_erreur")}</div>
+        ) : historique.length === 0 ? (
+          <div style={S.vide}>{t("score_historique_vide")}</div>
+        ) : (
+          <div style={S.historiqueTable}>
+            <div style={S.historiqueEntete}>
+              <span>{t("score_historique_col_mois")}</span>
+              <span>{t("score_historique_col_score")}</span>
+              <span>{t("score_objectifs_titre")}</span>
+            </div>
+            {historique.map((h) => {
+              const palier = PALIERS.find((p) => p.id === h.palier) || PALIERS[0];
+              return (
+                <div key={h.periode} style={S.historiqueLigne}>
+                  <span style={S.historiqueMois}>{libelleMois(h.periode)}</span>
+                  <span style={{ ...S.historiqueScore, color: palier.couleur }}>
+                    {h.score}/100
+                    <span style={S.historiquePalier}>
+                      {h.palier === "bronze" ? "Bronze" : h.palier === "argent" ? "Argent" : "Or"}
+                    </span>
+                  </span>
+                  <span style={S.historiqueObjectifs}>
+                    {h.objectifs_atteints}/{h.objectifs_total}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        )}
+      </div>
+
       {/* Attestation */}
       <div style={S.card}>
         <div style={S.cardHeader}>
@@ -503,6 +621,37 @@ const S = {
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
+  vide: { marginTop: 12, fontSize: 12.5, color: "#8A8578", lineHeight: 1.5 },
+  historiqueTable: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
+  historiqueEntete: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 8,
+    fontSize: 11,
+    fontWeight: 700,
+    color: "#8A8578",
+    textTransform: "uppercase",
+    letterSpacing: "0.04em",
+    paddingBottom: 4,
+    borderBottom: "1px solid #EDE7DA",
+  },
+  historiqueLigne: {
+    display: "grid",
+    gridTemplateColumns: "1fr 1fr 1fr",
+    gap: 8,
+    alignItems: "center",
+    padding: "7px 0",
+    borderBottom: "1px dashed #EDE7DA",
+  },
+  historiqueMois: { fontSize: 12.5, color: "#5C5748" },
+  historiqueScore: { fontSize: 13, fontWeight: 700 },
+  historiquePalier: {
+    marginLeft: 6,
+    fontSize: 10.5,
+    fontWeight: 600,
+    color: "#8A8578",
+  },
+  historiqueObjectifs: { fontSize: 12.5, color: "#5C5748" },
   avertissement: {
     display: "flex",
     gap: 10,

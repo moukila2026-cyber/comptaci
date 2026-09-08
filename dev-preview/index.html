@@ -1,0 +1,53 @@
+<!doctype html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>ComptaCi — aperçu des nouveaux écrans (données fictives)</title>
+    <link
+      href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600;9..144,700&family=Inter:wght@400;500;600;700&display=swap"
+      rel="stylesheet"
+    />
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body { font-family: "Inter", sans-serif; background: #FBF7F0; color: #16213E; }
+      .bandeau {
+        background: #16213E;
+        color: #F3D9A0;
+        padding: 12px 20px;
+        font-size: 12.5px;
+        letter-spacing: 0.02em;
+      }
+      .conteneur { max-width: 1080px; margin: 0 auto; padding: 18px 20px 60px; }
+      .onglets { display: flex; gap: 8px; margin-bottom: 18px; flex-wrap: wrap; }
+      .onglets button {
+        padding: 9px 15px;
+        border-radius: 20px;
+        border: 1px solid #E4DDD0;
+        background: #FFFEFB;
+        color: #5C5748;
+        font-size: 13px;
+        font-weight: 600;
+        cursor: pointer;
+        font-family: "Inter", sans-serif;
+      }
+      .onglets button.actif { background: #16213E; color: #F3D9A0; border-color: #16213E; }
+      footer { font-size: 11.5px; color: #8A8578; margin-top: 30px; line-height: 1.6; }
+    </style>
+  </head>
+  <body>
+    <div class="bandeau">
+      APERÇU — données fictives. Aucune connexion Supabase requise (page non incluse dans le build de production).
+    </div>
+    <div class="conteneur">
+      <div class="onglets" id="onglets"></div>
+      <div id="root"></div>
+      <footer>
+        Lancez <code>npm run dev</code> puis ouvrez <code>/dev-preview/index.html</code>.
+        Pour l'application réelle : <code>/index.html</code> (landing) et <code>/app.html</code> (application,
+        nécessite <code>VITE_SUPABASE_URL</code> et <code>VITE_SUPABASE_ANON_KEY</code>).
+      </footer>
+    </div>
+    <script type="module" src="./main.jsx"></script>
+  </body>
+</html>

@@ -307,7 +307,22 @@ officielle de l'API DGI et ajuster `chargeUtileFne()` dans `fne.js`.
 
 Migration : **`supabase-fne.sql`**.
 
-### 5. Aperçu local
+### 5. Aperçu local (`dev-preview/`)
 
-`npm run dev` puis `/.scratch/preview.html` : rendu des nouveaux écrans avec
-des données fictives (dossier non déployé, voir `.gitignore`).
+```
+npm run dev   →   http://localhost:5173/dev-preview/index.html
+```
+
+Rendu des nouveaux écrans (Score de crédit, Facturation FNE, types
+d'établissement, abonnement) avec des données fictives, **sans connexion
+Supabase**. Le dossier n'est pas inclus dans le build de production
+(seuls `index.html` et `app.html` sont des entrées Vite).
+
+### 6. Changer le type d'un établissement existant
+
+Les comptes créés avant le découpage (valeur historique `restauration`) sont
+requalifiés en `restaurant` par la migration. Un ancien compte qui est
+réellement un bar, un maquis ou un hôtel peut corriger son type depuis
+**Abonnement → « Type de votre établissement »** : la répartition des dépenses
+et les suggestions de saisie basculent immédiatement sur les postes du nouveau
+métier.

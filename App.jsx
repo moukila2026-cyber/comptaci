@@ -143,6 +143,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const [sessionCaisse, setSessionCaisse] = useState(null);
   const [historiqueCaisse, setHistoriqueCaisse] = useState([]);
   const [etablissement, setEtablissement] = useState(null);
+  const [demandesPaiement, setDemandesPaiement] = useState([]);
   const [role, setRole] = useState(null);
   const [mesEtablissements, setMesEtablissements] = useState([]);
   const [listeChargee, setListeChargee] = useState(false);
@@ -167,6 +168,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
         setEtablissementActifId(null);
         setEtablissement(null);
         setRole(null);
+        setDemandesPaiement([]);
         setTransactions([]);
         setProduits([]);
         setFournisseurs([]);
@@ -290,6 +292,21 @@ function ComptaCiApp({ langue, setLangue, t }) {
       }
 
       try {
+        const { data: demandes, error: errDemandes } = await supabase
+          .from("demandes_paiement")
+          .select("id, plan, montant, statut, created_at")
+          .eq("etablissement_id", etab.id)
+          .order("created_at", { ascending: false })
+          .limit(50);
+        if (errDemandes) throw errDemandes;
+        setDemandesPaiement(demandes || []);
+      } catch (e) {
+        // Table optionnelle : son absence ne doit rien bloquer.
+        console.error("Erreur chargement demandes de paiement:", e);
+        setDemandesPaiement([]);
+      }
+
+      try {
         const { data: sessions, error: errSessions } = await supabase
           .from("sessions_caisse")
           .select("*")
@@ -347,6 +364,35 @@ function ComptaCiApp({ langue, setLangue, t }) {
       return true;
     } catch (e) {
       setErreur("Impossible de créer ce nouvel établissement.");
+      return false;
+    }
+  };
+
+  /**
+   * Change le type d'établissement (restaurant, bar, maquis, hôtel…).
+   * Effet immédiat : la répartition des dépenses et les suggestions de saisie
+   * utilisent les postes réels du nouveau métier.
+   */
+  const changerSecteur = async (secteur) => {
+    if (!etablissement?.id) return false;
+    const secteurPropre = secteurNormalise(secteur);
+    try {
+      const { error } = await supabase
+        .from("etablissements")
+        .update({ secteur: secteurPropre })
+        .eq("id", etablissement.id);
+      if (error) throw error;
+      setEtablissement({ ...etablissement, secteur: secteurPropre });
+      setMesEtablissements((liste) =>
+        liste.map((m) =>
+          m.etablissement_id === etablissement.id
+            ? { ...m, etablissements: { ...m.etablissements, secteur: secteurPropre } }
+            : m
+        )
+      );
+      return true;
+    } catch (e) {
+      console.error("Erreur changement de type d'établissement:", e);
       return false;
     }
   };
@@ -694,7 +740,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
         {chargement ? (
           <div style={styles.loading}>{t("chargement")}</div>
         ) : vue === "dashboard" ? (
-          <Dashboard transactions={transactions} isMobile={isMobile} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
+          <Dashboard
+            transactions={transactions}
+            isMobile={isMobile}
+            secteur={etablissement?.secteur}
+            etablissement={etablissement}
+            demandes={demandesPaiement}
+            t={t}
+          />
         ) : vue === "saisie" ? (
           <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
         ) : vue === "stock" ? (
@@ -726,6 +779,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
           <ScoreCredit
             transactions={transactions}
             etablissement={etablissement}
+            demandes={demandesPaiement}
             langue={langue}
             t={t}
           />
@@ -744,6 +798,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             planEffectif={planEffectif}
             enEssai={enEssai}
             onSupprimerCompte={supprimerMonCompte}
+            onChangerSecteur={changerSecteur}
             t={t}
           />
         ) : (
@@ -1034,10 +1089,14 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   );
 }
 
-function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
+function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = [], t }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
   const [copie, setCopie] = useState(false);
+  // Le graphique de répartition affiche par défaut les POSTES RÉELS de
+  // l'activité (« biscuits », « eau de javel »…) ; on peut revenir aux
+  // grandes catégories d'un clic.
+  const [modeRepartition, setModeRepartition] = useState("postes");
 
   const trend = useMemo(() => buildTrend(transactions, periode), [transactions, periode]);
   const parCategorie = useMemo(() => buildCategorieBreakdown(transactions, secteur), [transactions, secteur]);
@@ -1064,12 +1123,25 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
       calculerScoreCredit({
         transactions,
         etablissement,
+        demandes: demandes,
         seuilDepenses: (seuils.achats + seuils.personnel + seuils.charges) / 100,
       }),
-    [transactions, etablissement, seuils]
+    [transactions, etablissement, demandes, seuils]
   );
 
   const totalDepenses = parCategorie.reduce((a, c) => a + c.value, 0);
+
+  // Top 8 des postes réels pour le graphique (les autres restent visibles
+  // dans la grille détaillée juste en dessous).
+  const donneesGraphique = useMemo(() => {
+    if (modeRepartition === "categories") {
+      return parCategorie.filter((c) => c.value > 0);
+    }
+    return parPoste
+      .filter((p) => p.value > 0)
+      .slice(0, 8)
+      .map((p) => ({ ...p, label: p.label.length > 22 ? `${p.label.slice(0, 20)}…` : p.label }));
+  }, [modeRepartition, parCategorie, parPoste]);
   const ratios = [
     { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "#C1502E" },
     { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "#D4A24C" },
@@ -1235,12 +1307,36 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_repartition")}</div>
-              <div style={styles.cardCaption}>{t("dash_repartition_sous")}</div>
+              <div style={styles.cardCaption}>
+                {modeRepartition === "postes" ? t("dash_repartition_sous_postes") : t("dash_repartition_sous")}
+              </div>
             </div>
+          </div>
+          <div style={styles.basculeRepartition}>
+            <button
+              type="button"
+              onClick={() => setModeRepartition("postes")}
+              style={{
+                ...styles.basculeBtn,
+                ...(modeRepartition === "postes" ? styles.basculeBtnActif : {}),
+              }}
+            >
+              {t("dash_repartition_mode_postes")}
+            </button>
+            <button
+              type="button"
+              onClick={() => setModeRepartition("categories")}
+              style={{
+                ...styles.basculeBtn,
+                ...(modeRepartition === "categories" ? styles.basculeBtnActif : {}),
+              }}
+            >
+              {t("dash_repartition_mode_categories")}
+            </button>
           </div>
           <div style={{ height: 220 }}>
             <ResponsiveContainer width="100%" height="100%">
-              <BarChart data={parCategorie} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
+              <BarChart data={donneesGraphique} layout="vertical" margin={{ top: 4, right: 20, left: 0, bottom: 0 }}>
                 <XAxis type="number" hide />
                 <YAxis
                   dataKey="label"
@@ -1248,7 +1344,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
                   tick={{ fontSize: 12, fill: "#3A3628" }}
                   axisLine={false}
                   tickLine={false}
-                  width={100}
+                  width={modeRepartition === "postes" ? 130 : 100}
                 />
                 <Tooltip formatter={(v) => `${fmt(v)} FCFA`} contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }} />
                 <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#16213E" barSize={16} />
@@ -2234,12 +2330,75 @@ function ComparatifForfaits({ t }) {
   );
 }
 
-export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, t }) {
+export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, onChangerSecteur, t }) {
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
 
+  const secteurActif = secteurNormalise(etablissement?.secteur);
+  const [secteurChoisi, setSecteurChoisi] = useState(secteurActif);
+  const [secteurMsg, setSecteurMsg] = useState(null);
+  const [secteurEnCours, setSecteurEnCours] = useState(false);
+
+  useEffect(() => {
+    setSecteurChoisi(secteurNormalise(etablissement?.secteur));
+  }, [etablissement?.secteur]);
+
+  const enregistrerSecteur = async () => {
+    setSecteurMsg(null);
+    if (!onChangerSecteur) return;
+    setSecteurEnCours(true);
+    const ok = await onChangerSecteur(secteurChoisi);
+    setSecteurEnCours(false);
+    setSecteurMsg({
+      type: ok ? "ok" : "ko",
+      texte: ok ? t("etab_secteur_ok") : t("etab_secteur_ko"),
+    });
+  };
+
   return (
     <div style={styles.page}>
+      {/* Type d'établissement : conditionne les dépenses affichées.
+          Les comptes créés avant le découpage restaurant/bar/maquis/hôtel
+          peuvent ici choisir leur vrai métier. */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("etab_type_titre")}</div>
+            <div style={styles.cardCaption}>{t("etab_type_sous")}</div>
+          </div>
+        </div>
+        <div style={{ display: "flex", gap: 10, marginTop: 14, flexWrap: "wrap", alignItems: "flex-end" }}>
+          <label style={{ ...styles.field, flex: "1 1 240px", margin: 0 }}>
+            <span style={styles.fieldLabel}>{t("auth_secteur")}</span>
+            <select
+              value={secteurChoisi}
+              onChange={(e) => setSecteurChoisi(e.target.value)}
+              style={{ ...styles.select, cursor: "pointer" }}
+            >
+              {SECTEURS_IDS.map((id) => (
+                <option key={id} value={id}>{t(`secteur_${id}`)}</option>
+              ))}
+            </select>
+          </label>
+          <button
+            type="button"
+            onClick={enregistrerSecteur}
+            disabled={secteurEnCours || secteurChoisi === secteurActif}
+            style={styles.submitBtn}
+          >
+            {secteurEnCours ? t("etab_secteur_enregistrement") : t("etab_secteur_enregistrer")}
+          </button>
+        </div>
+        <p style={styles.postesNote}>
+          {t("etab_type_note", { nb: postesDuSecteur(secteurChoisi).length, secteur: t(`secteur_${secteurChoisi}`) })}
+        </p>
+        {secteurMsg && (
+          <div style={{ ...styles.confirmMsg, ...(secteurMsg.type === "ko" ? styles.erreurLocale : {}) }}>
+            {secteurMsg.texte}
+          </div>
+        )}
+      </div>
+
       <div style={styles.card}>
         <div style={styles.cardHeader}>
           <div>
@@ -2488,7 +2647,9 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
 }
 
 function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
-  const categories = categoriesDuSecteur(secteur);
+  const secteurActif = secteurNormalise(secteur);
+  const categories = categoriesDuSecteur(secteurActif);
+  const postes = postesDuSecteur(secteurActif);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const transactionsVisibles = limite30j
@@ -2577,7 +2738,12 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
                         <div style={{ ...styles.txDot, background: tx.type === "vente" ? "#186B4E" : "#B4432A" }} />
                         <div style={styles.txInfo}>
                           <div style={styles.txLabel}>
-                            {tx.type === "vente" ? t("hist_vente") : categories.find((c) => c.id === tx.categorie)?.label || t("hist_depense")}
+                            {tx.type === "vente"
+                              ? t("hist_vente")
+                              : postes.find((p) => p.id === tx.poste_id)?.label ||
+                                posteDeDesignation(secteurActif, designationTransaction(tx))?.label ||
+                                categories.find((c) => c.id === tx.categorie)?.label ||
+                                t("hist_depense")}
                           </div>
                           {tx.note && <div style={styles.txNote}>{tx.note}</div>}
                         </div>
@@ -3142,6 +3308,23 @@ const styles = {
   },
 
   /* --- Dépenses réelles par poste d'activité --- */
+  basculeRepartition: { display: "flex", gap: 6, marginTop: 10, flexWrap: "wrap" },
+  basculeBtn: {
+    padding: "6px 11px",
+    borderRadius: 20,
+    border: "1px solid #E4DDD0",
+    background: "#FFFEFB",
+    color: "#5C5748",
+    fontSize: 11.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  basculeBtnActif: {
+    background: "#16213E",
+    borderColor: "#16213E",
+    color: "#F3D9A0",
+  },
   postesGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
