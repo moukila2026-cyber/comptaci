@@ -8,7 +8,7 @@ import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
-import PaiementWave, { PRIX_PLANS, JOURS_ESSAI } from "./PaiementWave.jsx";
+import PaiementSasPay, { PRIX_PLANS, JOURS_ESSAI } from "./PaiementSasPay.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
 import {
   SECTEURS_IDS,
@@ -2506,7 +2506,7 @@ export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCo
 
         <p style={styles.aboIntro}>{t("abo_notice")}</p>
 
-        <PaiementWave
+        <PaiementSasPay
           etablissement={etablissement}
           t={t}
           planInitial={planEffectif || "starter"}

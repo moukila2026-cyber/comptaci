@@ -163,7 +163,7 @@ J0 ──────── 14 jours d'essai gratuit (0 FCFA) ──────
 
 ### Fenêtre de l'offre
 
-Front (`PaiementWave.jsx` — `fondateurVerrouille()`) et SQL partagent la même règle :
+Front (`PaiementSasPay.jsx` — `fondateurVerrouille()`) et SQL partagent la même règle :
 
 ```sql
 now() < date_creation + make_interval(days => coalesce(essai_jours, 14))
@@ -174,7 +174,7 @@ Migration à exécuter une fois : **`supabase-types-etablissements.sql`**
 
 ### Où la règle est appliquée
 
-1. **`PaiementWave.jsx`** — constantes `PRIX_PLANS`, `PRIX_FONDATEUR = 7000`,
+1. **`PaiementSasPay.jsx`** — constantes `PRIX_PLANS`, `PRIX_FONDATEUR = 7000`,
    `LIMITE_FONDATEURS = 100`, `JOURS_FONDATEUR = 14` (= `JOURS_ESSAI`), `AVANTAGES_PLANS` (6 clés
    `abo_feat_*` par forfait) ; fonctions exportées `estFondateur()`, `finEssai()`,
    `fondateurVerrouille()`, `tarifFondateurActif()`, `resteAvantDeblocage()`,
@@ -384,7 +384,7 @@ Deux fichiers ont été ajoutés :
 | `theme.js` | Miroir **JavaScript** de la palette (les graphiques SVG / Recharts n'acceptent pas `var(--…)`). Contient aussi `COULEURS_GRAPH`, `VOILE_BANNIERE`, `OMBRE*`. |
 
 **Toutes les couleurs** des fichiers `App.jsx`, `AuthScreen.jsx`,
-`ScoreCredit.jsx`, `FacturationFNE.jsx`, `PaiementWave.jsx` et
+`ScoreCredit.jsx`, `FacturationFNE.jsx`, `PaiementSasPay.jsx` et
 `PaiementEnAttente.jsx` pointent désormais vers les variables CSS
 (`color: "var(--cc-texte)"`). Résultat : **pour changer l'ambiance de
 l'application, il suffit de retoucher le bloc `:root` de `ui.css`** — aucune
@@ -426,3 +426,75 @@ Abonnement / type, Stock / import des postes.
 > Note : la page d'accueil publique (`index.html`) conserve volontairement sa
 > charte claire. Dis-moi si tu veux qu'elle passe elle aussi en sombre pour
 > être cohérente avec l'application.
+
+---
+
+## NOUVEAU (suite) — SasPay : les 3 liens de paiement + webhook d'activation
+
+### 14. Un lien SasPay par forfait
+
+Les liens créés sur app.saspay.me sont **déjà intégrés** dans `saspay.js`
+(aucune variable d'environnement à renseigner pour qu'ils fonctionnent) :
+
+| Forfait | Lien de paiement | Tarif |
+| --- | --- | --- |
+| Starter | https://link.saspay.me/vmtjcwrgafk | 7 000 FCFA / mois |
+| Pro | https://link.saspay.me/vrgqoaut3ba | 10 000 FCFA / mois |
+| Entreprise | https://link.saspay.me/zszja0kudmy | 20 000 FCFA / mois |
+
+- Le montant est **fixé par le lien SasPay** : l'application n'ajoute donc que
+  les paramètres de suivi (référence, établissement, téléphone du payeur).
+- Ils restent surchargeables par `VITE_SASPAY_URL_STARTER` / `_PRO` /
+  `_ENTREPRISE` (pratique pour tester avec des liens « test »).
+- Référence envoyée : `CCI-<6 premiers caractères de l'ID>-<AAAAMM>-<forfait>`
+  — le dernier segment est relu par le webhook pour créditer le bon forfait.
+
+### 15. La page « paiement Wave » est remplacée
+
+- `PaiementWave.jsx` → **supprimé**.
+- `PaiementSasPay.jsx` → le reprend intégralement (offre fondateurs, choix du
+  forfait, comparatif, confirmation, secours WhatsApp) en affichant désormais
+  **le lien SasPay du forfait sélectionné** (cliquable + copiable) et en
+  basculant sur le bloc « j'ai payé » dès que le paiement est lancé.
+- `App.jsx` (page Abonnement) et `PaiementEnAttente.jsx` utilisent le nouveau
+  composant.
+- 4 nouvelles clés de traduction FR/EN/AR (`paiement_saspay_lien`,
+  `paiement_saspay_copier_lien`, `paiement_saspay_lien_copie`,
+  `paiement_saspay_apres_paiement`).
+
+### 16. Webhook SasPay : activation automatique de l'abonnement
+
+**Fichier** : `supabase/functions/webhook-saspay/index.ts` (Edge Function Deno).
+Le secret `SASPAY_WEBHOOK_SECRET` est **déjà configuré sur Supabase** : la
+fonction le lit elle-même via `Deno.env.get`, il n'y a rien à coller dans le
+code ni dans `.env`.
+
+Ce qu'elle fait :
+1. vérifie la signature **HMAC-SHA256** du corps brut (en-tête
+   `x-saspay-signature`, formats `sha256=…` ou hex acceptés), comparaison à
+   temps constant ;
+2. lit un payload souple (plusieurs noms de champs reconnus : SasPay n'a pas
+   encore publié son format définitif) ;
+3. appelle la RPC SQL `traiter_paiement_saspay` qui, **de façon idempotente** :
+   - retrouve l'établissement (`business_id` → demande en attente → préfixe de
+     la référence `CCI-XXXXXX`) ;
+   - journalise la notification dans `paiements_saspay` ;
+   - **active l'abonnement** (`abonnement_actif = true`, `plan`, `abonne_le`,
+     `abonnement_expire_le = now() + 30 jours`) ;
+   - clôture la demande manuelle correspondante dans `demandes_paiement`.
+
+**Mise en route (3 commandes)** :
+
+```bash
+supabase secrets set SASPAY_WEBHOOK_SECRET=xxxxx      # déjà fait
+supabase functions deploy webhook-saspay --no-verify-jwt
+# puis, dans le tableau de bord SasPay :
+#   URL du webhook = https://<project-ref>.supabase.co/functions/v1/webhook-saspay
+```
+
+**Migration SQL à exécuter** : `supabase-saspay-webhook.sql`
+(table `paiements_saspay`, colonnes `abonne_le` / `abonnement_expire_le`,
+fonctions `resoudre_etablissement_par_prefixe` et `traiter_paiement_saspay`,
+vue de contrôle `v_paiements_saspay`).
+
+Contrôle rapide : `select * from v_paiements_saspay limit 20;`

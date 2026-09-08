@@ -214,6 +214,11 @@ const dict = {
     paiement_saspay_indispo_titre: "Paiement en cours de configuration",
     paiement_saspay_indispo_texte: "Le lien de paiement SasPay n'est pas encore renseigné. Contactez-nous sur WhatsApp pour régler votre abonnement.",
     paiement_saspay_erreur: "Impossible d'ouvrir le paiement SasPay.",
+    paiement_saspay_lien: "Lien de paiement SasPay",
+    paiement_saspay_copier_lien: "Copier le lien",
+    paiement_saspay_lien_copie: "Lien copié !",
+    paiement_saspay_apres_paiement:
+      "Paiement lancé : réglez sur SasPay, puis confirmez ci-dessous. L'abonnement s'active automatiquement dès la notification SasPay reçue (ou après validation par notre équipe).",
     paiement_copier_reference: "Copier la référence",
 
     // Tableau de bord
@@ -717,6 +722,11 @@ const dict = {
     paiement_saspay_indispo_titre: "Payment being set up",
     paiement_saspay_indispo_texte: "The SasPay payment link is not configured yet. Contact us on WhatsApp to pay your subscription.",
     paiement_saspay_erreur: "Could not open the SasPay payment.",
+    paiement_saspay_lien: "SasPay payment link",
+    paiement_saspay_copier_lien: "Copy link",
+    paiement_saspay_lien_copie: "Link copied!",
+    paiement_saspay_apres_paiement:
+      "Payment started: complete it on SasPay, then confirm below. Your subscription activates automatically as soon as SasPay notifies us (or after our team validates it).",
     paiement_copier_reference: "Copy reference",
 
     dash_ca: "Revenue",
@@ -1198,6 +1208,11 @@ const dict = {
     paiement_saspay_indispo_titre: "الدفع قيد الإعداد",
     paiement_saspay_indispo_texte: "لم يتم إعداد رابط الدفع SasPay بعد. تواصلوا معنا عبر واتساب لتسوية اشتراككم.",
     paiement_saspay_erreur: "تعذّر فتح صفحة الدفع SasPay.",
+    paiement_saspay_lien: "رابط الدفع SasPay",
+    paiement_saspay_copier_lien: "نسخ الرابط",
+    paiement_saspay_lien_copie: "تم نسخ الرابط!",
+    paiement_saspay_apres_paiement:
+      "تم بدء الدفع: أكملوا العملية على SasPay ثم أكّدوا أدناه. يُفعَّل الاشتراك تلقائياً عند وصول إشعار SasPay (أو بعد تحقّق فريقنا).",
     paiement_copier_reference: "نسخ المرجع",
 
     dash_ca: "رقم الأعمال",

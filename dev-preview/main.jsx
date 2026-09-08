@@ -12,6 +12,7 @@ import ScoreCredit from "../ScoreCredit.jsx";
 import FacturationFNE from "../FacturationFNE.jsx";
 import { traducteur } from "../i18n.js";
 import { Abonnement, Caisse, Dashboard, Historique, Saisie, Stock } from "../App.jsx";
+import PaiementSasPay from "../PaiementSasPay.jsx";
 import { SECTEURS_IDS, postesDuSecteur, posteDeDesignation } from "../secteurs.js";
 
 const t = traducteur("fr");
@@ -195,6 +196,7 @@ const VUES = [
   { id: "fne", label: "Facturation FNE" },
   { id: "secteurs", label: "Types d'établissement" },
   { id: "abonnement", label: "Abonnement / type" },
+  { id: "paiement", label: "Paiement SasPay" },
   { id: "stock", label: "Stock / import des postes" },
 ];
 
@@ -267,6 +269,9 @@ function Application() {
           enEssai={false}
           t={t}
         />
+      )}
+      {vue === "paiement" && (
+        <PaiementSasPay etablissement={ETABLISSEMENT} t={t} planActuel="pro" planInitial="pro" />
       )}
       {vue === "secteurs" && <ApercuSecteurs />}
       {vue === "stock" && (

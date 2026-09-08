@@ -1,20 +1,38 @@
+/**
+ * PaiementSasPay.jsx — Paiement des forfaits ComptaCi par lien SasPay
+ * ---------------------------------------------------------------------------
+ * Remplace l'ancienne page « Paiement Wave » (supprimée). SasPay est un
+ * agrégateur : un seul lien encaisse Wave, Orange Money, MTN MoMo, Moov et la
+ * carte bancaire. Chaque forfait a son lien dédié (voir saspay.js) :
+ *
+ *   Starter    → https://link.saspay.me/vmtjcwrgafk
+ *   Pro        → https://link.saspay.me/vrgqoaut3ba
+ *   Entreprise → https://link.saspay.me/zszja0kudmy
+ *
+ * Parcours : choix du forfait → « Payer maintenant » (ouvre le lien SasPay du
+ * forfait) → confirmation → activation automatique par le webhook SasPay
+ * (`supabase/functions/webhook-saspay`) ou validation manuelle par l'admin.
+ */
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import {
   SASPAY_CONFIGURE,
   SASPAY_MOYENS,
+  LIENS_PAIEMENT,
+  lienPlanConfigure,
+  lienPaiementSasPay,
   refPaiement,
   ouvrirPaiementSasPay,
   WHATSAPP_SUPPORT,
 } from "./saspay.js";
 
 /** Paiement : lien SasPay (Mobile Money + carte). Aucun QR code. */
-export { WHATSAPP_SUPPORT };
+export { WHATSAPP_SUPPORT, LIENS_PAIEMENT };
 
 /**
  * Tarifs officiels ComptaCi (FCFA / mois / établissement) :
  *  - Starter  : 7 000  → c'est aussi le tarif fondateur verrouillé
- *  - Pro      : 10 000 (prix de référence Wave)
+ *  - Pro      : 10 000 (prix public)
  *  - Entreprise : 20 000
  */
 export const PRIX_PLANS = {
@@ -169,25 +187,25 @@ function notePlan(t, p) {
 
 function messageWhatsApp({ t, etablissement, plan, montant, reference, telephone }) {
   const lignes = [
-    `Bonjour ComptaCi, je confirme mon paiement Wave.`,
+    `Bonjour ComptaCi, je confirme mon paiement SasPay.`,
     `Établissement : ${etablissement?.nom || "—"}`,
     `Plan : ${nomPlan(t, plan)} (${fmt(montant)} FCFA/mois)`,
     telephone ? `Téléphone payeur : ${telephone}` : null,
-    reference ? `Référence Wave : ${reference}` : null,
+    reference ? `Référence SasPay : ${reference}` : null,
     etablissement?.id ? `ID : ${etablissement.id}` : null,
   ].filter(Boolean);
   return lignes.join("\n");
 }
 
 /**
- * Bloc complet : choix du plan → QR Wave → formulaire « j'ai payé ».
+ * Bloc complet : choix du plan → lien SasPay du forfait → « j'ai payé ».
  * Utilisé par l'écran de blocage (essai expiré) et la page Abonnement.
  *
  * Les 3 forfaits sont TOUJOURS affichés. Pendant l'offre fondateurs,
  * Pro et Entreprise sont cadenassés (aria-disabled, clic = explication) ;
  * un minuteur interne les débloque à la fin des 14 jours sans rechargement.
  */
-export default function PaiementWave({
+export default function PaiementSasPay({
   etablissement,
   t,
   planInitial = null,
@@ -205,6 +223,9 @@ export default function PaiementWave({
   const [erreur, setErreur] = useState("");
   const [demande, setDemande] = useState(null);
   const [copieOk, setCopieOk] = useState(false);
+  // Lien SasPay ouvert : on bascule alors sur le bloc « j'ai payé ».
+  const [paiementLance, setPaiementLance] = useState(false);
+  const [lienCopie, setLienCopie] = useState(false);
 
   const fondateur = estFondateur(etablissement);
   const verrouille = fondateurVerrouille(etablissement, maintenant);
@@ -214,6 +235,16 @@ export default function PaiementWave({
   const reste = resteAvantDeblocage(etablissement, maintenant);
   // Référence affichée AVANT paiement : elle est reprise dans la demande.
   const referencePaiement = refPaiement(etablissement, plan);
+  // Lien SasPay du forfait sélectionné (avec la référence en paramètre).
+  const lienDuPlanChoisi =
+    lienPaiementSasPay({
+      montant,
+      plan,
+      etablissement,
+      reference: referencePaiement,
+      telephone: (telephone || "").trim() || null,
+    }) || "";
+  const lienConfigure = lienPlanConfigure(plan);
 
   // Minuteur : rafraîchit l'horloge tant que l'offre fondateurs est en cours.
   useEffect(() => {
@@ -311,7 +342,23 @@ export default function PaiementWave({
       reference: referencePaiement,
       telephone: (telephone || "").trim() || null,
     });
-    if (!ouvert) setErreur(t("paiement_saspay_erreur"));
+    if (!ouvert) {
+      setErreur(t("paiement_saspay_erreur"));
+      return;
+    }
+    setErreur("");
+    setPaiementLance(true);
+  };
+
+  /** Copie le lien de paiement du forfait (utile pour le payer sur un autre appareil). */
+  const copierLien = async () => {
+    try {
+      await navigator.clipboard.writeText(lienDuPlanChoisi);
+      setLienCopie(true);
+      setTimeout(() => setLienCopie(false), 2000);
+    } catch (_) {
+      setLienCopie(false);
+    }
   };
 
   /** Copie la référence de paiement (utile pour le support). */
@@ -425,8 +472,24 @@ export default function PaiementWave({
           — {nomPlan(t, plan)}
         </div>
 
-        {SASPAY_CONFIGURE ? (
+        {lienConfigure ? (
           <>
+            {/* Lien SasPay du forfait : copiable / partageable */}
+            <div style={S.lienBox}>
+              <span style={S.lienLabel}>{t("paiement_saspay_lien")}</span>
+              <a
+                href={lienDuPlanChoisi}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={S.lienValeur}
+              >
+                {lienDuPlanChoisi.replace(/^https?:\/\//, "")}
+              </a>
+              <button type="button" onClick={copierLien} style={S.copyBtn}>
+                {lienCopie ? t("paiement_saspay_lien_copie") : t("paiement_saspay_copier_lien")}
+              </button>
+            </div>
+
             <button
               type="button"
               onClick={payerAvecSasPay}
@@ -435,6 +498,7 @@ export default function PaiementWave({
             >
               {t("paiement_saspay_cta")}
             </button>
+
             <div style={S.saspayMoyens}>
               {SASPAY_MOYENS.map((m) => (
                 <span key={m} style={S.saspayChip}>
@@ -442,6 +506,7 @@ export default function PaiementWave({
                 </span>
               ))}
             </div>
+
             <div style={S.saspayRef}>
               <span>
                 {t("paiement_reference")} : <strong>{referencePaiement}</strong>
@@ -450,7 +515,12 @@ export default function PaiementWave({
                 {copieOk ? t("paiement_numero_copie") : t("paiement_copier_reference")}
               </button>
             </div>
-            <p style={S.scanHint}>{t("paiement_saspay_hint")}</p>
+
+            <p style={S.scanHint}>
+              {paiementLance
+                ? t("paiement_saspay_apres_paiement")
+                : t("paiement_saspay_hint")}
+            </p>
           </>
         ) : (
           <>
@@ -669,6 +739,27 @@ const S = {
     fontWeight: 700,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
+  },
+  lienBox: {
+    display: "flex",
+    alignItems: "center",
+    flexWrap: "wrap",
+    gap: 8,
+    width: "100%",
+    maxWidth: 420,
+    justifyContent: "center",
+    background: "var(--cc-surface-2)",
+    border: "1px dashed var(--cc-bord-fort)",
+    borderRadius: 10,
+    padding: "9px 11px",
+  },
+  lienLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)" },
+  lienValeur: {
+    fontSize: 12.5,
+    fontWeight: 600,
+    color: "var(--cc-or)",
+    textDecoration: "none",
+    wordBreak: "break-all",
   },
   saspayMoyens: {
     display: "flex",

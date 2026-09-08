@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import PaiementWave, { JOURS_ESSAI, PRIX_FONDATEUR } from "./PaiementWave.jsx";
+import PaiementSasPay, { JOURS_ESSAI, PRIX_FONDATEUR } from "./PaiementSasPay.jsx";
 import { C } from "./theme.js";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
@@ -93,7 +93,7 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
           </div>
         )}
 
-        <PaiementWave
+        <PaiementSasPay
           etablissement={etablissement}
           t={t}
           planInitial={demandeExistante?.plan || etablissement?.plan || "starter"}
