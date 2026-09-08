@@ -1,3 +1,4 @@
+import { dureeEssai, finEssai } from "./essai.js";
 import React, { useState, useEffect, useMemo } from "react";
 import {
   AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
@@ -17,8 +18,10 @@ import {
   secteursTraduits,
   categoriesDuSecteur,
   postesDuSecteur,
+  produitsDuSecteur,
+  libellePoste,
+  categoriesHistoriquesDuSecteur,
   posteDeDesignation,
-  categorieSuggeree,
   seuilsDuSecteur,
   margeCibleDuSecteur,
   natureCategorie,
@@ -491,11 +494,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   /**
-   * Importe les postes de dépense de l'activité dans le stock.
-   * Un nouvel établissement démarre sinon avec un stock vide : importer les
-   * 20+ postes de son métier (biscuits, eau de javel… pour une boutique) lui
-   * donne une liste prête à l'emploi, à compléter avec les quantités réelles.
-   * Les postes déjà présents ne sont jamais dupliqués.
+   * Importe uniquement les références stockables de l'activité, pas les frais.
+   * Les quantités restent à zéro jusqu'à la saisie des quantités réelles.
+   * Les produits déjà présents ne sont jamais dupliqués.
    */
   const importerPostesStock = async () => {
     if (!etablissement?.id) return { ok: false, ajoutes: 0 };
@@ -503,7 +504,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
     const existants = new Set(
       produits.map((p) => String(p.designation || "").trim().toLowerCase())
     );
-    const aCreer = postesDuSecteur(secteurActif)
+    const aCreer = produitsDuSecteur(secteurActif)
       .filter((p) => !existants.has(p.label.toLowerCase()))
       .map((p) => ({
         etablissement_id: etablissement.id,
@@ -718,9 +719,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
     );
   }
 
-  const essaiExpireLe = etablissement
-    ? new Date(new Date(etablissement.date_creation).getTime() + (Number(etablissement.essai_jours) || JOURS_ESSAI) * 24 * 60 * 60 * 1000)
-    : null;
+  const essaiExpireLe = finEssai(etablissement);
   const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
   const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
 
@@ -766,7 +765,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
           setLangue={setLangue}
           t={t}
         />
-        {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={etablissement?.essai_jours} t={t} />}
+        {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={dureeEssai(etablissement)} t={t} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {!chargement && <PageBanner vue={vue} t={t} />}
         {chargement ? (
@@ -781,7 +780,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             t={t}
           />
         ) : vue === "saisie" ? (
-          <Saisie onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
+          <Saisie key={`${etablissement?.id}:${etablissement?.secteur}`} onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
         ) : vue === "stock" ? (
           <Stock
             produits={produits}
@@ -1628,7 +1627,7 @@ function BarreProgression({ pourcentage, couleur = "var(--cc-accent)", fond = "v
 export function Saisie({ onAdd, secteur, etablissement, t }) {
   const secteurActif = secteurNormalise(secteur);
   const categories = categoriesDuSecteur(secteurActif);
-  // Les dépenses types du métier (20 minimum) : elles alimentent les
+  // Les 20 frais de fonctionnement du métier : ils alimentent les
   // suggestions de saisie et la répartition du tableau de bord.
   const postes = postesDuSecteur(secteurActif);
   const [type, setType] = useState("vente");
@@ -1643,6 +1642,17 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
   const [enCours, setEnCours] = useState(false);
   const [dernierRecu, setDernierRecu] = useState(null);
 
+  const changerType = (nouveauType) => {
+    if (nouveauType === type) return;
+    setType(nouveauType);
+    setDesignation("");
+    setPosteId("");
+    setCategorie(categories[0].id);
+    setQuantite("1");
+    setPrixUnitaire("");
+    setErreurLocale("");
+  };
+
   const totalCalcule = (parseFloat(quantite) || 0) * (parseFloat(prixUnitaire) || 0);
 
   const submit = async (e) => {
@@ -1653,11 +1663,14 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
     const infosRecu = { type, designation: designation.trim(), quantite, prixUnitaire, total: totalCalcule, date };
     // Une dépense rattachée à un poste connu garde son poste : la répartition
     // du tableau de bord est alors exacte, même après rechargement.
-    const posteDetecte = type === "depense" ? posteId || posteDeDesignation(secteurActif, designation)?.id || null : null;
+    const posteSuggere = postes.find((p) => p.id === posteId) || posteDeDesignation(secteurActif, designation);
+    // Une catégorie changée manuellement ne doit pas être écrasée à l'enregistrement.
+    const posteDetecte = type === "depense" && posteSuggere?.categorie === categorie
+      ? posteSuggere.id : null;
     const succes = await onAdd({
       type,
       montant: totalCalcule,
-      categorie: type === "depense" ? (postes.find((p) => p.id === posteDetecte)?.categorie || categorie) : "vente",
+      categorie: type === "depense" ? categorie : "vente",
       poste_id: posteDetecte,
       note: [designation.trim(), `Qté: ${quantite || 0}`, `PU: ${fmt(parseFloat(prixUnitaire) || 0)} FCFA`].filter(Boolean).join(" — "),
       date,
@@ -1725,14 +1738,14 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
           <div style={styles.toggleRow}>
             <button
               type="button"
-              onClick={() => setType("vente")}
+              onClick={() => changerType("vente")}
               style={{ ...styles.toggleBtn, ...(type === "vente" ? styles.toggleBtnActiveVente : {}) }}
             >
               {t("saisie_vente")}
             </button>
             <button
               type="button"
-              onClick={() => setType("depense")}
+              onClick={() => changerType("depense")}
               style={{ ...styles.toggleBtn, ...(type === "depense" ? styles.toggleBtnActiveDepense : {}) }}
             >
               {t("saisie_depense")}
@@ -1752,12 +1765,13 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
                 setDesignation(e.target.value);
                 // Saisie libre : on retrouve le poste correspondant pour
                 // classer la dépense automatiquement.
-                const trouve = posteDeDesignation(secteurActif, e.target.value);
+                const trouve = type === "depense" ? posteDeDesignation(secteurActif, e.target.value) : null;
                 if (trouve) {
                   setPosteId(trouve.id);
                   setCategorie(trouve.categorie);
                 } else {
                   setPosteId("");
+                  setCategorie("autre");
                 }
               }}
               style={styles.input}
@@ -1776,8 +1790,9 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
               <span style={styles.fieldLabel}>
                 {t("saisie_poste_rapide")} — {t(`secteur_${secteurActif}`)}
               </span>
+              <div style={styles.cardCaption}>{t("saisie_poste_aide")}</div>
               <div style={styles.postesRapides}>
-                {postes.slice(0, 8).map((p) => (
+                {postes.map((p) => (
                   <button
                     key={p.id}
                     type="button"
@@ -1785,6 +1800,8 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
                       setDesignation(p.label);
                       setPosteId(p.id);
                       setCategorie(p.categorie);
+                      setQuantite("1");
+                      setPrixUnitaire("");
                     }}
                     style={{
                       ...styles.posteRapideBtn,
@@ -1801,7 +1818,10 @@ export function Saisie({ onAdd, secteur, etablissement, t }) {
           {type === "depense" && (
             <label style={styles.field}>
               <span style={styles.fieldLabel}>{t("saisie_categorie")}</span>
-              <select value={categorie} onChange={(e) => setCategorie(e.target.value)} style={styles.select}>
+              <select value={categorie} onChange={(e) => {
+                setCategorie(e.target.value);
+                setPosteId("");
+              }} style={styles.select}>
                 {categories.map((c) => (
                   <option key={c.id} value={c.id}>{c.label}</option>
                 ))}
@@ -2085,7 +2105,7 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
   const [importMsg, setImportMsg] = useState(null);
 
   const secteurActif = secteurNormalise(secteur);
-  const postes = postesDuSecteur(secteurActif);
+  const postes = produitsDuSecteur(secteurActif);
   const existants = new Set(
     produits.map((p) => String(p.designation || "").trim().toLowerCase())
   );
@@ -2199,7 +2219,7 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
           </div>
         </div>
 
-        {/* Import en un clic des postes de dépense de l'activité */}
+        {/* Import des produits stockables, séparés des frais de fonctionnement */}
         <div style={styles.importPostes}>
           <div style={{ flex: "1 1 260px" }}>
             <div style={styles.importTitre}>{t("stock_import_titre")}</div>
@@ -2739,8 +2759,7 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
 
 export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   const secteurActif = secteurNormalise(secteur);
-  const categories = categoriesDuSecteur(secteurActif);
-  const postes = postesDuSecteur(secteurActif);
+  const categories = categoriesHistoriquesDuSecteur(secteurActif);
   const limite30j = plan !== "pro";
   const seuil = Date.now() - 30 * 24 * 60 * 60 * 1000;
   const transactionsVisibles = limite30j
@@ -2831,7 +2850,7 @@ export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t 
                           <div style={styles.txLabel}>
                             {tx.type === "vente"
                               ? t("hist_vente")
-                              : postes.find((p) => p.id === tx.poste_id)?.label ||
+                              : libellePoste(secteurActif, tx.poste_id) ||
                                 posteDeDesignation(secteurActif, designationTransaction(tx))?.label ||
                                 categories.find((c) => c.id === tx.categorie)?.label ||
                                 t("hist_depense")}
@@ -2961,7 +2980,7 @@ function buildTrend(transactions) {
 function buildCategorieBreakdown(transactions, secteur) {
   const now = new Date();
   const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
-  return categoriesDuSecteur(secteur).map((c) => ({
+  return categoriesHistoriquesDuSecteur(secteur).map((c) => ({
     id: c.id,
     label: c.label,
     value: transactions
@@ -2971,8 +2990,8 @@ function buildCategorieBreakdown(transactions, secteur) {
 }
 
 /**
- * Répartition des dépenses par POSTE RÉEL de l'activité (les 20+ dépenses
- * types du métier : « biscuits », « eau de javel », « faux ongles »…).
+ * Répartition selon les 20 frais de fonctionnement suggérés pour l'activité.
+ * Les anciennes dépenses hors catalogue restent incluses dans Autre / non classé.
  *
  * Une dépense est rattachée à son poste :
  *   1. par l'identifiant de poste enregistré (`poste_id`) si la colonne existe,

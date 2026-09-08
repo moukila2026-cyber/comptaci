@@ -138,11 +138,13 @@ begin
       declare
         compte_fondateurs int;
       begin
+        perform pg_advisory_xact_lock(hashtext(''comptaci_offre_fondateur''));
         select count(*) into compte_fondateurs from etablissements where est_fondateur = true;
         -- 14 jours d''essai gratuit (0 FCFA) pour tout le monde.
         new.essai_jours := 14;
         if compte_fondateurs < 100 then
           new.est_fondateur := true;
+          new.plan := ''starter'';
           new.tarif_verrouille := 7000;
         else
           new.est_fondateur := false;

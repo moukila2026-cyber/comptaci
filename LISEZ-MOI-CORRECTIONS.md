@@ -1,5 +1,43 @@
 # ComptaCi — Corrections & améliorations (à lire avant déploiement)
 
+## Correctif dépenses par activité — 20 suggestions, séparées du stock
+
+- **200 suggestions** : exactement 20 frais de fonctionnement pour chacun des
+  10 types, définis dans `depensesActivites.js`.
+- Les 20 boutons et l'autocomplétion sont disponibles automatiquement dans
+  **Saisie du jour → Dépense**, suivant le type de l'établissement actif.
+- Un clic remplit le libellé, la catégorie et la quantité 1. Le montant reste
+  vide : saisir le paiement réel puis enregistrer, sans écriture fictive.
+- Les produits à vendre et consommables stockables utilisent un catalogue
+  distinct (`produitsDuSecteur`). Le stock n'importe plus de loyers/salaires.
+- Les achats réels de marchandises restent saisissables librement dans leur
+  catégorie ; supprimer des suggestions ne supprime pas une charge comptable.
+- Les anciens identifiants et libellés sont conservés dans `anciensPostes.js`
+  pour l'historique. Aucun montant, stock ou enregistrement existant n'est modifié.
+  Les anciennes dépenses hors nouveau catalogue restent dans « Autre / non classé »
+  pour la répartition par poste, et gardent leur catégorie historique.
+- **Déploiement de l'application uniquement** : aucune migration SQL supplémentaire
+  n'est nécessaire pour ce correctif de catalogue.
+- Vérifications : `npm test` (catalogues et interactions du composant Saisie),
+  `npm run build`.
+
+## Correctif essai fondateurs — 14 jours
+
+Après le déploiement de l'application, exécuter **`supabase-essai-14jours.sql`**
+dans **Supabase → SQL Editor**, sur une base déjà initialisée avec le setup final.
+Ce correctif dédié synchronise les nouvelles inscriptions et les comptes existants
+avec l'essai de 14 jours. Il conserve la date de création (pas de remise à zéro),
+les abonnements payés et les durées supérieures à 14 jours. Il peut être relancé.
+La limite de l'offre reste fixée à **100 établissements**, avec verrouillage contre
+les inscriptions simultanées. Ne pas réexécuter un ancien script d'essai ensuite.
+
+L'application prend également en charge les anciennes valeurs de 3/7 jours dès
+son déploiement : bandeau commun à tous les onglets, accès, compte à rebours,
+choix des forfaits et score crédit utilisent une durée commune d'au moins 14 jours.
+Exemple : **6 j 8 h** restantes auparavant deviennent **13 j 8 h** au même instant.
+
+Vérifications : `node --test tests/essai.test.js` et `npm run build`.
+
 ## 1) ÉTAPE OBLIGATOIRE — corriger la base de données
 
 Tous les bugs signalés (ajout de produit en stock impossible, erreur à la
@@ -225,22 +263,21 @@ Le menu déroulant « Créer un établissement » propose désormais **10 types*
 
 | Identifiant | Libellé | Postes de dépense |
 |---|---|---|
-| `restaurant` | Restaurant | 22 |
-| `bar` | Bar | 21 |
-| `maquis` | Maquis | 21 |
-| `hotel` | Hôtel | 21 |
-| `quincaillerie` | Quincaillerie | 22 |
-| `boutique` | Boutique (épicerie / supérette) | 27 |
-| `salon_beaute` | Salon de coiffure et beauté | 25 |
-| `accessoires_telephone` | Boutique d'accessoires de téléphone | 21 |
-| `vetements` | Boutique de vêtements | 21 |
-| `pharmacie` | Pharmacie | 21 |
+| `restaurant` | Restaurant | 20 |
+| `bar` | Bar | 20 |
+| `maquis` | Maquis | 20 |
+| `hotel` | Hôtel | 20 |
+| `quincaillerie` | Quincaillerie | 20 |
+| `boutique` | Boutique (épicerie / supérette) | 20 |
+| `salon_beaute` | Salon de coiffure et beauté | 20 |
+| `accessoires_telephone` | Boutique d'accessoires de téléphone | 20 |
+| `vetements` | Boutique de vêtements | 20 |
+| `pharmacie` | Pharmacie | 20 |
 
-Chaque type porte **au moins 20 postes de dépense réels** : biscuits, eau de
-javel, savon, bonbons, yaourt, bouteille d'eau 5 L… pour une boutique ; faux
-ongles, faux cils, vernis, perruques… pour un salon. La section
-« Dépenses réelles de votre activité » du tableau de bord n'affiche **que** les
-postes du type choisi à l'inscription.
+Chaque type propose désormais **20 frais de fonctionnement** : loyer,
+salaires, factures, entretien, transport et prestations adaptés au métier.
+Les biscuits, médicaments, vêtements, ciment et autres marchandises sont
+séparés dans le catalogue de stock, pas dans les suggestions de dépenses.
 
 > « La boutique de Diallo » est un **nom** d'établissement, pas un type : c'est
 > une boutique (épicerie / supérette), elle hérite donc de la liste ci-dessus.
@@ -331,19 +368,19 @@ métier.
 
 ## NOUVEAU (suite) — Stock pré-rempli et landing page à jour
 
-### 7. Import des postes de l'activité dans le stock
+### 7. Import des produits de l'activité dans le stock
 
 Un nouvel établissement démarrait avec un stock vide : il fallait tout saisir à
 la main avant de pouvoir suivre quoi que ce soit.
 
-**Stock → « Importer les postes de votre activité »** crée en un clic les
-postes manquants du type d'établissement (quantité 0, seuil d'alerte 5). Pour
-un salon de coiffure, on obtient immédiatement les 25 postes (faux ongles,
+**Stock → « Importer les produits de votre activité »** crée en un clic les
+produits manquants du type d'établissement (quantité 0, seuil d'alerte 5). Pour
+un salon de coiffure, on obtient immédiatement les références stockables (faux ongles,
 vernis, perruques…) ; il ne reste qu'à saisir les quantités réelles.
 
-- les postes déjà présents ne sont **jamais** dupliqués (comparaison sur la
+- les produits déjà présents ne sont **jamais** dupliqués (comparaison sur la
   désignation, insensible à la casse) ;
-- le bandeau affiche le nombre de postes manquants et disparaît quand tout est
+- le bandeau affiche le nombre de produits manquants et disparaît quand tout est
   importé.
 
 ### 8. Landing page (`index.html`)

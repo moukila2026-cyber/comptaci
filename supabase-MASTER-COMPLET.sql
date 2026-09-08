@@ -16,7 +16,7 @@
 --    code_invitation + table membres manquantes
 --  - "Fonctionnalités manquantes" (fournisseurs, caisse) → tables
 --    fournisseurs / sessions_caisse manquantes
---  - Essai gratuit 7 jours + plan Entreprise
+--  - Essai gratuit 14 jours + plan Entreprise
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -58,9 +58,9 @@ alter table etablissements drop constraint if exists etablissements_secteur_chec
 alter table etablissements add constraint etablissements_secteur_check
   check (secteur in ('restauration', 'quincaillerie', 'boutique', 'pharmacie'));
 
--- Offre fondateurs + essai gratuit de 7 jours pour tout le monde
+-- Offre fondateurs + essai gratuit de 14 jours pour tout le monde
 alter table etablissements add column if not exists est_fondateur boolean not null default false;
-alter table etablissements add column if not exists essai_jours integer not null default 7;
+alter table etablissements add column if not exists essai_jours integer not null default 14;
 alter table etablissements add column if not exists tarif_verrouille numeric;
 
 alter table etablissements enable row level security;
@@ -140,7 +140,7 @@ $$;
 grant execute on function public.places_fondateurs_restantes() to anon, authenticated;
 
 -- ------------------------------------------------------------
--- 7) Déclencheur : essai gratuit 7 jours pour tous + offre fondateurs
+-- 7) Déclencheur : essai gratuit 14 jours pour tous + offre fondateurs
 --    (100 premiers établissements créés, tarif verrouillé à vie)
 -- ------------------------------------------------------------
 create or replace function public.appliquer_offre_fondateur()
@@ -154,12 +154,12 @@ begin
   perform pg_advisory_xact_lock(hashtext('comptaci_offre_fondateur'));
 
   select count(*) into compte_fondateurs from etablissements where est_fondateur = true;
-  new.essai_jours := 7;
+  new.essai_jours := 14;
   if compte_fondateurs < 100 then
     new.est_fondateur := true;
     new.tarif_verrouille := 7000;
     -- Règle métier : l'offre fondateurs démarre sur le plan STARTER
-    -- (7 000 FCFA) ; le choix de Pro / Entreprise s'ouvre à la fin des 7 jours.
+    -- (7 000 FCFA) ; le choix de Pro / Entreprise s'ouvre à la fin des 14 jours.
     new.plan := 'starter';
   else
     new.est_fondateur := false;
@@ -175,19 +175,20 @@ create trigger trg_offre_fondateur
   for each row execute function public.appliquer_offre_fondateur();
 
 -- ------------------------------------------------------------
--- 7bis) Garde-fou : PENDANT l'offre fondateurs (fenêtre de 7 jours),
+-- 7bis) Garde-fou : PENDANT l'offre fondateurs (fenêtre de 14 jours),
 --       un fondateur reste sur STARTER / 7 000 FCFA. Une fois la
 --       fenêtre passée, il choisit librement Starter, Pro ou
 --       Entreprise : le garde-fou ne s'applique plus.
---       Fenêtre : now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+--       Fenêtre : now() < date_creation + make_interval(days => coalesce(essai_jours, 14))
 -- ------------------------------------------------------------
 create or replace function public.empecher_sortie_plan_fondateur()
 returns trigger language plpgsql
 as $$
 begin
   if new.est_fondateur
+     and not coalesce(new.abonnement_actif, false)
      and now() < coalesce(new.date_creation, now())
-                 + make_interval(days => coalesce(new.essai_jours, 7)) then
+                 + make_interval(days => coalesce(new.essai_jours, 14)) then
     if new.plan is distinct from 'starter' then
       new.plan := 'starter';
     end if;
@@ -212,7 +213,7 @@ update etablissements
        tarif_verrouille = 7000
  where est_fondateur = true
    and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000)
-   and now() < date_creation + make_interval(days => coalesce(essai_jours, 7));
+   and now() < date_creation + make_interval(days => coalesce(essai_jours, 14));
 
 -- ------------------------------------------------------------
 -- 8) Table transactions (ventes / dépenses)
@@ -289,5 +290,5 @@ create policy "acces_sessions_caisse_etablissement" on sessions_caisse for all u
 
 -- ============================================================
 -- FIN DU SCRIPT — Tout est prêt : gérants, mouvements, stock,
--- fournisseurs, caisse, essai 7 jours, plan Entreprise.
+-- fournisseurs, caisse, essai 14 jours, plan Entreprise.
 -- ============================================================

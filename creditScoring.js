@@ -1,3 +1,4 @@
+import { dureeEssai } from "./essai.js";
 /**
  * creditScoring.js — Score de Crédit ComptaCi (Credit Scoring)
  * ---------------------------------------------------------------------------
@@ -237,7 +238,7 @@ export function calculerScoreCredit({
   demandes = [],
   maintenant = new Date(),
 } = {}) {
-  const essaiJours = Number(etablissement?.essai_jours) || 14;
+  const essaiJours = dureeEssai(etablissement);
   const creation = parseDate(etablissement?.date_creation);
 
   /* --- Fenêtre d'observation : 90 jours, bornée par la date de création --- */

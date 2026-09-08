@@ -1,5 +1,5 @@
 alter table etablissements add column if not exists est_fondateur boolean not null default false;
-alter table etablissements add column if not exists essai_jours integer not null default 3;
+alter table etablissements add column if not exists essai_jours integer not null default 14;
 alter table etablissements add column if not exists tarif_verrouille numeric;
 
 -- Applique automatiquement l'offre fondateur aux 100 premiers établissements
@@ -18,14 +18,14 @@ begin
   select count(*) into compte_fondateurs from etablissements where est_fondateur = true;
   if compte_fondateurs < 100 then
     new.est_fondateur := true;
-    new.essai_jours := 7;
+    new.essai_jours := 14;
     new.tarif_verrouille := 7000;
     -- Règle métier : l'offre fondateurs démarre sur le plan STARTER
-    -- (7 000 FCFA) ; le choix de Pro / Entreprise s'ouvre à la fin des 7 jours.
+    -- (7 000 FCFA) ; le choix de Pro / Entreprise s'ouvre à la fin des 14 jours.
     new.plan := 'starter';
   else
     new.est_fondateur := false;
-    new.essai_jours := 3;
+    new.essai_jours := 14;
     new.tarif_verrouille := null;
   end if;
   return new;
@@ -38,19 +38,20 @@ create trigger trg_offre_fondateur
   for each row execute function public.appliquer_offre_fondateur();
 
 -- ------------------------------------------------------------
--- 7bis) Garde-fou : PENDANT l'offre fondateurs (fenêtre de 7 jours),
+-- 7bis) Garde-fou : PENDANT l'offre fondateurs (fenêtre de 14 jours),
 --       un fondateur reste sur STARTER / 7 000 FCFA. Une fois la
 --       fenêtre passée, il choisit librement Starter, Pro ou
 --       Entreprise : le garde-fou ne s'applique plus.
---       Fenêtre : now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+--       Fenêtre : now() < date_creation + make_interval(days => coalesce(essai_jours, 14))
 -- ------------------------------------------------------------
 create or replace function public.empecher_sortie_plan_fondateur()
 returns trigger language plpgsql
 as $$
 begin
   if new.est_fondateur
+     and not coalesce(new.abonnement_actif, false)
      and now() < coalesce(new.date_creation, now())
-                 + make_interval(days => coalesce(new.essai_jours, 7)) then
+                 + make_interval(days => coalesce(new.essai_jours, 14)) then
     if new.plan is distinct from 'starter' then
       new.plan := 'starter';
     end if;
@@ -75,7 +76,7 @@ update etablissements
        tarif_verrouille = 7000
  where est_fondateur = true
    and (plan is distinct from 'starter' or tarif_verrouille is distinct from 7000)
-   and now() < date_creation + make_interval(days => coalesce(essai_jours, 7));
+   and now() < date_creation + make_interval(days => coalesce(essai_jours, 14));
 
 -- Fonction publique pour afficher le nombre de places fondateurs restantes
 -- sur la landing page, sans exposer aucune donnée des établissements.
