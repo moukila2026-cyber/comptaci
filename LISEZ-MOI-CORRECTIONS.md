@@ -365,3 +365,64 @@ Un script de contrôle croise les clés `styles.*` utilisées dans `App.jsx` ave
 celles définies dans l'objet `styles` : **215 utilisées, 0 manquante**. Les
 composants sont également rendus en jsdom (Score de crédit, FNE, Stock,
 Abonnement) : **0 erreur console**.
+
+---
+
+## NOUVEAU (suite) — Interface : thème sombre + vraie feuille de style CSS
+
+### 10. Une feuille de style pour toute l'application (`ui.css`)
+
+Les styles étaient jusqu'ici écrits **en ligne** dans les composants
+(`style={styles.card}`). C'est pratique mais ça interdit les états
+(`:hover`), les animations, le responsive fin et l'impression.
+
+Deux fichiers ont été ajoutés :
+
+| Fichier | Rôle |
+| --- | --- |
+| `ui.css` | **Design system** de l'app : jetons de couleur (`:root`), états des boutons et des champs, animations d'entrée, barres de défilement, infobulles des graphiques, règles responsive, feuille d'impression, classes utilitaires (`.cc-card`, `.cc-badge`, `.cc-btn-or`…). |
+| `theme.js` | Miroir **JavaScript** de la palette (les graphiques SVG / Recharts n'acceptent pas `var(--…)`). Contient aussi `COULEURS_GRAPH`, `VOILE_BANNIERE`, `OMBRE*`. |
+
+**Toutes les couleurs** des fichiers `App.jsx`, `AuthScreen.jsx`,
+`ScoreCredit.jsx`, `FacturationFNE.jsx`, `PaiementWave.jsx` et
+`PaiementEnAttente.jsx` pointent désormais vers les variables CSS
+(`color: "var(--cc-texte)"`). Résultat : **pour changer l'ambiance de
+l'application, il suffit de retoucher le bloc `:root` de `ui.css`** — aucune
+modification de code.
+
+### 11. Thème sombre élégant (bleu nuit + or)
+
+- Fond bleu nuit profond avec deux halos discrets (or en haut à gauche, bleu
+  en bas à droite), filigrane comptable doré (paramétrable dans `wallpaper.js`).
+- Barre latérale en dégradé nuit, **barre dorée** sur la page active.
+- Barre du haut en verre dépoli (`backdrop-filter`).
+- Cartes bordées, ombres douces, **filet doré** en haut de chaque carte,
+  animation d'entrée en cascade.
+- **Bouton principal en dégradé or** (connexion, enregistrer une opération,
+  ouvrir la caisse, payer, générer une facture…) ; boutons secondaires en
+  bleu nuit en relief.
+- Bandeaux photo des pages : voile sombre + titre or pâle.
+- Graphiques, infobulles, listes déroulantes, champs autocomplétés : tout est
+  harmonisé.
+- Accessibilité : anneau de focus doré, `prefers-reduced-motion` respecté,
+  feuille d'impression (factures/attestations) en noir sur blanc.
+
+### 12. Aperçu des pages sans base de données
+
+`/dev-preview/index.html` (après `npm run dev`) affiche **9 onglets** avec des
+données fictives, dans le thème sombre : Tableau de bord, Saisie, Caisse,
+Historique, Score de crédit, Facturation FNE, Types d'établissement,
+Abonnement / type, Stock / import des postes.
+
+### 13. Vérification automatisée
+
+- Contrôle des variables : **39 jetons `--cc-*` définis, 0 référence
+  manquante** dans les composants.
+- Les 10 écrans (Dashboard, Saisie, Caisse, Historique, Stock, Abonnement,
+  Score de crédit, FNE, Connexion, Paiement en attente) sont rendus en jsdom :
+  **0 erreur console**.
+- `npm run build` : OK (~5 s), `ui.css` génère ~11 kB de CSS.
+
+> Note : la page d'accueil publique (`index.html`) conserve volontairement sa
+> charte claire. Dis-moi si tu veux qu'elle passe elle aussi en sombre pour
+> être cohérente avec l'application.

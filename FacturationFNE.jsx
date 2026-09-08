@@ -143,7 +143,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
       `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${t(
         "fne_titre"
       )} — ${f.numero}</title>` +
-        `<style>body{font-family:'Courier New',monospace;color:#16213E;padding:32px;font-size:13px;line-height:1.5}` +
+        `<style>body{font-family:'Courier New',monospace;color:var(--cc-accent);padding:32px;font-size:13px;line-height:1.5}` +
         `pre{white-space:pre-wrap;font-family:'Courier New',monospace;font-size:12.5px}` +
         `img{margin-top:12px}</style></head><body><pre>${corps}</pre>` +
         (qr ? `<img src="${qr}" alt="QR de vérification" width="150" height="150" />` : "") +
@@ -162,9 +162,9 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
   /* ------------------------------------------------------------------ accès */
   if (!aAcces) {
     return (
-      <div style={S.page}>
-        <div style={S.verrouCard}>
-          <Lock size={22} color="#B4801F" />
+      <div className="cc-page cc-page-fne" style={S.page}>
+        <div style={S.verrouCard} className="cc-card">
+          <Lock size={22} color="var(--cc-or)" />
           <div>
             <div style={S.verrouTitre}>{t("fne_reserve_pro")}</div>
             <p style={S.verrouTexte}>{t("fne_reserve_pro_texte")}</p>
@@ -175,10 +175,10 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
   }
 
   return (
-    <div style={S.page}>
+    <div className="cc-page cc-page-fne" style={S.page}>
       {/* Rappel du cadre légal */}
-      <div style={S.cadreCard}>
-        <ShieldCheck size={18} color="#186B4E" />
+      <div style={S.cadreCard} className="cc-card">
+        <ShieldCheck size={18} color="var(--cc-vert)" />
         <div>
           <div style={S.cadreTitre}>{t("fne_cadre_titre")}</div>
           <p style={S.cadreTexte}>{t("fne_cadre_texte")}</p>
@@ -227,7 +227,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
       {/* --------------------------------------------------------- enrôlement */}
       {onglet === "enrolement" && (
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("fne_enrolement_titre")}</div>
@@ -236,8 +236,8 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
             <span
               style={{
                 ...S.statutBadge,
-                background: etat.pretPourApi ? "#E7F5EF" : etat.enrole ? "#FBF3E2" : "#FBEBE4",
-                color: etat.pretPourApi ? "#186B4E" : etat.enrole ? "#8A6420" : "#B4432A",
+                background: etat.pretPourApi ? "var(--cc-vert-fond)" : etat.enrole ? "var(--cc-surface-3)" : "var(--cc-rouge-fond)",
+                color: etat.pretPourApi ? "var(--cc-vert)" : etat.enrole ? "var(--cc-or-clair)" : "var(--cc-rouge)",
               }}
             >
               {etat.pretPourApi ? t("fne_statut_certifie") : etat.enrole ? t("fne_statut_partiel") : t("fne_statut_brouillon")}
@@ -302,7 +302,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
       {/* --------------------------------------------------------- génération */}
       {onglet === "generation" && (
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("fne_generation_titre")}</div>
@@ -358,7 +358,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
                   alt={t("fne_qr_alt")}
                   width={140}
                   height={140}
-                  style={{ marginTop: 10, border: "1px solid #EDE7DA", borderRadius: 8 }}
+                  style={{ marginTop: 10, border: "1px solid var(--cc-bord)", borderRadius: 8 }}
                 />
               )}
               <div style={S.attestationActions}>
@@ -376,7 +376,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
       {/* ------------------------------------------------------------ archive */}
       {onglet === "archive" && (
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("fne_archive_titre")}</div>
@@ -397,7 +397,7 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
                       {f.date_emission} · {fmt(f.montant_ttc)} FCFA ·{" "}
                       <span
                         style={{
-                          color: f.statut === "certifiee" ? "#186B4E" : "#8A6420",
+                          color: f.statut === "certifiee" ? "var(--cc-vert)" : "var(--cc-or-clair)",
                           fontWeight: 700,
                         }}
                       >
@@ -443,43 +443,43 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
 const S = {
   page: { display: "flex", flexDirection: "column", gap: 14, width: "100%" },
-  card: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: 16 },
+  card: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: 16 },
   cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E" },
-  cardCaption: { fontSize: 12, color: "#8A8578", marginTop: 3 },
+  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--cc-texte)" },
+  cardCaption: { fontSize: 12, color: "var(--cc-texte-doux)", marginTop: 3 },
   cadreCard: {
     display: "flex",
     gap: 12,
     alignItems: "flex-start",
-    background: "#E7F5EF",
-    border: "1px solid #B7E0CC",
+    background: "var(--cc-vert-fond)",
+    border: "1px solid var(--cc-vert-bord)",
     borderRadius: 12,
     padding: "12px 14px",
   },
-  cadreTitre: { fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "#186B4E" },
-  cadreTexte: { margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.55, color: "#2F5B48" },
+  cadreTitre: { fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "var(--cc-vert)" },
+  cadreTexte: { margin: "4px 0 0", fontSize: 12.5, lineHeight: 1.55, color: "var(--cc-vert)" },
   verrouCard: {
     display: "flex",
     gap: 12,
     alignItems: "flex-start",
-    background: "#FBF3E2",
-    border: "1px solid #E5C88C",
+    background: "var(--cc-surface-3)",
+    border: "1px solid var(--cc-or-pale)",
     borderRadius: 12,
     padding: "14px 16px",
   },
-  verrouTitre: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#8A6420" },
-  verrouTexte: { margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "#8A6420" },
+  verrouTitre: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "var(--cc-or-clair)" },
+  verrouTexte: { margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "var(--cc-or-clair)" },
   avertissement: {
     display: "flex",
     gap: 10,
     alignItems: "flex-start",
-    background: "#FBEBE4",
-    border: "1px solid #EFC9BA",
+    background: "var(--cc-rouge-fond)",
+    border: "1px solid var(--cc-rouge-bord)",
     borderRadius: 10,
     padding: "10px 12px",
     marginTop: 12,
   },
-  avertissementTexte: { margin: 0, fontSize: 12, lineHeight: 1.55, color: "#B4432A" },
+  avertissementTexte: { margin: 0, fontSize: 12, lineHeight: 1.55, color: "var(--cc-rouge)" },
   onglets: { display: "flex", gap: 8, flexWrap: "wrap" },
   onglet: {
     display: "inline-flex",
@@ -487,37 +487,38 @@ const S = {
     gap: 6,
     padding: "9px 13px",
     borderRadius: 20,
-    border: "1px solid #E4DDD0",
-    background: "#FFFEFB",
-    color: "#5C5748",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte-corps)",
     fontSize: 12.5,
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
-  ongletActif: { background: "#16213E", color: "#F3D9A0", borderColor: "#16213E" },
+  ongletActif: { background: "var(--cc-accent)", color: "var(--cc-or-clair)", borderColor: "var(--cc-or-bord)" },
   statutBadge: { fontSize: 11.5, fontWeight: 700, padding: "4px 10px", borderRadius: 20 },
-  etapes: { margin: "12px 0 0", paddingLeft: 18, fontSize: 12.5, lineHeight: 1.7, color: "#5C5748" },
+  etapes: { margin: "12px 0 0", paddingLeft: 18, fontSize: 12.5, lineHeight: 1.7, color: "var(--cc-texte-corps)" },
   form: { display: "flex", flexDirection: "column", gap: 12, marginTop: 14 },
   field: { display: "flex", flexDirection: "column", gap: 5 },
-  label: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
-  optionnel: { fontWeight: 400, color: "#8A8578" },
+  label: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)" },
+  optionnel: { fontWeight: 400, color: "var(--cc-texte-doux)" },
   input: {
     padding: "10px 12px",
     borderRadius: 9,
-    border: "1px solid #E4DDD0",
+    border: "1px solid var(--cc-bord)",
     fontSize: 14,
     fontFamily: "'Inter', sans-serif",
-    color: "#16213E",
+    color: "var(--cc-texte)",
     outline: "none",
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
   },
   btnPrimaire: {
     padding: "12px 0",
-    borderRadius: 9,
+    borderRadius: 10,
     border: "none",
-    background: "#16213E",
-    color: "#F3D9A0",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
+    boxShadow: "var(--cc-ombre-or)",
     fontSize: 13.5,
     fontWeight: 600,
     cursor: "pointer",
@@ -529,9 +530,9 @@ const S = {
     gap: 6,
     padding: "10px 14px",
     borderRadius: 9,
-    border: "1px solid #D4A24C",
+    border: "1px solid var(--cc-or)",
     background: "transparent",
-    color: "#8A6420",
+    color: "var(--cc-or-clair)",
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
@@ -543,9 +544,9 @@ const S = {
     gap: 6,
     padding: "7px 11px",
     borderRadius: 8,
-    border: "1px solid #E4DDD0",
-    background: "#FFFEFB",
-    color: "#16213E",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte)",
     fontSize: 12,
     fontWeight: 600,
     cursor: "pointer",
@@ -558,34 +559,34 @@ const S = {
     alignItems: "center",
     gap: 10,
     padding: "10px 12px",
-    border: "1px solid #EDE7DA",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 10,
-    background: "#FBF9F4",
+    background: "var(--cc-surface-2)",
     flexWrap: "wrap",
   },
-  venteDesignation: { fontSize: 13, fontWeight: 600, color: "#16213E" },
-  venteMeta: { fontSize: 11.5, color: "#8A8578", marginTop: 3 },
-  lienVerif: { fontSize: 11.5, color: "#B4801F", textDecoration: "underline" },
-  vide: { marginTop: 12, fontSize: 12.5, color: "#8A8578" },
+  venteDesignation: { fontSize: 13, fontWeight: 600, color: "var(--cc-texte)" },
+  venteMeta: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 3 },
+  lienVerif: { fontSize: 11.5, color: "var(--cc-or)", textDecoration: "underline" },
+  vide: { marginTop: 12, fontSize: 12.5, color: "var(--cc-texte-doux)" },
   factureApercu: {
     marginTop: 16,
     padding: 14,
-    border: "1px dashed #D4A24C",
+    border: "1px dashed var(--cc-or)",
     borderRadius: 12,
-    background: "#FFFDF7",
+    background: "var(--cc-surface)",
   },
   preFacture: {
     margin: "10px 0 0",
     fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
     fontSize: 11.5,
     lineHeight: 1.55,
-    color: "#3A3628",
+    color: "var(--cc-texte)",
     whiteSpace: "pre-wrap",
     overflowX: "auto",
   },
   attestationActions: { display: "flex", gap: 8, marginTop: 12, flexWrap: "wrap" },
   message: { padding: "10px 12px", borderRadius: 10, fontSize: 12.5, lineHeight: 1.5 },
-  messageOk: { background: "#E7F5EF", border: "1px solid #B7E0CC", color: "#186B4E" },
-  messageKo: { background: "#FBEBE4", border: "1px solid #EFC9BA", color: "#B4432A" },
-  messageInfo: { background: "#FBF3E2", border: "1px solid #E5C88C", color: "#8A6420" },
+  messageOk: { background: "var(--cc-vert-fond)", border: "1px solid var(--cc-vert-bord)", color: "var(--cc-vert)" },
+  messageKo: { background: "var(--cc-rouge-fond)", border: "1px solid var(--cc-rouge-bord)", color: "var(--cc-rouge)" },
+  messageInfo: { background: "var(--cc-surface-3)", border: "1px solid var(--cc-or-pale)", color: "var(--cc-or-clair)" },
 };

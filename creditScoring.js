@@ -23,9 +23,10 @@ const JOUR_MS = 86400000;
 
 /** Paliers de score, du plus faible au plus élevé. */
 export const PALIERS = [
-  { id: "bronze", min: 0, max: 50, couleur: "#B4801F", couleurFond: "#FBF3E2" },
-  { id: "argent", min: 51, max: 75, couleur: "#5C6B7A", couleurFond: "#EEF1F5" },
-  { id: "or", min: 76, max: 100, couleur: "#186B4E", couleurFond: "#E7F5EF" },
+  // Paliers harmonisés avec le thème sombre (cf. les jetons --cc-* de ui.css).
+  { id: "bronze", min: 0, max: 50, couleur: "#C9A063", couleurFond: "rgba(201,160,99,0.15)" },
+  { id: "argent", min: 51, max: 75, couleur: "#A9B8CC", couleurFond: "rgba(169,184,204,0.14)" },
+  { id: "or", min: 76, max: 100, couleur: "#43C79A", couleurFond: "rgba(67,199,154,0.15)" },
 ];
 
 /** Poids de chaque critère (la somme fait 100). */

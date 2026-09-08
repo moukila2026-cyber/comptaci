@@ -1,5 +1,7 @@
 import React, { useState, useEffect, useMemo } from "react";
-import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
+import {
+  AreaChart, Area, BarChart, Bar, Cell, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid,
+} from "recharts";
 import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info, Award, FileText } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
@@ -22,6 +24,7 @@ import {
   natureCategorie,
 } from "./secteurs.js";
 import { calculerScoreCredit } from "./creditScoring.js";
+import { C, COULEURS_GRAPH } from "./theme.js";
 import ScoreCredit from "./ScoreCredit.jsx";
 import FacturationFNE from "./FacturationFNE.jsx";
 
@@ -29,16 +32,8 @@ import FacturationFNE from "./FacturationFNE.jsx";
 const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
 
 /** Palette des barres de répartition (dépenses par poste sectoriel). */
-const COULEURS_REPARTITION = [
-  "#16213E",
-  "#D4A24C",
-  "#C1502E",
-  "#186B4E",
-  "#6B5B95",
-  "#2E7BA6",
-  "#8A8578",
-  "#B4801F",
-];
+/** Palette des barres : reprise de `theme.js` (miroir de `ui.css`). */
+const COULEURS_REPARTITION = COULEURS_GRAPH;
 
 /** Valeur d'une ligne de stock : quantité disponible × prix unitaire. */
 const valeurStockLigne = (p) =>
@@ -700,7 +695,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   if (verifSession) {
-    return <div style={styles.loading}>Chargement…</div>;
+    return <div className="cc-ecran" style={styles.loading}>Chargement…</div>;
   }
 
   if (modeRecuperation) {
@@ -752,10 +747,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const planEffectif = enEssai ? "starter" : etablissement?.plan;
 
   return (
-    <div style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
+    <div className="cc-app" style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
       <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} t={t} />
-      <div style={styles.main}>
+      <div className="cc-main" style={styles.main}>
         <TopBar
           etablissement={etablissement?.nom || "Mon établissement"}
           onRename={renameEtablissement}
@@ -775,7 +770,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
         {!chargement && <PageBanner vue={vue} t={t} />}
         {chargement ? (
-          <div style={styles.loading}>{t("chargement")}</div>
+          <div className="cc-ecran" style={styles.loading}>{t("chargement")}</div>
         ) : vue === "dashboard" ? (
           <Dashboard
             transactions={transactions}
@@ -873,7 +868,7 @@ function PageBanner({ vue, t }) {
   if (!banner) return null;
   const label = t(`nav_${vue}`);
   return (
-    <div className="page-banner" style={styles.pageBanner}>
+    <div className="page-banner cc-banner" style={styles.pageBanner}>
       <img src={banner.src} alt={label} style={{ ...styles.pageBannerImg, objectPosition: banner.position }} />
       <div style={styles.pageBannerOverlay} />
       <div style={styles.pageBannerLabel}>{label}</div>
@@ -896,12 +891,12 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
 
   if (isMobile) {
     return (
-      <aside style={styles.sidebarMobile}>
+      <aside className="cc-sidebar cc-sidebar-mobile" style={styles.sidebarMobile}>
         <div style={styles.brandRowMobile}>
           <div style={styles.brand}>
             <div style={styles.brandMark}>
               <svg width="18" height="18" viewBox="0 0 20 20" fill="none">
-                <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+                <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
             </div>
             <div style={styles.brandName}>ComptaCi</div>
@@ -918,6 +913,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
               <button
                 key={it.id}
                 onClick={() => setVue(it.id)}
+                className={active ? "cc-nav-item cc-nav-item-mobile cc-nav-item-actif" : "cc-nav-item cc-nav-item-mobile"}
                 style={{ ...styles.navItemMobile, ...(active ? styles.navItemActive : {}) }}
               >
                 <Icon size={16} strokeWidth={2} />
@@ -931,11 +927,11 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
   }
 
   return (
-    <aside style={styles.sidebar}>
+    <aside className="cc-sidebar" style={styles.sidebar}>
       <div style={styles.brand}>
         <div style={styles.brandMark}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M2 14L7 6L12 11L18 3" stroke="#E8B65A" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
         </div>
         <div>
@@ -951,6 +947,7 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
             <button
               key={it.id}
               onClick={() => setVue(it.id)}
+              className={active ? "cc-nav-item cc-nav-item-actif" : "cc-nav-item"}
               style={{ ...styles.navItem, ...(active ? styles.navItemActive : {}) }}
             >
               <Icon size={17} strokeWidth={2} />
@@ -1013,14 +1010,14 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   };
 
   return (
-    <header style={styles.topbar}>
+    <header className="cc-topbar" style={styles.topbar}>
       <div style={styles.topbarLeft}>
-        <Building2 size={16} color="#8A8578" />
+        <Building2 size={16} color="var(--cc-texte-doux)" />
         {mesEtablissements && mesEtablissements.length > 0 ? (
           <div style={{ position: "relative" }}>
             <button style={styles.topbarNameBtn} onClick={() => setSelecteurOuvert((v) => !v)}>
               {etablissement}{role === "gerant" ? ` · ${t("nav_gerant")}` : ""}
-              <ChevronDown size={14} color="#B5AF9E" />
+              <ChevronDown size={14} color="var(--cc-texte-discret)" />
             </button>
             {selecteurOuvert && (
               <div style={styles.etabPopover}>
@@ -1081,7 +1078,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
         ) : estProprietaire ? (
           <button style={styles.topbarNameBtn} onClick={() => setEditing(true)}>
             {etablissement}
-            <ChevronDown size={14} color="#B5AF9E" />
+            <ChevronDown size={14} color="var(--cc-texte-discret)" />
           </button>
         ) : (
           <span style={styles.topbarNameBtn}>{etablissement} · {t("nav_gerant")}</span>
@@ -1128,7 +1125,7 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
   );
 }
 
-function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = [], t }) {
+export function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = [], t }) {
   const stats = useMemo(() => computeStats(transactions), [transactions]);
   const [periode, setPeriode] = useState("mois");
   const [copie, setCopie] = useState(false);
@@ -1182,9 +1179,9 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
       .map((p) => ({ ...p, label: p.label.length > 22 ? `${p.label.slice(0, 20)}…` : p.label }));
   }, [modeRepartition, parCategorie, parPoste]);
   const ratios = [
-    { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "#C1502E" },
-    { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "#D4A24C" },
-    { cle: "charges", label: t("dash_poids_charges"), montant: stats.postes.charges, seuil: seuils.charges, couleur: "#6B5B95" },
+    { cle: "achats", label: t("dash_poids_achats"), montant: stats.postes.achats, seuil: seuils.achats, couleur: "var(--cc-rouge)" },
+    { cle: "personnel", label: t("dash_poids_personnel"), montant: stats.postes.personnel, seuil: seuils.personnel, couleur: "var(--cc-or)" },
+    { cle: "charges", label: t("dash_poids_charges"), montant: stats.postes.charges, seuil: seuils.charges, couleur: "var(--cc-violet)" },
   ].map((r) => ({ ...r, ...evaluerRatio(r.montant, stats.caMois, r.seuil) }));
 
   const copierBilan = () => {
@@ -1206,7 +1203,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
   };
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-dashboard" style={styles.page}>
       <div style={{ ...styles.dashboardHeader, justifyContent: "space-between", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
         <div style={styles.secteurBadge}>
           <Store size={13} />
@@ -1308,7 +1305,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
       </div>
 
       <div className="grid-two">
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_evolution")}</div>
@@ -1320,29 +1317,29 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
               <AreaChart data={trend} margin={{ top: 8, right: 8, left: -18, bottom: 0 }}>
                 <defs>
                   <linearGradient id="ca" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#D4A24C" stopOpacity={0.35} />
-                    <stop offset="100%" stopColor="#D4A24C" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.or} stopOpacity={0.35} />
+                    <stop offset="100%" stopColor={C.or} stopOpacity={0} />
                   </linearGradient>
                   <linearGradient id="dep" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#C1502E" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#C1502E" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.rouge} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={C.rouge} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid stroke="#EDE7DA" vertical={false} />
-                <XAxis dataKey="label" tick={{ fontSize: 11, fill: "#8A8578" }} axisLine={false} tickLine={false} />
-                <YAxis tick={{ fontSize: 11, fill: "#8A8578" }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
+                <CartesianGrid stroke={C.bord} vertical={false} />
+                <XAxis dataKey="label" tick={{ fontSize: 11, fill: C.texteDoux }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fontSize: 11, fill: C.texteDoux }} axisLine={false} tickLine={false} tickFormatter={(v) => `${Math.round(v / 1000)}k`} />
                 <Tooltip
                   formatter={(v) => `${fmt(v)} FCFA`}
-                  contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }}
+                  contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid var(--cc-bord)", borderRadius: 8 }}
                 />
-                <Area type="monotone" dataKey="ca" stroke="#D4A24C" strokeWidth={2} fill="url(#ca)" name={t("dash_ca")} />
-                <Area type="monotone" dataKey="dep" stroke="#C1502E" strokeWidth={2} fill="url(#dep)" name={t("dash_depenses")} />
+                <Area type="monotone" dataKey="ca" stroke={C.or} strokeWidth={2} fill="url(#ca)" name={t("dash_ca")} />
+                <Area type="monotone" dataKey="dep" stroke={C.rouge} strokeWidth={2} fill="url(#dep)" name={t("dash_depenses")} />
               </AreaChart>
             </ResponsiveContainer>
           </div>
         </div>
 
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_repartition")}</div>
@@ -1380,13 +1377,17 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
                 <YAxis
                   dataKey="label"
                   type="category"
-                  tick={{ fontSize: 12, fill: "#3A3628" }}
+                  tick={{ fontSize: 12, fill: C.texte }}
                   axisLine={false}
                   tickLine={false}
                   width={modeRepartition === "postes" ? 130 : 100}
                 />
-                <Tooltip formatter={(v) => `${fmt(v)} FCFA`} contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid #EDE7DA", borderRadius: 8 }} />
-                <Bar dataKey="value" radius={[0, 6, 6, 0]} fill="#16213E" barSize={16} />
+                <Tooltip formatter={(v) => `${fmt(v)} FCFA`} contentStyle={{ fontFamily: "Inter, sans-serif", fontSize: 12, border: "1px solid var(--cc-bord)", borderRadius: 8 }} />
+                <Bar dataKey="value" radius={[0, 6, 6, 0]} barSize={16}>
+                  {donneesGraphique.map((_, i) => (
+                    <Cell key={i} fill={COULEURS_GRAPH[i % COULEURS_GRAPH.length]} />
+                  ))}
+                </Bar>
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -1394,7 +1395,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
       </div>
 
       {/* Répartition détaillée des dépenses par poste sectoriel */}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("dash_depenses_detail_titre")}</div>
@@ -1430,7 +1431,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
 
       {/* Dépenses réelles par poste d'activité : la liste des 20+ dépenses
           types du métier, filtrée automatiquement sur le type d'établissement */}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("dash_postes_titre")}</div>
@@ -1466,7 +1467,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
 
       <div className="grid-two">
         {/* Classement des produits vendus ce mois-ci */}
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_top_produits")}</div>
@@ -1485,7 +1486,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
                       {fmt(p.ca)} FCFA · {p.part.toFixed(0)}%
                     </span>
                   </div>
-                  <BarreProgression pourcentage={p.part} couleur="#D4A24C" />
+                  <BarreProgression pourcentage={p.part} couleur="var(--cc-or)" />
                   <div style={styles.repartitionDetail}>
                     {t("dash_col_qte")} : {fmt(p.quantite)} — {fmt(p.nbVentes)} {t("dash_ventes_court")}
                   </div>
@@ -1498,7 +1499,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
         </div>
 
         {/* Ratios financiers : poids de chaque poste par rapport au CA */}
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("dash_ratios_titre")}</div>
@@ -1587,10 +1588,10 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, demandes = 
 
 function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "FCFA" }) {
   const colors = {
-    gold: { fg: "#B4801F", bg: "#FBF3E2" },
-    clay: { fg: "#B4432A", bg: "#FBEBE4" },
-    teal: { fg: "#186B4E", bg: "#E4F2EC" },
-    ink: { fg: "#16213E", bg: "#EAECF3" },
+    gold: { fg: "var(--cc-or)", bg: "var(--cc-surface-3)" },
+    clay: { fg: "var(--cc-rouge)", bg: "var(--cc-rouge-fond)" },
+    teal: { fg: "var(--cc-vert)", bg: "var(--cc-vert-fond)" },
+    ink: { fg: "var(--cc-texte)", bg: "var(--cc-surface-3)" },
   }[accent];
   return (
     <div style={{ ...styles.kpiCard, ...(hero ? styles.kpiCardHero : {}) }}>
@@ -1598,7 +1599,7 @@ function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "
         <span style={styles.kpiLabel}>{label}</span>
         <span style={{ ...styles.kpiIcon, color: colors.fg, background: colors.bg }}>{icon}</span>
       </div>
-      <div style={{ ...styles.kpiValue, color: hero ? colors.fg : "#16213E" }}>
+      <div style={{ ...styles.kpiValue, color: hero ? colors.fg : "var(--cc-texte)" }}>
         {valeurTexte !== undefined ? (
           valeurTexte
         ) : (
@@ -1615,7 +1616,7 @@ function KpiCard({ label, value, accent, icon, sub, hero, valeurTexte, unite = "
 }
 
 /** Barre de progression utilisée par les répartitions du tableau de bord. */
-function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }) {
+function BarreProgression({ pourcentage, couleur = "var(--cc-accent)", fond = "var(--cc-surface-2)" }) {
   const largeur = Math.max(0, Math.min(100, pourcentage || 0));
   return (
     <div style={{ ...styles.barTrack, background: fond }}>
@@ -1624,7 +1625,7 @@ function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }
   );
 }
 
-function Saisie({ onAdd, secteur, etablissement, t }) {
+export function Saisie({ onAdd, secteur, etablissement, t }) {
   const secteurActif = secteurNormalise(secteur);
   const categories = categoriesDuSecteur(secteurActif);
   // Les dépenses types du métier (20 minimum) : elles alimentent les
@@ -1697,7 +1698,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
   };
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-saisie" style={styles.page}>
       {dernierRecu && (
         <div style={styles.recuBox}>
           <div style={styles.recuBoxText}>{t("saisie_recu_question")}</div>
@@ -1858,7 +1859,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
   );
 }
 
-function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer, t }) {
+export function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFermer, t }) {
   const [fondOuverture, setFondOuverture] = useState("");
   const [fondCompte, setFondCompte] = useState("");
   const [modeFermeture, setModeFermeture] = useState(false);
@@ -1892,8 +1893,8 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   };
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-caisse" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("caisse_titre")}</div>
@@ -1995,11 +1996,11 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
               </div>
               <div style={styles.caisseSummaryRow}>
                 <span>{t("caisse_ventes_depuis")}</span>
-                <strong style={{ color: "#186B4E" }}>{fmt(ventesSession)} FCFA</strong>
+                <strong style={{ color: "var(--cc-vert)" }}>{fmt(ventesSession)} FCFA</strong>
               </div>
               <div style={styles.caisseSummaryRow}>
                 <span>{t("caisse_depenses_depuis")}</span>
-                <strong style={{ color: "#B4432A" }}>{fmt(depensesSession)} FCFA</strong>
+                <strong style={{ color: "var(--cc-rouge)" }}>{fmt(depensesSession)} FCFA</strong>
               </div>
               <div style={{ ...styles.caisseSummaryRow, ...styles.caisseSummaryTotal }}>
                 <span>{t("caisse_solde_attendu")}</span>
@@ -2050,7 +2051,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
       </div>
 
       {historiqueCaisse.length > 0 && (
-        <div style={styles.card}>
+        <div style={styles.card} className="cc-card">
           <div style={styles.cardHeader}>
             <div>
               <div style={styles.cardTitle}>{t("caisse_historique_titre")}</div>
@@ -2066,7 +2067,7 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
                   </div>
                   <div style={styles.txNote}>{t("caisse_fond_depart")} : {fmt(s.fond_ouverture)} FCFA · {t("caisse_compte")} : {fmt(s.fond_fermeture_reel)} FCFA</div>
                 </div>
-                <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "#186B4E" : Math.abs(s.ecart) > 0 ? "#B4432A" : "#16213E" }}>
+                <div style={{ ...styles.txAmount, color: s.ecart === 0 ? "var(--cc-vert)" : Math.abs(s.ecart) > 0 ? "var(--cc-rouge)" : "var(--cc-accent)" }}>
                   {s.ecart >= 0 ? "+" : ""}{fmt(s.ecart)}
                 </div>
               </div>
@@ -2138,7 +2139,7 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
   const produitsEnAlerte = produits.filter((p) => (parseFloat(p.quantite_stock) || 0) <= (parseFloat(p.seuil_alerte) || 5));
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-stock" style={styles.page}>
       <div className="kpi-row">
         <KpiCard
           label={t("stock_valeur_totale")}
@@ -2183,7 +2184,7 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
           {produitsEnAlerte.map((p) => p.designation).join(", ")}
         </div>
       )}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("stock_titre")}</div>
@@ -2446,11 +2447,11 @@ export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCo
   };
 
   return (
-    <div style={styles.page}>
+    <div className="cc-page cc-page-abonnement" style={styles.page}>
       {/* Type d'établissement : conditionne les dépenses affichées.
           Les comptes créés avant le découpage restaurant/bar/maquis/hôtel
           peuvent ici choisir leur vrai métier. */}
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("etab_type_titre")}</div>
@@ -2489,7 +2490,7 @@ export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCo
         )}
       </div>
 
-      <div style={styles.card}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("nav_abonnement")}</div>
@@ -2595,7 +2596,7 @@ function RecuperationMotDePasse({ t, onTermine }) {
       <div style={styles.recupCard}>
         <div style={styles.recupBrand}>
           <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-            <path d="M2 14L7 6L12 11L18 3" stroke="#D4A24C" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+            <path d="M2 14L7 6L12 11L18 3" stroke={C.or} strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
           <span style={styles.brandName}>ComptaCi</span>
         </div>
@@ -2658,8 +2659,8 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   const telephoneNettoye = (tel) => tel.replace(/\s|\+/g, "");
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-fournisseurs" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("four_titre")}</div>
@@ -2736,7 +2737,7 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   );
 }
 
-function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
+export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   const secteurActif = secteurNormalise(secteur);
   const categories = categoriesDuSecteur(secteurActif);
   const postes = postesDuSecteur(secteurActif);
@@ -2772,8 +2773,8 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
   }, [transactionsVisibles]);
 
   return (
-    <div style={styles.page}>
-      <div style={styles.card}>
+    <div className="cc-page cc-page-historique" style={styles.page}>
+      <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
             <div style={styles.cardTitle}>{t("hist_titre")}</div>
@@ -2825,7 +2826,7 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
                       </div>
                     ) : (
                       <div key={tx.id} style={styles.txRow}>
-                        <div style={{ ...styles.txDot, background: tx.type === "vente" ? "#186B4E" : "#B4432A" }} />
+                        <div style={{ ...styles.txDot, background: tx.type === "vente" ? "var(--cc-vert)" : "var(--cc-rouge)" }} />
                         <div style={styles.txInfo}>
                           <div style={styles.txLabel}>
                             {tx.type === "vente"
@@ -2839,7 +2840,7 @@ function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
                         </div>
                         <button
                           onClick={() => commencerEdition(tx)}
-                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: tx.type === "vente" ? "#186B4E" : "#B4432A" }}
+                          style={{ ...styles.txAmount, ...styles.txAmountBtn, color: tx.type === "vente" ? "var(--cc-vert)" : "var(--cc-rouge)" }}
                         >
                           {tx.type === "vente" ? "+" : "-"}{fmt(tx.montant)}
                         </button>
@@ -3011,9 +3012,9 @@ function buildPosteBreakdown(transactions, secteur) {
   return lignes;
 }
 
+/* Règles globales injectées avec l'app. Les polices et le thème complet
+   (couleurs, états, animations) vivent dans `ui.css`, importé par `main.jsx`. */
 const GLOBAL_CSS = `
-@import url('https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&display=swap');
-
 * { box-sizing: border-box; }
 
 .kpi-row {
@@ -3056,14 +3057,14 @@ const styles = {
   app: {
     display: "flex",
     minHeight: "100vh",
-    background: "#FBF7F0",
+    background: "var(--cc-bg)",
     fontFamily: "'Inter', sans-serif",
-    color: "#16213E",
+    color: "var(--cc-texte)",
   },
   sidebar: {
     width: 220,
-    background: "#16213E",
-    color: "#FBF7F0",
+    background: "var(--cc-sidebar)",
+    color: "var(--cc-texte)",
     display: "flex",
     flexDirection: "column",
     padding: "24px 16px",
@@ -3075,100 +3076,100 @@ const styles = {
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   brandName: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, letterSpacing: "-0.01em" },
-  brandSub: { fontSize: 10.5, color: "#9AA4C4", marginTop: 1 },
+  brandSub: { fontSize: 10.5, color: "var(--cc-texte-discret)", marginTop: 1 },
   nav: { display: "flex", flexDirection: "column", gap: 2 },
   navItem: {
     display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 8,
-    background: "transparent", border: "none", color: "#B7BFDA", fontSize: 13.5, fontWeight: 500,
+    background: "transparent", border: "none", color: "var(--cc-texte-discret)", fontSize: 13.5, fontWeight: 500,
     cursor: "pointer", textAlign: "left", fontFamily: "'Inter', sans-serif",
   },
-  navItemActive: { background: "rgba(232,182,90,0.14)", color: "#F3D9A0" },
+  navItemActive: { background: "rgba(232,182,90,0.14)", color: "var(--cc-or-clair)" },
   sidebarMobile: {
-    width: "100%", background: "#16213E", color: "#FBF7F0",
+    width: "100%", background: "var(--cc-sidebar)", color: "var(--cc-texte)",
     padding: "14px 16px", flexShrink: 0,
   },
   brandRowMobile: { display: "flex", alignItems: "center", justifyContent: "space-between" },
   logoutBtnMobile: {
     display: "flex", alignItems: "center", gap: 6, background: "rgba(255,255,255,0.06)",
-    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "#F3D9A0", fontSize: 12,
+    border: "1px solid rgba(255,255,255,0.12)", borderRadius: 8, color: "var(--cc-or-clair)", fontSize: 12,
     fontWeight: 600, cursor: "pointer", padding: "7px 10px", fontFamily: "'Inter', sans-serif",
   },
   navMobile: { display: "flex", gap: 6, marginTop: 12, overflowX: "auto" },
   navItemMobile: {
     display: "flex", alignItems: "center", gap: 6, padding: "8px 12px", borderRadius: 8,
-    background: "transparent", border: "none", color: "#B7BFDA", fontSize: 12.5, fontWeight: 500,
+    background: "transparent", border: "none", color: "var(--cc-texte-discret)", fontSize: 12.5, fontWeight: 500,
     cursor: "pointer", whiteSpace: "nowrap", fontFamily: "'Inter', sans-serif", flexShrink: 0,
   },
   sidebarFooter: { marginTop: "auto", paddingTop: 20 },
   sidebarFooterPattern: {
-    height: 2, background: "linear-gradient(90deg, #E8B65A 0%, transparent 100%)", marginBottom: 12, opacity: 0.5,
+    height: 2, background: "linear-gradient(90deg, var(--cc-or) 0%, transparent 100%)", marginBottom: 12, opacity: 0.5,
   },
-  sidebarFooterText: { fontSize: 11, color: "#7C87AC", lineHeight: 1.5 },
+  sidebarFooterText: { fontSize: 11, color: "var(--cc-texte-discret)", lineHeight: 1.5 },
   logoutBtn: {
     display: "flex", alignItems: "center", gap: 8, background: "none", border: "none",
-    color: "#9AA4C4", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
+    color: "var(--cc-texte-discret)", fontSize: 12.5, cursor: "pointer", padding: "8px 8px", fontFamily: "'Inter', sans-serif",
   },
   main: { flex: 1, display: "flex", flexDirection: "column", minWidth: 0, width: "100%", ...wallpaperStyle },
   topbar: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6,
-    padding: "14px 20px", borderBottom: "1px solid #EDE7DA", background: "#FFFEFB",
+    padding: "14px 20px", borderBottom: "1px solid var(--cc-bord)", background: "rgba(17,25,41,0.78)",
   },
   topbarLeft: { display: "flex", alignItems: "center", gap: 8 },
   topbarNameBtn: {
     display: "flex", alignItems: "center", gap: 4, background: "none", border: "none",
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "#16213E", cursor: "pointer", padding: 0,
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "var(--cc-texte)", cursor: "pointer", padding: 0,
   },
   topbarInput: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "#16213E",
-    border: "none", borderBottom: "1px solid #D4A24C", outline: "none", background: "transparent",
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 500, color: "var(--cc-texte)",
+    border: "none", borderBottom: "1px solid var(--cc-or)", outline: "none", background: "transparent",
   },
-  topbarDate: { fontSize: 12.5, color: "#8A8578", textTransform: "capitalize" },
+  topbarDate: { fontSize: 12.5, color: "var(--cc-texte-doux)", textTransform: "capitalize" },
   inviteBtn: {
-    padding: "7px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 12, fontWeight: 600, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    padding: "7px 12px", borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    fontSize: 12, fontWeight: 600, color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  upgradeHint: { fontSize: 11.5, color: "#B4801F", background: "#FBF3E2", padding: "6px 10px", borderRadius: 8 },
+  upgradeHint: { fontSize: 11.5, color: "var(--cc-or)", background: "var(--cc-surface-3)", padding: "6px 10px", borderRadius: 8 },
   etabPopover: {
-    position: "absolute", top: "calc(100% + 8px)", left: 0, background: "#FFFEFB",
-    border: "1px solid #EDE7DA", borderRadius: 12, padding: 8, width: 260,
-    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 20,
+    position: "absolute", top: "calc(100% + 8px)", left: 0, background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, padding: 8, width: 260,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.45)", zIndex: 20,
   },
   etabPopoverItem: {
     display: "flex", justifyContent: "space-between", alignItems: "center", width: "100%",
     padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
-    fontSize: 13, color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+    fontSize: 13, color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
   },
-  etabPopoverItemActive: { background: "#FBF3E2", fontWeight: 600 },
-  etabPopoverRole: { fontSize: 10.5, color: "#8A8578" },
-  etabPopoverDivider: { height: 1, background: "#EDE7DA", margin: "6px 4px" },
+  etabPopoverItemActive: { background: "var(--cc-surface-3)", fontWeight: 600 },
+  etabPopoverRole: { fontSize: 10.5, color: "var(--cc-texte-doux)" },
+  etabPopoverDivider: { height: 1, background: "var(--cc-bord)", margin: "6px 4px" },
   etabPopoverAdd: {
     width: "100%", padding: "9px 10px", borderRadius: 8, border: "none", background: "transparent",
-    fontSize: 13, color: "#B4801F", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
+    fontSize: 13, color: "var(--cc-or)", fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif", textAlign: "left",
   },
   etabPopoverInput: {
-    padding: "8px 10px", borderRadius: 8, border: "1px solid #E4DDD0", fontSize: 12.5,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+    padding: "8px 10px", borderRadius: 8, border: "1px solid var(--cc-bord)", fontSize: 12.5,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none",
   },
   invitePopover: {
-    position: "absolute", top: "calc(100% + 8px)", right: 0, background: "#FFFEFB",
-    border: "1px solid #EDE7DA", borderRadius: 12, padding: 16, width: 260,
-    boxShadow: "0 8px 24px rgba(22,33,62,0.12)", zIndex: 10,
+    position: "absolute", top: "calc(100% + 8px)", right: 0, background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, padding: 16, width: 260,
+    boxShadow: "0 8px 24px rgba(0,0,0,0.45)", zIndex: 10,
   },
-  invitePopoverLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", marginBottom: 8 },
+  invitePopoverLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)", marginBottom: 8 },
   inviteCode: {
-    fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: "#16213E",
-    letterSpacing: "0.08em", textAlign: "center", background: "#FBF3E2", borderRadius: 8, padding: "10px 0", marginBottom: 10,
+    fontFamily: "'Fraunces', serif", fontSize: 22, fontWeight: 600, color: "var(--cc-texte)",
+    letterSpacing: "0.08em", textAlign: "center", background: "var(--cc-surface-3)", borderRadius: 8, padding: "10px 0", marginBottom: 10,
   },
-  invitePopoverText: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginBottom: 10 },
+  invitePopoverText: { fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.5, marginBottom: 10 },
   inviteCopyBtn: {
-    width: "100%", padding: "8px 0", borderRadius: 8, border: "none", background: "#16213E",
-    color: "#F3D9A0", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    width: "100%", padding: "8px 0", borderRadius: 8, border: "none", background: "var(--cc-accent)",
+    color: "var(--cc-or-clair)", fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBEBE4", color: "#8A3420", borderRadius: 8, fontSize: 13 },
-  essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "#FBF3E2", color: "#8A6420", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
-  essaiBannerUrgent: { background: "#FBEBE4", color: "#B4432A", fontWeight: 700 },
+  errorBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", borderRadius: 8, fontSize: 13 },
+  essaiBanner: { margin: "16px 32px 0", padding: "10px 14px", background: "var(--cc-surface-3)", color: "var(--cc-or-clair)", borderRadius: 8, fontSize: 12.5, fontWeight: 500 },
+  essaiBannerUrgent: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", fontWeight: 700 },
   fondateurTag: {
-    display: "inline-block", background: "#16213E", color: "#F3D9A0", fontSize: 10.5, fontWeight: 700,
+    display: "inline-block", background: "var(--cc-accent)", color: "var(--cc-or-clair)", fontSize: 10.5, fontWeight: 700,
     padding: "2px 8px", borderRadius: 20, marginRight: 8, letterSpacing: "0.02em",
   },
   pageBanner: {
@@ -3178,79 +3179,80 @@ const styles = {
   pageBannerImg: { width: "100%", height: "100%", objectFit: "cover", display: "block" },
   pageBannerOverlay: {
     position: "absolute", inset: 0,
-    background: "linear-gradient(90deg, rgba(22,33,62,0.72) 0%, rgba(22,33,62,0.28) 55%, rgba(22,33,62,0.05) 100%)",
+    background: "var(--cc-voile-banniere)",
   },
   pageBannerLabel: {
-    position: "absolute", left: 20, bottom: 14, color: "#FBF7F0",
-    fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, letterSpacing: "-0.01em",
+    position: "absolute", left: 20, bottom: 14, color: "var(--cc-or-pale)",
+    textShadow: "0 2px 14px rgba(0,0,0,0.85)",
+    fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, letterSpacing: "-0.01em",
   },
-  loading: { padding: 40, color: "#8A8578", fontSize: 14 },
-  appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "#B5AF9E" },
+  loading: { padding: 40, color: "var(--cc-texte-doux)", fontSize: 14 },
+  appFooter: { textAlign: "center", padding: "24px 20px 12px", fontSize: 11, color: "var(--cc-texte-discret)" },
   configError: {
     minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", padding: 20,
+    background: "var(--cc-bg)", padding: 20,
   },
   configErrorCard: {
-    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 26, maxWidth: 440,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-rouge-bord)", borderRadius: 14, padding: 26, maxWidth: 440,
   },
-  configErrorTitle: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
-  configErrorText: { fontSize: 13.5, color: "#5C5748", lineHeight: 1.6 },
+  configErrorTitle: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "var(--cc-rouge)", marginBottom: 10 },
+  configErrorText: { fontSize: 13.5, color: "var(--cc-texte-corps)", lineHeight: 1.6 },
   page: { padding: "20px 20px 40px", display: "flex", flexDirection: "column", gap: 20, minWidth: 0 },
   kpiRow: { display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 14 },
   kpiCard: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: "18px 18px 16px",
+    background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: "18px 18px 16px",
     display: "flex", flexDirection: "column", gap: 10,
   },
-  kpiCardHero: { borderColor: "#E8D9B5", boxShadow: "0 2px 14px rgba(212,162,76,0.10)" },
+  kpiCardHero: { borderColor: "var(--cc-or-bord)", boxShadow: "0 2px 14px rgba(232,182,90,0.22)" },
   kpiTop: { display: "flex", alignItems: "center", justifyContent: "space-between" },
-  kpiLabel: { fontSize: 12, color: "#8A8578", fontWeight: 500 },
+  kpiLabel: { fontSize: 12, color: "var(--cc-texte-doux)", fontWeight: 500 },
   kpiIcon: { width: 26, height: 26, borderRadius: 7, display: "flex", alignItems: "center", justifyContent: "center" },
   kpiValue: { fontFamily: "'Fraunces', serif", fontSize: 26, fontWeight: 600, letterSpacing: "-0.01em" },
-  kpiUnit: { fontSize: 13, fontWeight: 400, color: "#8A8578" },
-  kpiSub: { fontSize: 11.5, color: "#8A8578" },
+  kpiUnit: { fontSize: 13, fontWeight: 400, color: "var(--cc-texte-doux)" },
+  kpiSub: { fontSize: 11.5, color: "var(--cc-texte-doux)" },
   gridTwo: { display: "grid", gridTemplateColumns: "1.4fr 1fr", gap: 14 },
-  card: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: 20 },
+  card: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: 20 },
   cardHeader: { display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 14 },
-  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#16213E" },
-  cardCaption: { fontSize: 12, color: "#8A8578", marginTop: 2 },
-  emptyState: { padding: "36px 20px", textAlign: "center", border: "1px dashed #E4DDD0", borderRadius: 12 },
+  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "var(--cc-texte)" },
+  cardCaption: { fontSize: 12, color: "var(--cc-texte-doux)", marginTop: 2 },
+  emptyState: { padding: "36px 20px", textAlign: "center", border: "1px dashed var(--cc-bord)", borderRadius: 12 },
   emptyTitle: { fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, marginBottom: 4 },
-  emptyText: { fontSize: 12.5, color: "#8A8578" },
+  emptyText: { fontSize: 12.5, color: "var(--cc-texte-doux)" },
   upgradeNotice: {
-    fontSize: 12, color: "#B4801F", background: "#FBF3E2", padding: "10px 12px",
+    fontSize: 12, color: "var(--cc-or)", background: "var(--cc-surface-3)", padding: "10px 12px",
     borderRadius: 9, marginBottom: 16,
   },
   stockForm: {
     display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18,
-    padding: 14, background: "#FBF9F4", borderRadius: 10,
+    padding: 14, background: "var(--cc-surface-2)", borderRadius: 10,
   },
   stockRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "10px 12px", borderRadius: 9,
-    background: "#FBF9F4", flexWrap: "wrap",
+    background: "var(--cc-surface-2)", flexWrap: "wrap",
   },
-  stockLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
-  stockSub: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
+  stockLabel: { fontSize: 13.5, fontWeight: 500, color: "var(--cc-texte)" },
+  stockSub: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 1 },
   stockAdjustBtn: {
-    width: 26, height: 26, borderRadius: 7, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#16213E",
+    width: 26, height: 26, borderRadius: 7, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--cc-texte)",
   },
   fourActionBtn: {
-    width: 30, height: 30, borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "#186B4E",
+    width: 30, height: 30, borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", color: "var(--cc-vert)",
     textDecoration: "none", flexShrink: 0,
   },
   aboIntro: {
-    fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
+    fontSize: 13, color: "var(--cc-texte-corps)", lineHeight: 1.55, margin: "0 0 16px", maxWidth: 560,
   },
   comparatifCard: {
     marginTop: 18,
-    border: "1px solid #EDE7DA",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 14,
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
     padding: "14px 14px 8px",
   },
   comparatifTitre: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", marginBottom: 10,
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "var(--cc-texte)", marginBottom: 10,
   },
   comparatifTable: { display: "flex", flexDirection: "column" },
   comparatifRow: {
@@ -3259,9 +3261,9 @@ const styles = {
     gap: 6,
     alignItems: "center",
     padding: "8px 4px",
-    borderTop: "1px solid #F1ECE2",
+    borderTop: "1px solid var(--cc-surface-2)",
     fontSize: 12,
-    color: "#5C5748",
+    color: "var(--cc-texte-corps)",
   },
   comparatifHead: {
     display: "grid",
@@ -3271,93 +3273,93 @@ const styles = {
     padding: "4px 4px 8px",
     borderTop: "none",
   },
-  comparatifLabel: { fontSize: 11.5, lineHeight: 1.35, color: "#5C5748" },
-  comparatifLabelHead: { fontSize: 10.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  comparatifLabel: { fontSize: 11.5, lineHeight: 1.35, color: "var(--cc-texte-corps)" },
+  comparatifLabelHead: { fontSize: 10.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   comparatifColHead: { display: "flex", flexDirection: "column", alignItems: "center", gap: 2, textAlign: "center" },
-  comparatifColNom: { fontFamily: "'Fraunces', serif", fontSize: 12.5, fontWeight: 600, color: "#16213E" },
-  comparatifColPrix: { fontSize: 10.5, fontWeight: 700, color: "#B4801F" },
+  comparatifColNom: { fontFamily: "'Fraunces', serif", fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)" },
+  comparatifColPrix: { fontSize: 10.5, fontWeight: 700, color: "var(--cc-or)" },
   comparatifCell: { display: "flex", alignItems: "center", justifyContent: "center" },
   comparatifCheck: { fontSize: 11, lineHeight: 1 },
   stockQty: {
-    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "#16213E", minWidth: 40, textAlign: "center",
+    fontFamily: "'Fraunces', serif", fontSize: 15, fontWeight: 600, color: "var(--cc-texte)", minWidth: 40, textAlign: "center",
   },
-  stockQtyLow: { color: "#B4432A" },
+  stockQtyLow: { color: "var(--cc-rouge)" },
   stockValeur: { minWidth: 96, textAlign: "right", flexShrink: 0 },
   stockValeurMontant: {
-    fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "#16213E", whiteSpace: "nowrap",
+    fontFamily: "'Fraunces', serif", fontSize: 14, fontWeight: 600, color: "var(--cc-texte)", whiteSpace: "nowrap",
   },
-  stockValeurDetail: { fontSize: 11, color: "#8A8578", marginTop: 1, whiteSpace: "nowrap" },
+  stockValeurDetail: { fontSize: 11, color: "var(--cc-texte-doux)", marginTop: 1, whiteSpace: "nowrap" },
   stockSeuilField: {
     display: "flex", flexDirection: "column", alignItems: "center", gap: 3, flexShrink: 0,
   },
   stockSeuilLabel: {
-    fontSize: 9, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", letterSpacing: "0.04em",
+    fontSize: 9, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase", letterSpacing: "0.04em",
   },
   stockSeuilInput: {
-    width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid #E4DDD0",
-    fontSize: 12, fontFamily: "'Inter', sans-serif", color: "#5C5748", outline: "none", textAlign: "center",
+    width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid var(--cc-bord)",
+    fontSize: 12, fontFamily: "'Inter', sans-serif", color: "var(--cc-texte-corps)", outline: "none", textAlign: "center",
   },
   stockApercu: {
-    flex: "1 1 100%", background: "#FBF3E2", borderRadius: 9, padding: "10px 14px",
+    flex: "1 1 100%", background: "var(--cc-surface-3)", borderRadius: 9, padding: "10px 14px",
     display: "flex", flexDirection: "column", gap: 2,
   },
-  stockApercuTitre: { fontSize: 11.5, fontWeight: 600, color: "#8A6420", textTransform: "uppercase" },
-  stockApercuValeur: { fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: "#16213E" },
-  stockApercuDetail: { fontSize: 11.5, color: "#8A6420" },
+  stockApercuTitre: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-or-clair)", textTransform: "uppercase" },
+  stockApercuValeur: { fontFamily: "'Fraunces', serif", fontSize: 18, fontWeight: 600, color: "var(--cc-texte)" },
+  stockApercuDetail: { fontSize: 11.5, color: "var(--cc-or-clair)" },
 
   // Guide pédagogique de la caisse
   caisseConsigne: {
-    fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E", lineHeight: 1.35,
+    fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--cc-texte)", lineHeight: 1.35,
   },
   guideCard: {
-    border: "1px solid #EDE7DA", borderRadius: 12, background: "#FBF9F4", marginBottom: 18, overflow: "hidden",
+    border: "1px solid var(--cc-bord)", borderRadius: 12, background: "var(--cc-surface-2)", marginBottom: 18, overflow: "hidden",
   },
   guideToggle: {
     display: "flex", alignItems: "center", gap: 8, width: "100%", padding: "12px 14px",
     background: "transparent", border: "none", cursor: "pointer", fontFamily: "'Inter', sans-serif",
-    fontSize: 13.5, fontWeight: 600, color: "#16213E", textAlign: "left",
+    fontSize: 13.5, fontWeight: 600, color: "var(--cc-texte)", textAlign: "left",
   },
   guideBody: { padding: "0 14px 14px", display: "flex", flexDirection: "column", gap: 14 },
-  guideTexte: { fontSize: 13, lineHeight: 1.6, color: "#5C5748", margin: 0 },
-  guideFormule: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 10, padding: "12px 14px" },
-  guideFormuleTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase", marginBottom: 6 },
+  guideTexte: { fontSize: 13, lineHeight: 1.6, color: "var(--cc-texte-corps)", margin: 0 },
+  guideFormule: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 10, padding: "12px 14px" },
+  guideFormuleTitre: { fontSize: 11.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase", marginBottom: 6 },
   guideFormuleLigne: {
-    fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "#16213E", lineHeight: 1.45,
+    fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600, color: "var(--cc-texte)", lineHeight: 1.45,
   },
-  guideFormuleNote: { fontSize: 11.5, color: "#8A8578", marginTop: 6, lineHeight: 1.5 },
-  guideEtapesTitre: { fontSize: 11.5, fontWeight: 700, color: "#8A8578", textTransform: "uppercase" },
+  guideFormuleNote: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 6, lineHeight: 1.5 },
+  guideEtapesTitre: { fontSize: 11.5, fontWeight: 700, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   guideEtapes: {
     listStyle: "none", margin: 0, padding: 0, display: "grid", gap: 10,
     gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))",
   },
   guideEtape: { display: "flex", gap: 9, alignItems: "flex-start" },
   guideEtapeNumero: {
-    width: 21, height: 21, borderRadius: "50%", background: "#16213E", color: "#F3D9A0",
+    width: 21, height: 21, borderRadius: "50%", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 11.5, fontWeight: 700, display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
-  guideEtapeTitre: { fontSize: 12.5, fontWeight: 600, color: "#16213E" },
-  guideEtapeTexte: { fontSize: 11.5, color: "#8A8578", lineHeight: 1.5, marginTop: 2 },
+  guideEtapeTitre: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)" },
+  guideEtapeTexte: { fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.5, marginTop: 2 },
   montantsRapides: { display: "flex", flexDirection: "column", gap: 7 },
-  montantsRapidesLabel: { fontSize: 11.5, fontWeight: 600, color: "#8A8578", textTransform: "uppercase" },
+  montantsRapidesLabel: { fontSize: 11.5, fontWeight: 600, color: "var(--cc-texte-doux)", textTransform: "uppercase" },
   montantsRapidesRow: { display: "flex", flexWrap: "wrap", gap: 7 },
   montantRapideBtn: {
-    padding: "8px 12px", borderRadius: 8, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    color: "#16213E", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    padding: "8px 12px", borderRadius: 8, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    color: "var(--cc-texte)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  montantRapideBtnActif: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
+  montantRapideBtnActif: { background: "var(--cc-accent)", borderColor: "var(--cc-or-bord)", color: "var(--cc-or-clair)" },
 
   // Analyse sectorielle du tableau de bord
   secteurBadge: {
     display: "inline-flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 999,
-    background: "#EAECF3", color: "#16213E", fontSize: 12, fontWeight: 600,
+    background: "var(--cc-bord)", color: "var(--cc-texte)", fontSize: 12, fontWeight: 600,
   },
-  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "#16213E" },
+  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 17, fontWeight: 600, color: "var(--cc-texte)" },
   repartitionHead: {
     display: "flex", alignItems: "baseline", justifyContent: "space-between", gap: 10, marginBottom: 6,
   },
-  repartitionLabel: { fontSize: 13, fontWeight: 500, color: "#16213E" },
-  repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "#5C5748", whiteSpace: "nowrap" },
-  repartitionDetail: { fontSize: 11.5, color: "#8A8578", marginTop: 5 },
+  repartitionLabel: { fontSize: 13, fontWeight: 500, color: "var(--cc-texte)" },
+  repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)", whiteSpace: "nowrap" },
+  repartitionDetail: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 5 },
 
   /* --- Aperçu du score de crédit (haut du tableau de bord) --- */
   scoreApercuCard: {
@@ -3368,18 +3370,18 @@ const styles = {
     flexWrap: "wrap",
     margin: "0 0 16px",
     padding: "14px 18px",
-    border: "1.5px solid #EDE7DA",
+    border: "1.5px solid var(--cc-bord)",
     borderRadius: 14,
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
   },
   scoreApercuGauche: { display: "flex", flexDirection: "column", gap: 3 },
   scoreApercuTitre: {
     fontFamily: "'Fraunces', serif",
     fontSize: 15,
     fontWeight: 600,
-    color: "#16213E",
+    color: "var(--cc-texte)",
   },
-  scoreApercuSous: { fontSize: 12, color: "#5C5748" },
+  scoreApercuSous: { fontSize: 12, color: "var(--cc-texte-corps)" },
   scoreApercuDroite: { display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" },
   scoreApercuValeur: {
     fontFamily: "'Fraunces', serif",
@@ -3387,10 +3389,10 @@ const styles = {
     fontWeight: 700,
     lineHeight: 1,
   },
-  scoreApercuSur100: { fontSize: 13, color: "#8A8578", fontWeight: 600 },
+  scoreApercuSur100: { fontSize: 13, color: "var(--cc-texte-doux)", fontWeight: 600 },
   scorePalierBadge: {
     marginLeft: 6,
-    color: "#FFFEFB",
+    color: "var(--cc-surface)",
     fontSize: 11,
     fontWeight: 700,
     padding: "3px 10px",
@@ -3402,18 +3404,18 @@ const styles = {
   basculeBtn: {
     padding: "6px 11px",
     borderRadius: 20,
-    border: "1px solid #E4DDD0",
-    background: "#FFFEFB",
-    color: "#5C5748",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte-corps)",
     fontSize: 11.5,
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
   basculeBtnActif: {
-    background: "#16213E",
-    borderColor: "#16213E",
-    color: "#F3D9A0",
+    background: "var(--cc-accent)",
+    borderColor: "var(--cc-or-bord)",
+    color: "var(--cc-or-clair)",
   },
   postesGrid: {
     display: "grid",
@@ -3428,25 +3430,25 @@ const styles = {
     gap: 8,
     padding: "8px 10px",
     borderRadius: 9,
-    border: "1px solid #EDE7DA",
-    background: "#FFFEFB",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
   },
   posteChipActif: {
-    borderColor: "#D4A24C",
-    background: "#FBF9F4",
+    borderColor: "var(--cc-or)",
+    background: "var(--cc-surface-2)",
   },
   posteChipLabel: {
     fontSize: 12,
-    color: "#3A3628",
+    color: "var(--cc-texte)",
     lineHeight: 1.3,
   },
   posteChipMontant: {
     fontSize: 11.5,
     fontWeight: 600,
-    color: "#A9A497",
+    color: "var(--cc-texte-discret)",
     whiteSpace: "nowrap",
   },
-  posteChipMontantActif: { color: "#16213E" },
+  posteChipMontantActif: { color: "var(--cc-texte)" },
   importPostes: {
     display: "flex",
     alignItems: "center",
@@ -3454,25 +3456,25 @@ const styles = {
     flexWrap: "wrap",
     marginTop: 12,
     padding: "12px 14px",
-    background: "#FBF9F4",
-    border: "1px dashed #D4A24C",
+    background: "var(--cc-surface-2)",
+    border: "1px dashed var(--cc-or)",
     borderRadius: 12,
   },
-  importTitre: { fontSize: 13, fontWeight: 700, color: "#16213E" },
-  importSous: { fontSize: 11.5, color: "#8A8578", marginTop: 3, lineHeight: 1.45 },
+  importTitre: { fontSize: 13, fontWeight: 700, color: "var(--cc-texte)" },
+  importSous: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 3, lineHeight: 1.45 },
   importBtn: {
     padding: "9px 14px",
     borderRadius: 9,
     border: "none",
-    background: "#16213E",
-    color: "#F3D9A0",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
     fontSize: 12.5,
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
     whiteSpace: "nowrap",
   },
-  importMsg: { marginTop: 8, fontSize: 12, color: "#186B4E", fontWeight: 600 },
+  importMsg: { marginTop: 8, fontSize: 12, color: "var(--cc-vert)", fontWeight: 600 },
   postesRapides: {
     display: "flex",
     flexWrap: "wrap",
@@ -3481,165 +3483,166 @@ const styles = {
   posteRapideBtn: {
     padding: "6px 10px",
     borderRadius: 20,
-    border: "1px solid #E4DDD0",
-    background: "#FFFEFB",
-    color: "#5C5748",
+    border: "1px solid var(--cc-bord)",
+    background: "var(--cc-surface)",
+    color: "var(--cc-texte-corps)",
     fontSize: 12,
     fontWeight: 500,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
   posteRapideBtnActif: {
-    borderColor: "#D4A24C",
-    background: "#FBF3E2",
-    color: "#8A6420",
+    borderColor: "var(--cc-or)",
+    background: "var(--cc-surface-3)",
+    color: "var(--cc-or-clair)",
     fontWeight: 700,
   },
   postesNote: {
     margin: "12px 0 0",
     fontSize: 11.5,
-    color: "#8A8578",
+    color: "var(--cc-texte-doux)",
     lineHeight: 1.5,
   },
   barTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
   ratioBadge: {
     display: "inline-block", padding: "2px 8px", borderRadius: 999, fontSize: 11, fontWeight: 600,
-    background: "#F1ECE2", color: "#8A8578",
+    background: "var(--cc-surface-2)", color: "var(--cc-texte-doux)",
   },
-  ratioSain: { background: "#E4F2EC", color: "#186B4E" },
-  ratioSurveiller: { background: "#FBF3E2", color: "#B4801F" },
-  ratioAlerte: { background: "#FBEBE4", color: "#B4432A" },
+  ratioSain: { background: "var(--cc-vert-fond)", color: "var(--cc-vert)" },
+  ratioSurveiller: { background: "var(--cc-surface-3)", color: "var(--cc-or)" },
+  ratioAlerte: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)" },
   conseilsCard: {
-    background: "#FFFEFB", border: "1px solid #E8D9B5", borderRadius: 14, padding: 20,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-or-bord)", borderRadius: 14, padding: 20,
   },
   conseilsHeader: { display: "flex", gap: 11, alignItems: "flex-start", marginBottom: 14 },
   conseilsIcon: {
-    width: 28, height: 28, borderRadius: 8, background: "#FBF3E2", color: "#B4801F",
+    width: 28, height: 28, borderRadius: 8, background: "var(--cc-surface-3)", color: "var(--cc-or)",
     display: "flex", alignItems: "center", justifyContent: "center", flexShrink: 0,
   },
   conseilsMarge: {
     display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10,
-    background: "#FBF3E2", borderRadius: 9, padding: "10px 14px", fontSize: 13, color: "#8A6420", fontWeight: 600,
+    background: "var(--cc-surface-3)", borderRadius: 9, padding: "10px 14px", fontSize: 13, color: "var(--cc-or-clair)", fontWeight: 600,
   },
   conseilsListe: {
     margin: "14px 0 0", padding: "0 0 0 18px", display: "flex", flexDirection: "column", gap: 9,
   },
-  conseilItem: { fontSize: 13, lineHeight: 1.6, color: "#5C5748" },
-  caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "#FBF9F4", borderRadius: 10, padding: 16, maxWidth: 360 },
-  caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "#5C5748" },
-  caisseSummaryTotal: { borderTop: "1px solid #EDE7DA", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "#16213E" },
+  conseilItem: { fontSize: 13, lineHeight: 1.6, color: "var(--cc-texte-corps)" },
+  caisseSummary: { display: "flex", flexDirection: "column", gap: 8, background: "var(--cc-surface-2)", borderRadius: 10, padding: 16, maxWidth: 360 },
+  caisseSummaryRow: { display: "flex", justifyContent: "space-between", fontSize: 13.5, color: "var(--cc-texte-corps)" },
+  caisseSummaryTotal: { borderTop: "1px solid var(--cc-bord)", paddingTop: 10, marginTop: 4, fontSize: 14.5, color: "var(--cc-texte)" },
   ecartBox: { padding: "10px 14px", borderRadius: 9, fontSize: 13.5, fontWeight: 600, textAlign: "center" },
-  ecartOk: { background: "#E4F2EC", color: "#186B4E" },
-  ecartPositif: { background: "#FBF3E2", color: "#B4801F" },
-  ecartNegatif: { background: "#FBEBE4", color: "#B4432A" },
+  ecartOk: { background: "var(--cc-vert-fond)", color: "var(--cc-vert)" },
+  ecartPositif: { background: "var(--cc-surface-3)", color: "var(--cc-or)" },
+  ecartNegatif: { background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)" },
   recuBox: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 10,
-    background: "#E4F2EC", border: "1px solid #B7DBCA", borderRadius: 10, padding: "12px 16px",
+    background: "var(--cc-vert-fond)", border: "1px solid var(--cc-vert-bord)", borderRadius: 10, padding: "12px 16px",
   },
-  recuBoxText: { fontSize: 13, fontWeight: 600, color: "#186B4E" },
+  recuBoxText: { fontSize: 13, fontWeight: 600, color: "var(--cc-vert)" },
   recuBtn: {
-    padding: "8px 14px", borderRadius: 8, border: "none", background: "#186B4E", color: "#FFFEFB",
+    padding: "8px 14px", borderRadius: 8, border: "none", background: "var(--cc-vert)", color: "var(--cc-surface)",
     fontSize: 12.5, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   recuBtnGhost: {
     display: "flex", alignItems: "center", gap: 5, padding: "8px 14px", borderRadius: 8,
-    border: "1px solid #B7DBCA", background: "transparent", color: "#186B4E", fontSize: 12.5,
+    border: "1px solid var(--cc-vert-bord)", background: "transparent", color: "var(--cc-vert)", fontSize: 12.5,
     fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dashboardHeader: { display: "flex", justifyContent: "flex-end" },
   copyBtn: {
     display: "flex", alignItems: "center", gap: 6, padding: "8px 14px", borderRadius: 9,
-    border: "1px solid #E4DDD0", background: "#FFFEFB", fontSize: 12.5, fontWeight: 600,
-    color: "#16213E", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    border: "1px solid var(--cc-bord)", background: "var(--cc-surface)", fontSize: 12.5, fontWeight: 600,
+    color: "var(--cc-texte)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   toggleRow: { display: "flex", gap: 8 },
   toggleBtn: {
-    flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid #E4DDD0", background: "#FFFEFB",
-    fontSize: 13.5, fontWeight: 600, color: "#8A8578", cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    flex: 1, padding: "10px 0", borderRadius: 9, border: "1px solid var(--cc-bord)", background: "var(--cc-surface)",
+    fontSize: 13.5, fontWeight: 600, color: "var(--cc-texte-doux)", cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
-  toggleBtnActiveVente: { background: "#E4F2EC", borderColor: "#B7DBCA", color: "#186B4E" },
-  toggleBtnActiveDepense: { background: "#FBEBE4", borderColor: "#EABBA9", color: "#B4432A" },
+  toggleBtnActiveVente: { background: "var(--cc-vert-fond)", borderColor: "var(--cc-vert-bord)", color: "var(--cc-vert)" },
+  toggleBtnActiveDepense: { background: "var(--cc-rouge-fond)", borderColor: "var(--cc-rouge-bord)", color: "var(--cc-rouge)" },
   field: { display: "flex", flexDirection: "column", gap: 6 },
-  fieldLabel: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
+  fieldLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-corps)" },
   input: {
-    padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none",
+    padding: "10px 12px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 14,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none",
   },
   inputBig: {
-    padding: "12px 14px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 22,
-    fontFamily: "'Fraunces', serif", fontWeight: 600, color: "#16213E", outline: "none",
+    padding: "12px 14px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 22,
+    fontFamily: "'Fraunces', serif", fontWeight: 600, color: "var(--cc-texte)", outline: "none",
   },
   select: {
-    padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none", background: "#FFFEFB",
+    padding: "10px 12px", borderRadius: 9, border: "1px solid var(--cc-bord)", fontSize: 14,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none", background: "var(--cc-surface)",
   },
   submitBtn: {
     display: "flex", alignItems: "center", justifyContent: "center", gap: 8,
-    padding: "12px 0", borderRadius: 9, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "12px 0", borderRadius: 10, border: "none", background: "var(--cc-degrade-or)", color: "var(--cc-texte-inverse)",
     fontSize: 14, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
+    boxShadow: "var(--cc-ombre-or)",
   },
-  confirmMsg: { fontSize: 12.5, color: "#186B4E", textAlign: "center" },
-  erreurLocale: { fontSize: 12.5, color: "#B4432A", textAlign: "center", background: "#FBEBE4", padding: "8px 10px", borderRadius: 8 },
+  confirmMsg: { fontSize: 12.5, color: "var(--cc-vert)", textAlign: "center" },
+  erreurLocale: { fontSize: 12.5, color: "var(--cc-rouge)", textAlign: "center", background: "var(--cc-rouge-fond)", padding: "8px 10px", borderRadius: 8 },
   qtyRow: { display: "flex", gap: 12 },
   totalBox: {
-    display: "flex", alignItems: "center", justifyContent: "space-between", background: "#FBF3E2",
+    display: "flex", alignItems: "center", justifyContent: "space-between", background: "var(--cc-surface-3)",
     borderRadius: 9, padding: "12px 14px",
   },
-  totalLabel: { fontSize: 12.5, fontWeight: 600, color: "#8A6420" },
-  totalValue: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "#16213E" },
-  dateHeader: { fontSize: 12.5, fontWeight: 600, color: "#8A8578", textTransform: "capitalize", marginBottom: 8 },
+  totalLabel: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-or-clair)" },
+  totalValue: { fontFamily: "'Fraunces', serif", fontSize: 19, fontWeight: 600, color: "var(--cc-texte)" },
+  dateHeader: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-doux)", textTransform: "capitalize", marginBottom: 8 },
   txRow: {
     display: "flex", alignItems: "center", gap: 10, padding: "9px 10px", borderRadius: 9,
-    background: "#FBF9F4",
+    background: "var(--cc-surface-2)",
   },
   txDot: { width: 7, height: 7, borderRadius: "50%", flexShrink: 0 },
   txInfo: { flex: 1, minWidth: 0 },
-  txLabel: { fontSize: 13.5, fontWeight: 500, color: "#16213E" },
-  txNote: { fontSize: 11.5, color: "#8A8578", marginTop: 1 },
+  txLabel: { fontSize: 13.5, fontWeight: 500, color: "var(--cc-texte)" },
+  txNote: { fontSize: 11.5, color: "var(--cc-texte-doux)", marginTop: 1 },
   txAmount: { fontFamily: "'Fraunces', serif", fontSize: 14.5, fontWeight: 600 },
   txAmountBtn: { background: "none", border: "none", cursor: "pointer", fontFamily: "'Fraunces', serif" },
-  txDelete: { background: "none", border: "none", color: "#B5AF9E", cursor: "pointer", padding: 4 },
+  txDelete: { background: "none", border: "none", color: "var(--cc-texte-discret)", cursor: "pointer", padding: 4 },
   txRowEdit: {
-    display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: "#FBF3E2",
+    display: "flex", alignItems: "center", gap: 8, padding: "9px 10px", borderRadius: 9, background: "var(--cc-surface-3)",
   },
   txEditInput: {
-    padding: "6px 8px", borderRadius: 7, border: "1px solid #E4DDD0", fontSize: 13,
-    fontFamily: "'Inter', sans-serif", color: "#16213E", outline: "none", width: 100,
+    padding: "6px 8px", borderRadius: 7, border: "1px solid var(--cc-bord)", fontSize: 13,
+    fontFamily: "'Inter', sans-serif", color: "var(--cc-texte)", outline: "none", width: 100,
   },
   txSaveBtn: {
-    padding: "6px 12px", borderRadius: 7, border: "none", background: "#16213E", color: "#F3D9A0",
+    padding: "6px 12px", borderRadius: 7, border: "none", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 12, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   txCancelBtn: {
-    padding: "6px 12px", borderRadius: 7, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    padding: "6px 12px", borderRadius: 7, border: "1px solid var(--cc-bord)", background: "transparent", color: "var(--cc-texte-doux)",
     fontSize: 12, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerCard: {
-    background: "#FFFEFB", border: "1px solid #EABBA9", borderRadius: 14, padding: 20,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-rouge-bord)", borderRadius: 14, padding: 20,
   },
-  dangerTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "#B4432A", marginBottom: 10 },
-  dangerText: { fontSize: 13, color: "#5C5748", lineHeight: 1.55, margin: 0 },
+  dangerTitle: { fontFamily: "'Fraunces', serif", fontSize: 15.5, fontWeight: 600, color: "var(--cc-rouge)", marginBottom: 10 },
+  dangerText: { fontSize: 13, color: "var(--cc-texte-corps)", lineHeight: 1.55, margin: 0 },
   dangerBtn: {
     display: "flex", alignItems: "center", gap: 7, padding: "10px 14px", borderRadius: 9,
-    border: "1px solid #EABBA9", background: "#FBEBE4", color: "#B4432A", fontSize: 13, fontWeight: 600,
+    border: "1px solid var(--cc-rouge-bord)", background: "var(--cc-rouge-fond)", color: "var(--cc-rouge)", fontSize: 13, fontWeight: 600,
     cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerBtnConfirm: {
-    padding: "10px 14px", borderRadius: 9, border: "none", background: "#B4432A", color: "#FFFEFB",
+    padding: "10px 14px", borderRadius: 9, border: "none", background: "var(--cc-rouge)", color: "var(--cc-surface)",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   dangerBtnGhost: {
-    padding: "10px 14px", borderRadius: 9, border: "1px solid #E4DDD0", background: "transparent", color: "#8A8578",
+    padding: "10px 14px", borderRadius: 9, border: "1px solid var(--cc-bord)", background: "transparent", color: "var(--cc-texte-doux)",
     fontSize: 13, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
   recupWrap: {
     minHeight: "100vh", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center",
-    background: "#FBF7F0", padding: 20, fontFamily: "'Inter', sans-serif",
+    background: "var(--cc-bg)", padding: 20, fontFamily: "'Inter', sans-serif",
   },
   recupCard: {
-    background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 16, padding: 32, width: "100%", maxWidth: 380,
+    background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 16, padding: 32, width: "100%", maxWidth: 380,
   },
   recupBrand: { display: "flex", alignItems: "center", gap: 8, justifyContent: "center", marginBottom: 18 },
-  recupSucces: { fontSize: 13, color: "#186B4E", background: "#E4F2EC", padding: "10px 12px", borderRadius: 8 },
+  recupSucces: { fontSize: 13, color: "var(--cc-vert)", background: "var(--cc-vert-fond)", padding: "10px 12px", borderRadius: 8 },
 };

@@ -12,6 +12,7 @@ import { Award, Target, TrendingUp, Copy, MessageCircle, Info, Printer, History 
 import { supabase } from "./supabaseClient.js";
 import { calculerScoreCredit, attestationScore, PALIERS } from "./creditScoring.js";
 import { secteurNormalise, seuilsDuSecteur } from "./secteurs.js";
+import { C, COULEURS_GRAPH } from "./theme.js";
 
 const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
@@ -26,7 +27,7 @@ function Jauge({ score, palier }) {
   return (
     <div style={S.jaugeWrap}>
       <svg width="170" height="170" viewBox="0 0 170 170" role="img" aria-label={`Score ${score} sur 100`}>
-        <circle cx="85" cy="85" r={rayon} fill="none" stroke="#EDE7DA" strokeWidth="14" />
+        <circle cx="85" cy="85" r={rayon} fill="none" stroke={C.bord} strokeWidth="14" />
         <circle
           cx="85"
           cy="85"
@@ -42,7 +43,7 @@ function Jauge({ score, palier }) {
           x="85"
           y="80"
           textAnchor="middle"
-          style={{ font: "700 40px 'Fraunces', serif", fill: "#16213E" }}
+          style={{ font: "700 40px 'Fraunces', serif", fill: C.texte }}
         >
           {score}
         </text>
@@ -50,7 +51,7 @@ function Jauge({ score, palier }) {
           x="85"
           y="104"
           textAnchor="middle"
-          style={{ font: "600 13px Inter, sans-serif", fill: "#8A8578" }}
+          style={{ font: "600 13px Inter, sans-serif", fill: C.texteDoux }}
         >
           /100
         </text>
@@ -191,7 +192,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
       `<!doctype html><html lang="fr"><head><meta charset="utf-8"><title>${t(
         "score_attestation_titre"
       )} — ${etablissement?.nom || ""}</title>` +
-        `<style>body{font-family:Inter,system-ui,sans-serif;color:#16213E;padding:36px;line-height:1.6}` +
+        `<style>body{font-family:Inter,system-ui,sans-serif;color:var(--cc-accent);padding:36px;line-height:1.6}` +
         `h1{font-family:Georgia,serif;font-size:22px;margin:0 0 18px}` +
         `pre{white-space:pre-wrap;font-family:Inter,system-ui,sans-serif;font-size:13px}</style></head>` +
         `<body><h1>${t("score_attestation_titre")}</h1><pre>${texteAttestation().replace(
@@ -205,11 +206,11 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
   };
 
   return (
-    <div style={S.page}>
+    <div className="cc-page cc-page-score" style={S.page}>
       {/* En-tête explicative */}
-      <div style={S.introCard}>
+      <div style={S.introCard} className="cc-card">
         <div style={S.introIcon}>
-          <Award size={20} color="#B4801F" />
+          <Award size={20} color="var(--cc-or)" />
         </div>
         <div>
           <div style={S.introTitre}>{t("score_titre_long")}</div>
@@ -219,7 +220,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
 
       <div style={S.scoreRow}>
         {/* Jauge + paliers */}
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("score_titre")}</div>
@@ -255,7 +256,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
         </div>
 
         {/* Détail des 5 critères */}
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("score_criteres_titre")}</div>
@@ -278,10 +279,10 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
                       width: `${(c.points / c.max) * 100}%`,
                       background:
                         c.points / c.max >= 0.75
-                          ? "#186B4E"
+                          ? "var(--cc-vert)"
                           : c.points / c.max >= 0.4
-                          ? "#D4A24C"
-                          : "#C1502E",
+                          ? "var(--cc-or)"
+                          : "var(--cc-rouge)",
                     }}
                   />
                 </div>
@@ -293,7 +294,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
       </div>
 
       {/* Objectifs atteints */}
-      <div style={S.card}>
+      <div style={S.card} className="cc-card">
         <div style={S.cardHeader}>
           <div>
             <div style={S.cardTitle}>{t("score_objectifs_titre")}</div>
@@ -339,7 +340,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
 
       {/* Indicateurs + évolution */}
       <div style={S.scoreRow}>
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("score_indicateurs_titre")}</div>
@@ -362,7 +363,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
           </div>
         </div>
 
-        <div style={S.card}>
+        <div style={S.card} className="cc-card">
           <div style={S.cardHeader}>
             <div>
               <div style={S.cardTitle}>{t("score_evolution_titre")}</div>
@@ -374,14 +375,14 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
               <AreaChart data={resultat.evolution} margin={{ top: 6, right: 8, left: 0, bottom: 0 }}>
                 <defs>
                   <linearGradient id="caScore" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="0%" stopColor="#186B4E" stopOpacity={0.28} />
-                    <stop offset="100%" stopColor="#186B4E" stopOpacity={0} />
+                    <stop offset="0%" stopColor={C.vert} stopOpacity={0.28} />
+                    <stop offset="100%" stopColor={C.vert} stopOpacity={0} />
                   </linearGradient>
                 </defs>
-                <CartesianGrid strokeDasharray="3 3" stroke="#EDE7DA" vertical={false} />
+                <CartesianGrid strokeDasharray="3 3" stroke={C.bord} vertical={false} />
                 <XAxis
                   dataKey="mois"
-                  tick={{ fontSize: 11, fill: "#8A8578" }}
+                  tick={{ fontSize: 11, fill: C.texteDoux }}
                   axisLine={false}
                   tickLine={false}
                 />
@@ -391,14 +392,14 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
                   contentStyle={{
                     fontFamily: "Inter, sans-serif",
                     fontSize: 12,
-                    border: "1px solid #EDE7DA",
+                    border: "1px solid var(--cc-bord)",
                     borderRadius: 8,
                   }}
                 />
                 <Area
                   type="monotone"
                   dataKey="ca"
-                  stroke="#186B4E"
+                  stroke={C.vert}
                   strokeWidth={2}
                   fill="url(#caScore)"
                   name={t("score_ind_ca")}
@@ -410,7 +411,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
       </div>
 
       {/* Historique du score : une progression vaut mieux qu'un chiffre isolé */}
-      <div style={S.card}>
+      <div style={S.card} className="cc-card">
         <div style={S.cardHeader}>
           <div>
             <div style={S.cardTitle}>
@@ -453,7 +454,7 @@ export default function ScoreCredit({ transactions, etablissement, demandes = []
       </div>
 
       {/* Attestation */}
-      <div style={S.card}>
+      <div style={S.card} className="cc-card">
         <div style={S.cardHeader}>
           <div>
             <div style={S.cardTitle}>{t("score_attestation_titre")}</div>
@@ -498,8 +499,8 @@ const S = {
     display: "flex",
     gap: 12,
     alignItems: "flex-start",
-    background: "#FBF3E2",
-    border: "1px solid #E5C88C",
+    background: "var(--cc-surface-3)",
+    border: "1px solid var(--cc-or-pale)",
     borderRadius: 14,
     padding: "14px 16px",
   },
@@ -508,27 +509,27 @@ const S = {
     width: 36,
     height: 36,
     borderRadius: 10,
-    background: "#FFFEFB",
+    background: "var(--cc-surface)",
     display: "flex",
     alignItems: "center",
     justifyContent: "center",
   },
-  introTitre: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#8A6420" },
-  introTexte: { margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "#8A6420" },
+  introTitre: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--cc-or-clair)" },
+  introTexte: { margin: "4px 0 0", fontSize: 13, lineHeight: 1.55, color: "var(--cc-or-clair)" },
   scoreRow: { display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))", gap: 16 },
   card: {
-    background: "#FFFEFB",
-    border: "1px solid #EDE7DA",
+    background: "var(--cc-surface)",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 14,
     padding: 16,
   },
   cardHeader: { display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: 10 },
-  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "#16213E" },
-  cardCaption: { fontSize: 12, color: "#8A8578", marginTop: 3 },
-  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "#16213E" },
+  cardTitle: { fontFamily: "'Fraunces', serif", fontSize: 16, fontWeight: 600, color: "var(--cc-texte)" },
+  cardCaption: { fontSize: 12, color: "var(--cc-texte-doux)", marginTop: 3 },
+  cardMontant: { fontFamily: "'Fraunces', serif", fontSize: 20, fontWeight: 600, color: "var(--cc-texte)" },
   jaugeWrap: { display: "flex", flexDirection: "column", alignItems: "center", gap: 8, marginTop: 10 },
   palierBadge: {
-    color: "#FFFEFB",
+    color: "var(--cc-surface)",
     fontSize: 11.5,
     fontWeight: 700,
     letterSpacing: "0.06em",
@@ -541,54 +542,54 @@ const S = {
     alignItems: "center",
     gap: 6,
     padding: "5px 10px",
-    border: "1px solid #EDE7DA",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 20,
     fontSize: 11.5,
-    color: "#5C5748",
+    color: "var(--cc-texte-corps)",
   },
   palierPoint: { width: 8, height: 8, borderRadius: "50%", display: "inline-block" },
-  palierNom: { fontWeight: 600, color: "#16213E" },
-  palierBornes: { color: "#8A8578" },
-  note: { margin: "12px 0 0", fontSize: 11.5, color: "#8A8578", lineHeight: 1.5 },
+  palierNom: { fontWeight: 600, color: "var(--cc-texte)" },
+  palierBornes: { color: "var(--cc-texte-doux)" },
+  note: { margin: "12px 0 0", fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.5 },
   critereHead: { display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 5 },
-  critereLabel: { color: "#16213E", fontWeight: 500 },
-  criterePoints: { color: "#5C5748", fontWeight: 700 },
-  barTrack: { height: 8, borderRadius: 20, background: "#F1ECE2", overflow: "hidden" },
+  critereLabel: { color: "var(--cc-texte)", fontWeight: 500 },
+  criterePoints: { color: "var(--cc-texte-corps)", fontWeight: 700 },
+  barTrack: { height: 8, borderRadius: 20, background: "var(--cc-surface-2)", overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 20 },
-  critereExplication: { marginTop: 5, fontSize: 11.5, color: "#8A8578", lineHeight: 1.45 },
+  critereExplication: { marginTop: 5, fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.45 },
   objectifsGrid: {
     display: "grid",
     gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))",
     gap: 10,
     marginTop: 14,
   },
-  objectifCard: { border: "1px solid #EDE7DA", borderRadius: 11, padding: "10px 12px" },
-  objectifCardOk: { background: "#E7F5EF", borderColor: "#B7E0CC" },
-  objectifCardKo: { background: "#FFFEFB" },
+  objectifCard: { border: "1px solid var(--cc-bord)", borderRadius: 11, padding: "10px 12px" },
+  objectifCardOk: { background: "var(--cc-vert-fond)", borderColor: "var(--cc-vert-bord)" },
+  objectifCardKo: { background: "var(--cc-surface)" },
   objectifHead: { display: "flex", alignItems: "center", gap: 7 },
-  objectifTitre: { fontSize: 12.5, fontWeight: 600, color: "#16213E", lineHeight: 1.3 },
-  objectifValeur: { marginTop: 6, fontSize: 12, color: "#5C5748", fontWeight: 600 },
-  objectifCible: { fontWeight: 400, color: "#8A8578" },
+  objectifTitre: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)", lineHeight: 1.3 },
+  objectifValeur: { marginTop: 6, fontSize: 12, color: "var(--cc-texte-corps)", fontWeight: 600 },
+  objectifCible: { fontWeight: 400, color: "var(--cc-texte-doux)" },
   indicateursListe: { display: "flex", flexDirection: "column", gap: 10, marginTop: 12 },
   indicateur: {
     display: "flex",
     justifyContent: "space-between",
     alignItems: "center",
     paddingBottom: 8,
-    borderBottom: "1px dashed #EDE7DA",
+    borderBottom: "1px dashed var(--cc-bord)",
   },
-  indicateurLabel: { fontSize: 12.5, color: "#5C5748" },
-  indicateurValeur: { fontSize: 13.5, color: "#16213E" },
+  indicateurLabel: { fontSize: 12.5, color: "var(--cc-texte-corps)" },
+  indicateurValeur: { fontSize: 13.5, color: "var(--cc-texte)" },
   attestation: {
     margin: "12px 0 0",
     padding: 14,
-    background: "#FBF9F4",
-    border: "1px solid #EDE7DA",
+    background: "var(--cc-surface-2)",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 11,
     fontFamily: "'IBM Plex Mono', ui-monospace, monospace",
     fontSize: 11.5,
     lineHeight: 1.6,
-    color: "#3A3628",
+    color: "var(--cc-texte)",
     whiteSpace: "pre-wrap",
     overflowX: "auto",
   },
@@ -598,10 +599,10 @@ const S = {
     alignItems: "center",
     gap: 6,
     padding: "10px 14px",
-    borderRadius: 9,
+    borderRadius: 10,
     border: "none",
-    background: "#16213E",
-    color: "#F3D9A0",
+    background: "var(--cc-degrade-or)",
+    color: "var(--cc-texte-inverse)",
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
@@ -613,15 +614,15 @@ const S = {
     gap: 6,
     padding: "10px 14px",
     borderRadius: 9,
-    border: "1px solid #D4A24C",
+    border: "1px solid var(--cc-or)",
     background: "transparent",
-    color: "#8A6420",
+    color: "var(--cc-or-clair)",
     fontSize: 13,
     fontWeight: 600,
     cursor: "pointer",
     fontFamily: "'Inter', sans-serif",
   },
-  vide: { marginTop: 12, fontSize: 12.5, color: "#8A8578", lineHeight: 1.5 },
+  vide: { marginTop: 12, fontSize: 12.5, color: "var(--cc-texte-doux)", lineHeight: 1.5 },
   historiqueTable: { marginTop: 12, display: "flex", flexDirection: "column", gap: 6 },
   historiqueEntete: {
     display: "grid",
@@ -629,11 +630,11 @@ const S = {
     gap: 8,
     fontSize: 11,
     fontWeight: 700,
-    color: "#8A8578",
+    color: "var(--cc-texte-doux)",
     textTransform: "uppercase",
     letterSpacing: "0.04em",
     paddingBottom: 4,
-    borderBottom: "1px solid #EDE7DA",
+    borderBottom: "1px solid var(--cc-bord)",
   },
   historiqueLigne: {
     display: "grid",
@@ -641,25 +642,25 @@ const S = {
     gap: 8,
     alignItems: "center",
     padding: "7px 0",
-    borderBottom: "1px dashed #EDE7DA",
+    borderBottom: "1px dashed var(--cc-bord)",
   },
-  historiqueMois: { fontSize: 12.5, color: "#5C5748" },
+  historiqueMois: { fontSize: 12.5, color: "var(--cc-texte-corps)" },
   historiqueScore: { fontSize: 13, fontWeight: 700 },
   historiquePalier: {
     marginLeft: 6,
     fontSize: 10.5,
     fontWeight: 600,
-    color: "#8A8578",
+    color: "var(--cc-texte-doux)",
   },
-  historiqueObjectifs: { fontSize: 12.5, color: "#5C5748" },
+  historiqueObjectifs: { fontSize: 12.5, color: "var(--cc-texte-corps)" },
   avertissement: {
     display: "flex",
     gap: 10,
     alignItems: "flex-start",
-    background: "#EEF1F5",
-    border: "1px solid #D5DCE4",
+    background: "var(--cc-bord)",
+    border: "1px solid var(--cc-bord)",
     borderRadius: 12,
     padding: "12px 14px",
   },
-  avertissementTexte: { margin: 0, fontSize: 12, lineHeight: 1.55, color: "#4A5567" },
+  avertissementTexte: { margin: 0, fontSize: 12, lineHeight: 1.55, color: "var(--cc-texte-discret)" },
 };

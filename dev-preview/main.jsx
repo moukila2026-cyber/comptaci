@@ -11,7 +11,7 @@ import ReactDOM from "react-dom/client";
 import ScoreCredit from "../ScoreCredit.jsx";
 import FacturationFNE from "../FacturationFNE.jsx";
 import { traducteur } from "../i18n.js";
-import { Abonnement, Stock } from "../App.jsx";
+import { Abonnement, Caisse, Dashboard, Historique, Saisie, Stock } from "../App.jsx";
 import { SECTEURS_IDS, postesDuSecteur, posteDeDesignation } from "../secteurs.js";
 
 const t = traducteur("fr");
@@ -85,7 +85,7 @@ function ApercuSecteurs() {
   const postes = postesDuSecteur(secteur);
 
   const styles = {
-    carte: { background: "#FFFEFB", border: "1px solid #EDE7DA", borderRadius: 14, padding: 16 },
+    carte: { background: "var(--cc-surface)", border: "1px solid var(--cc-bord)", borderRadius: 14, padding: 16 },
     grille: {
       display: "grid",
       gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
@@ -101,7 +101,7 @@ function ApercuSecteurs() {
       </h2>
 
       <label style={{ display: "block", marginBottom: 16, maxWidth: 420 }}>
-        <span style={{ fontSize: 12.5, fontWeight: 600, color: "#5C5748" }}>
+        <span style={{ fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-doux)" }}>
           {t("auth_secteur")}
         </span>
         <select
@@ -112,7 +112,7 @@ function ApercuSecteurs() {
             width: "100%",
             padding: "10px 12px",
             borderRadius: 9,
-            border: "1px solid #E4DDD0",
+            border: "1px solid var(--cc-bord)",
             fontSize: 14,
             fontFamily: "'Inter', sans-serif",
             cursor: "pointer",
@@ -147,8 +147,8 @@ function ApercuSecteurs() {
                   gap: 8,
                   padding: "8px 10px",
                   borderRadius: 9,
-                  border: `1px solid ${actif ? "#D4A24C" : "#EDE7DA"}`,
-                  background: actif ? "#FBF9F4" : "#FFFEFB",
+                  border: `1px solid ${actif ? "var(--cc-or)" : "var(--cc-bord)"}`,
+                  background: actif ? "var(--cc-surface-2)" : "var(--cc-surface)",
                 }}
               >
                 <span style={{ fontSize: 12 }}>{p.label}</span>
@@ -171,7 +171,7 @@ function ApercuSecteurs() {
         </p>
       </div>
 
-      <div style={{ marginTop: 16, fontSize: 12.5, color: "#5C5748", lineHeight: 1.7 }}>
+      <div style={{ marginTop: 16, fontSize: 12.5, color: "var(--cc-texte-doux)", lineHeight: 1.7 }}>
         <strong>Rattachement automatique d'une dépense à son poste :</strong>
         <br />
         « eau de javel » → {posteDeDesignation(secteur, "eau de javel")?.label || "non classé"}
@@ -187,6 +187,10 @@ function ApercuSecteurs() {
 /* -------------------------------------------------------------------- rendu */
 
 const VUES = [
+  { id: "dashboard", label: "Tableau de bord" },
+  { id: "saisie", label: "Saisie" },
+  { id: "caisse", label: "Caisse" },
+  { id: "historique", label: "Historique" },
   { id: "score", label: "Score de crédit" },
   { id: "fne", label: "Facturation FNE" },
   { id: "secteurs", label: "Types d'établissement" },
@@ -195,7 +199,7 @@ const VUES = [
 ];
 
 function Application() {
-  const [vue, setVue] = useState("score");
+  const [vue, setVue] = useState("dashboard");
 
   return (
     <>
@@ -211,8 +215,43 @@ function Application() {
         ))}
       </div>
 
-      {vue === "score" && (
-        <ScoreCredit
+      {/* Les composants sont rendus dans le thème sombre de l'app (.cc-app) */}
+      <div className="cc-app" style={{ paddingBottom: 40 }}>
+        {vue === "dashboard" && (
+          <Dashboard
+            transactions={TRANSACTIONS}
+            isMobile={false}
+            secteur={ETABLISSEMENT.secteur}
+            etablissement={ETABLISSEMENT}
+            demandes={[]}
+            t={t}
+          />
+        )}
+        {vue === "saisie" && (
+          <Saisie onAdd={async () => true} secteur={ETABLISSEMENT.secteur} etablissement={ETABLISSEMENT} t={t} />
+        )}
+        {vue === "caisse" && (
+          <Caisse
+            sessionCaisse={null}
+            historiqueCaisse={[]}
+            transactions={TRANSACTIONS}
+            onOuvrir={async () => true}
+            onFermer={async () => true}
+            t={t}
+          />
+        )}
+        {vue === "historique" && (
+          <Historique
+            transactions={TRANSACTIONS.slice(0, 40)}
+            onDelete={async () => true}
+            onUpdate={async () => true}
+            plan="pro"
+            secteur={ETABLISSEMENT.secteur}
+            t={t}
+          />
+        )}
+        {vue === "score" && (
+          <ScoreCredit
           transactions={TRANSACTIONS}
           etablissement={ETABLISSEMENT}
           demandes={[]}
@@ -248,8 +287,9 @@ function Application() {
           planEffectif="pro"
           enEssai={false}
           t={t}
-        />
-      )}
+          />
+        )}
+      </div>
     </>
   );
 }
