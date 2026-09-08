@@ -1,98 +1,29 @@
 import React, { useState, useEffect, useMemo } from "react";
 import { AreaChart, Area, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from "recharts";
-import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info } from "lucide-react";
+import { Plus, TrendingUp, TrendingDown, Wallet, LayoutDashboard, PenLine, History, Trash2, Building2, ChevronDown, LogOut, Package, Copy, Minus, Lock, Unlock, Phone, MessageCircle, CreditCard, Store, Info, Award, FileText } from "lucide-react";
 import { supabase, configManquante, clientEnErreur } from "./supabaseClient.js";
 import AuthScreen from "./AuthScreen.jsx";
 import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
-import PaiementWave, { PRIX_PLANS } from "./PaiementWave.jsx";
+import PaiementWave, { PRIX_PLANS, JOURS_ESSAI } from "./PaiementWave.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
-
-const CATEGORIES_PAR_SECTEUR = {
-  restauration: [
-    { id: "boissons", label: "Boissons" },
-    { id: "nourriture", label: "Nourriture" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  quincaillerie: [
-    { id: "materiaux", label: "Matériaux de construction" },
-    { id: "outillage", label: "Outillage" },
-    { id: "plomberie", label: "Plomberie" },
-    { id: "electricite", label: "Électricité" },
-    { id: "peinture", label: "Peinture & finitions" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  boutique: [
-    { id: "alimentaire", label: "Produits alimentaires" },
-    { id: "hygiene", label: "Produits d'hygiène" },
-    { id: "boissons", label: "Boissons" },
-    { id: "emballages", label: "Emballages" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-  pharmacie: [
-    { id: "medicaments", label: "Médicaments" },
-    { id: "parapharmacie", label: "Parapharmacie" },
-    { id: "materiel_medical", label: "Matériel médical" },
-    { id: "personnel", label: "Personnel" },
-    { id: "charges_fixes", label: "Charges fixes" },
-    { id: "autre", label: "Autre" },
-  ],
-};
-
-const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
-function secteursTraduits(t) {
-  return SECTEURS_IDS.map((id) => ({ id, label: t(`secteur_${id}`) }));
-}
-
-function categoriesDuSecteur(secteur) {
-  return CATEGORIES_PAR_SECTEUR[secteur] || CATEGORIES_PAR_SECTEUR.restauration;
-}
-
-/**
- * Nature de chaque poste de dépense : achats/approvisionnements, masse
- * salariale, charges de structure ou autre. Sert aux ratios du tableau de bord.
- */
-const POSTES_PAR_CATEGORIE = {
-  medicaments: "achats",
-  parapharmacie: "achats",
-  materiel_medical: "achats",
-  alimentaire: "achats",
-  hygiene: "achats",
-  boissons: "achats",
-  emballages: "achats",
-  materiaux: "achats",
-  outillage: "achats",
-  plomberie: "achats",
-  electricite: "achats",
-  peinture: "achats",
-  nourriture: "achats",
-  personnel: "personnel",
-  charges_fixes: "charges",
-  autre: "autre",
-};
-
-/** Seuils de bonne gestion (en % du CA) propres à chaque secteur. */
-const SEUILS_RATIOS = {
-  pharmacie: { achats: 65, personnel: 15, charges: 15 },
-  boutique: { achats: 75, personnel: 12, charges: 12 },
-  quincaillerie: { achats: 70, personnel: 12, charges: 15 },
-  restauration: { achats: 40, personnel: 20, charges: 15 },
-};
-
-/** Objectif de marge brute indicative, par secteur. */
-const MARGE_CIBLE = {
-  pharmacie: "25 – 35 %",
-  boutique: "15 – 25 %",
-  quincaillerie: "20 – 30 %",
-  restauration: "55 – 65 %",
-};
+import {
+  SECTEURS_IDS,
+  SECTEUR_PAR_DEFAUT,
+  secteurNormalise,
+  secteursTraduits,
+  categoriesDuSecteur,
+  postesDuSecteur,
+  posteDeDesignation,
+  categorieSuggeree,
+  seuilsDuSecteur,
+  margeCibleDuSecteur,
+  natureCategorie,
+} from "./secteurs.js";
+import { calculerScoreCredit } from "./creditScoring.js";
+import ScoreCredit from "./ScoreCredit.jsx";
+import FacturationFNE from "./FacturationFNE.jsx";
 
 /** Montants usuels proposés en un clic à l'ouverture de la caisse. */
 const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
@@ -422,20 +353,36 @@ function ComptaCiApp({ langue, setLangue, t }) {
 
   const addTransaction = async (donneesTx) => {
     if (!etablissement) return false;
-    const { designation, quantite, prixUnitaire, ...champsTransaction } = donneesTx;
+    const { designation, quantite, prixUnitaire, poste_id, ...champsTransaction } = donneesTx;
     const quantiteNumerique = parseFloat(quantite) || 0;
     const prixNumerique = parseFloat(prixUnitaire) || 0;
     const champsCommuns = { ...champsTransaction, etablissement_id: etablissement.id };
 
-    // La colonne `quantite` n'existe que si la migration
-    // supabase-transactions-quantite.sql a été appliquée. On tente d'abord avec,
-    // puis on retente sans elle : un simple oubli de migration ne doit jamais
-    // empêcher l'enregistrement d'une vente.
+    // Les colonnes `quantite` et `poste_id` n'existent que si les migrations
+    // correspondantes ont été appliquées. On tente d'abord avec toutes, puis on
+    // retire progressivement celles que la base refuse : un simple oubli de
+    // migration ne doit jamais empêcher l'enregistrement d'une vente.
     let { data, error } = await supabase
       .from("transactions")
-      .insert({ ...champsCommuns, quantite: quantiteNumerique })
+      .insert({ ...champsCommuns, quantite: quantiteNumerique, poste_id: poste_id || null })
       .select();
     if (error && /quantite/i.test(error.message || "")) {
+      const repli = await supabase
+        .from("transactions")
+        .insert({ ...champsCommuns, poste_id: poste_id || null })
+        .select();
+      data = repli.data;
+      error = repli.error;
+    }
+    if (error && /poste_id/i.test(error.message || "")) {
+      const repli = await supabase
+        .from("transactions")
+        .insert({ ...champsCommuns, quantite: quantiteNumerique })
+        .select();
+      data = repli.data;
+      error = repli.error;
+    }
+    if (error && /quantite|poste_id/i.test(error.message || "")) {
       const repli = await supabase.from("transactions").insert(champsCommuns).select();
       data = repli.data;
       error = repli.error;
@@ -451,6 +398,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
     const transactionCreee = {
       ...(data?.[0] || {}),
       quantite: quantiteNumerique,
+      poste_id: poste_id || null,
       designation: designation ? designation.trim() : "",
     };
     setTransactions([transactionCreee, ...transactions]);
@@ -693,7 +641,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   }
 
   const essaiExpireLe = etablissement
-    ? new Date(new Date(etablissement.date_creation).getTime() + (etablissement.essai_jours || 7) * 24 * 60 * 60 * 1000)
+    ? new Date(new Date(etablissement.date_creation).getTime() + (Number(etablissement.essai_jours) || JOURS_ESSAI) * 24 * 60 * 60 * 1000)
     : null;
   const essaiEnCours = essaiExpireLe ? maintenant < essaiExpireLe.getTime() : false;
   const accesAutorise = etablissement?.abonnement_actif || essaiEnCours;
@@ -774,6 +722,22 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onSupprimer={supprimerFournisseur}
             t={t}
           />
+        ) : vue === "score" ? (
+          <ScoreCredit
+            transactions={transactions}
+            etablissement={etablissement}
+            langue={langue}
+            t={t}
+          />
+        ) : vue === "fne" ? (
+          <FacturationFNE
+            etablissement={etablissement}
+            transactions={transactions}
+            planEffectif={planEffectif}
+            enEssai={enEssai}
+            t={t}
+            onRafraichirEtablissement={chargerEtablissements}
+          />
         ) : vue === "abonnement" ? (
           <Abonnement
             etablissement={etablissement}
@@ -806,6 +770,8 @@ const PAGE_BANNERS = {
   historique: { src: "/images/photo-boutique.jpg", position: "center 20%" },
   fournisseurs: { src: "/images/photo-marche.jpg", position: "center 40%" },
   abonnement: { src: "/images/promo-controle.png", position: "center 10%" },
+  score: { src: "/images/promo-dashboard.png", position: "center 20%" },
+  fne: { src: "/images/photo-marche.jpg", position: "center 25%" },
 };
 
 function PageBanner({ vue, t }) {
@@ -828,6 +794,8 @@ function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
     { id: "caisse", label: t("nav_caisse"), icon: Lock },
     { id: "stock", label: t("nav_stock"), icon: Package },
     { id: "historique", label: t("nav_historique"), icon: History },
+    { id: "score", label: t("nav_score"), icon: Award },
+    { id: "fne", label: t("nav_fne"), icon: FileText },
     { id: "fournisseurs", label: t("nav_fournisseurs"), icon: Phone },
     { id: "abonnement", label: t("nav_abonnement"), icon: CreditCard },
   ];
@@ -915,7 +883,7 @@ function EssaiBanner({ msRestant, estFondateur, essaiJours, t }) {
   return (
     <div style={{ ...styles.essaiBanner, ...(urgent ? styles.essaiBannerUrgent : {}) }}>
       {estFondateur && <span style={styles.fondateurTag}>★ {t("fondateur_tag")}</span>}
-      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || 7} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
+      {urgent ? "⏰ " : ""}{t("essai_gratuit")} ({essaiJours || JOURS_ESSAI} {t("essai_jours")}) — {t("essai_reste")} {jours > 0 ? `${jours} j ${heuresRestantes} h` : `${heuresRestantes} h`} {t("essai_avant")} {estFondateur ? t("essai_fondateur") : t("essai_a_partir_de")}.
     </div>
   );
 }
@@ -1079,9 +1047,27 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
   const cleMois = `${maintenant.getFullYear()}-${String(maintenant.getMonth() + 1).padStart(2, "0")}`;
   const topProduits = useMemo(() => buildTopProduits(transactions, cleMois), [transactions, cleMois]);
 
-  const secteurActif = SECTEURS_IDS.includes(secteur) ? secteur : "restauration";
+  const secteurActif = secteurNormalise(secteur);
   const libelleSecteur = t(`secteur_${secteurActif}`);
-  const seuils = SEUILS_RATIOS[secteurActif] || SEUILS_RATIOS.restauration;
+  const seuils = seuilsDuSecteur(secteurActif);
+
+  // Répartition par POSTE RÉEL (les 20+ dépenses types du métier) :
+  // chaque gérant ne voit que les postes de son activité.
+  const parPoste = useMemo(
+    () => buildPosteBreakdown(transactions, secteurActif),
+    [transactions, secteurActif]
+  );
+
+  // Score de crédit calculé en direct (aperçu affiché sur le tableau de bord).
+  const scoreApercu = useMemo(
+    () =>
+      calculerScoreCredit({
+        transactions,
+        etablissement,
+        seuilDepenses: (seuils.achats + seuils.personnel + seuils.charges) / 100,
+      }),
+    [transactions, etablissement, seuils]
+  );
 
   const totalDepenses = parCategorie.reduce((a, c) => a + c.value, 0);
   const ratios = [
@@ -1121,6 +1107,35 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
           <Copy size={14} /> {copie ? t("dash_bilan_copie") : t("dash_copier_bilan")}
         </button>
       </div>
+      <div
+        style={{
+          ...styles.scoreApercuCard,
+          borderColor: scoreApercu.palier.couleur,
+          background: scoreApercu.palier.couleurFond,
+        }}
+      >
+        <div style={styles.scoreApercuGauche}>
+          <div style={styles.scoreApercuTitre}>{t("score_titre")}</div>
+          <div style={styles.scoreApercuSous}>
+            {t("score_objectifs_atteints")} : {scoreApercu.objectifsAtteints}/{scoreApercu.objectifsTotal}
+          </div>
+        </div>
+        <div style={styles.scoreApercuDroite}>
+          <span style={{ ...styles.scoreApercuValeur, color: scoreApercu.palier.couleur }}>
+            {scoreApercu.score}
+          </span>
+          <span style={styles.scoreApercuSur100}>/100</span>
+          <span
+            style={{
+              ...styles.scorePalierBadge,
+              background: scoreApercu.palier.couleur,
+            }}
+          >
+            {t(`score_palier_${scoreApercu.palier.id}`)}
+          </span>
+        </div>
+      </div>
+
       <div className="kpi-row">
         <KpiCard
           label={t("dash_ca")}
@@ -1278,6 +1293,42 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         )}
       </div>
 
+      {/* Dépenses réelles par poste d'activité : la liste des 20+ dépenses
+          types du métier, filtrée automatiquement sur le type d'établissement */}
+      <div style={styles.card}>
+        <div style={styles.cardHeader}>
+          <div>
+            <div style={styles.cardTitle}>{t("dash_postes_titre")}</div>
+            <div style={styles.cardCaption}>
+              {t("dash_postes_sous")} — {libelleSecteur} ({postesDuSecteur(secteurActif).length} {t("dash_postes_unites")})
+            </div>
+          </div>
+          <div style={styles.cardMontant}>{fmt(totalDepenses)} <span style={styles.kpiUnit}>FCFA</span></div>
+        </div>
+        <div style={styles.postesGrid}>
+          {parPoste.map((p) => {
+            const actif = p.value > 0;
+            const part = totalDepenses > 0 ? (p.value / totalDepenses) * 100 : 0;
+            return (
+              <div
+                key={p.id}
+                style={{
+                  ...styles.posteChip,
+                  ...(actif ? styles.posteChipActif : {}),
+                }}
+                title={`${p.label} — ${fmt(p.value)} FCFA`}
+              >
+                <span style={styles.posteChipLabel}>{p.label}</span>
+                <span style={{ ...styles.posteChipMontant, ...(actif ? styles.posteChipMontantActif : {}) }}>
+                  {actif ? `${fmt(p.value)} F · ${part.toFixed(0)}%` : "—"}
+                </span>
+              </div>
+            );
+          })}
+        </div>
+        <p style={styles.postesNote}>{t("dash_postes_note")}</p>
+      </div>
+
       <div className="grid-two">
         {/* Classement des produits vendus ce mois-ci */}
         <div style={styles.card}>
@@ -1378,7 +1429,7 @@ function Dashboard({ transactions, isMobile, secteur, etablissement, t }) {
         </div>
         <div style={styles.conseilsMarge}>
           <span>{t("dash_marge_cible")}</span>
-          <strong>{MARGE_CIBLE[secteurActif] || "—"}</strong>
+          <strong>{margeCibleDuSecteur(secteurActif)}</strong>
         </div>
         <ul style={styles.conseilsListe}>
           {[1, 2, 3].map((n) => (
@@ -1439,12 +1490,17 @@ function BarreProgression({ pourcentage, couleur = "#16213E", fond = "#F1ECE2" }
 }
 
 function Saisie({ onAdd, secteur, etablissement, t }) {
-  const categories = categoriesDuSecteur(secteur);
+  const secteurActif = secteurNormalise(secteur);
+  const categories = categoriesDuSecteur(secteurActif);
+  // Les dépenses types du métier (20 minimum) : elles alimentent les
+  // suggestions de saisie et la répartition du tableau de bord.
+  const postes = postesDuSecteur(secteurActif);
   const [type, setType] = useState("vente");
   const [designation, setDesignation] = useState("");
   const [quantite, setQuantite] = useState("1");
   const [prixUnitaire, setPrixUnitaire] = useState("");
   const [categorie, setCategorie] = useState(categories[0].id);
+  const [posteId, setPosteId] = useState("");
   const [date, setDate] = useState(todayISO());
   const [confirme, setConfirme] = useState(false);
   const [erreurLocale, setErreurLocale] = useState("");
@@ -1459,10 +1515,14 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
     setErreurLocale("");
     setEnCours(true);
     const infosRecu = { type, designation: designation.trim(), quantite, prixUnitaire, total: totalCalcule, date };
+    // Une dépense rattachée à un poste connu garde son poste : la répartition
+    // du tableau de bord est alors exacte, même après rechargement.
+    const posteDetecte = type === "depense" ? posteId || posteDeDesignation(secteurActif, designation)?.id || null : null;
     const succes = await onAdd({
       type,
       montant: totalCalcule,
-      categorie: type === "depense" ? categorie : "vente",
+      categorie: type === "depense" ? (postes.find((p) => p.id === posteDetecte)?.categorie || categorie) : "vente",
+      poste_id: posteDetecte,
       note: [designation.trim(), `Qté: ${quantite || 0}`, `PU: ${fmt(parseFloat(prixUnitaire) || 0)} FCFA`].filter(Boolean).join(" — "),
       date,
       designation: designation.trim(),
@@ -1472,6 +1532,7 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
     if (succes) {
       if (type === "vente") setDernierRecu(infosRecu);
       setDesignation("");
+      setPosteId("");
       setQuantite("1");
       setPrixUnitaire("");
       setConfirme(true);
@@ -1548,12 +1609,58 @@ function Saisie({ onAdd, secteur, etablissement, t }) {
             </span>
             <input
               type="text"
+              list={type === "depense" ? "comptaci-postes" : undefined}
               placeholder={type === "vente" ? t("saisie_designation_placeholder_vente") : t("saisie_designation_placeholder_depense")}
               value={designation}
-              onChange={(e) => setDesignation(e.target.value)}
+              onChange={(e) => {
+                setDesignation(e.target.value);
+                // Saisie libre : on retrouve le poste correspondant pour
+                // classer la dépense automatiquement.
+                const trouve = posteDeDesignation(secteurActif, e.target.value);
+                if (trouve) {
+                  setPosteId(trouve.id);
+                  setCategorie(trouve.categorie);
+                } else {
+                  setPosteId("");
+                }
+              }}
               style={styles.input}
             />
+            {type === "depense" && (
+              <datalist id="comptaci-postes">
+                {postes.map((p) => (
+                  <option key={p.id} value={p.label} />
+                ))}
+              </datalist>
+            )}
           </label>
+
+          {type === "depense" && (
+            <div style={styles.field}>
+              <span style={styles.fieldLabel}>
+                {t("saisie_poste_rapide")} — {t(`secteur_${secteurActif}`)}
+              </span>
+              <div style={styles.postesRapides}>
+                {postes.slice(0, 8).map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    onClick={() => {
+                      setDesignation(p.label);
+                      setPosteId(p.id);
+                      setCategorie(p.categorie);
+                    }}
+                    style={{
+                      ...styles.posteRapideBtn,
+                      ...(posteId === p.id ? styles.posteRapideBtnActif : {}),
+                    }}
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
 
           {type === "depense" && (
             <label style={styles.field}>
@@ -2527,7 +2634,7 @@ function computeStats(transactions) {
   duMois
     .filter((t) => t.type === "depense")
     .forEach((t) => {
-      const poste = POSTES_PAR_CATEGORIE[t.categorie] || "autre";
+      const poste = natureCategorie(t.categorie);
       postes[poste] += Number(t.montant) || 0;
     });
 
@@ -2604,6 +2711,48 @@ function buildCategorieBreakdown(transactions, secteur) {
       .filter((t) => monthKey(t.date) === curKey && t.type === "depense" && t.categorie === c.id)
       .reduce((a, t) => a + t.montant, 0),
   })).sort((a, b) => b.value - a.value);
+}
+
+/**
+ * Répartition des dépenses par POSTE RÉEL de l'activité (les 20+ dépenses
+ * types du métier : « biscuits », « eau de javel », « faux ongles »…).
+ *
+ * Une dépense est rattachée à son poste :
+ *   1. par l'identifiant de poste enregistré (`poste_id`) si la colonne existe,
+ *   2. sinon par analyse de la désignation saisie (libellé ou mot-clé).
+ *
+ * Les dépenses non rattachées tombent dans « Autre / non classé ».
+ */
+function buildPosteBreakdown(transactions, secteur) {
+  const now = new Date();
+  const curKey = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}`;
+  const postes = postesDuSecteur(secteur);
+  const totaux = new Map(postes.map((p) => [p.id, 0]));
+  let nonClasse = 0;
+
+  (transactions || [])
+    .filter((t) => monthKey(t.date) === curKey && t.type === "depense")
+    .forEach((t) => {
+      const valeur = Number(t.montant) || 0;
+      const idStocke = t.poste_id && totaux.has(t.poste_id) ? t.poste_id : null;
+      const trouve = idStocke || posteDeDesignation(secteur, designationTransaction(t))?.id;
+      if (trouve) totaux.set(trouve, (totaux.get(trouve) || 0) + valeur);
+      else nonClasse += valeur;
+    });
+
+  const lignes = postes
+    .map((p) => ({
+      id: p.id,
+      label: p.label,
+      categorie: p.categorie,
+      value: totaux.get(p.id) || 0,
+    }))
+    .sort((a, b) => b.value - a.value);
+
+  if (nonClasse > 0) {
+    lignes.push({ id: "__non_classe", label: "Autre / non classé", categorie: "autre", value: nonClasse });
+  }
+  return lignes;
 }
 
 const GLOBAL_CSS = `
@@ -2953,6 +3102,106 @@ const styles = {
   repartitionLabel: { fontSize: 13, fontWeight: 500, color: "#16213E" },
   repartitionMontant: { fontSize: 12.5, fontWeight: 600, color: "#5C5748", whiteSpace: "nowrap" },
   repartitionDetail: { fontSize: 11.5, color: "#8A8578", marginTop: 5 },
+
+  /* --- Aperçu du score de crédit (haut du tableau de bord) --- */
+  scoreApercuCard: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 14,
+    flexWrap: "wrap",
+    margin: "0 0 16px",
+    padding: "14px 18px",
+    border: "1.5px solid #EDE7DA",
+    borderRadius: 14,
+    background: "#FFFEFB",
+  },
+  scoreApercuGauche: { display: "flex", flexDirection: "column", gap: 3 },
+  scoreApercuTitre: {
+    fontFamily: "'Fraunces', serif",
+    fontSize: 15,
+    fontWeight: 600,
+    color: "#16213E",
+  },
+  scoreApercuSous: { fontSize: 12, color: "#5C5748" },
+  scoreApercuDroite: { display: "flex", alignItems: "baseline", gap: 6, flexWrap: "wrap" },
+  scoreApercuValeur: {
+    fontFamily: "'Fraunces', serif",
+    fontSize: 30,
+    fontWeight: 700,
+    lineHeight: 1,
+  },
+  scoreApercuSur100: { fontSize: 13, color: "#8A8578", fontWeight: 600 },
+  scorePalierBadge: {
+    marginLeft: 6,
+    color: "#FFFEFB",
+    fontSize: 11,
+    fontWeight: 700,
+    padding: "3px 10px",
+    borderRadius: 20,
+  },
+
+  /* --- Dépenses réelles par poste d'activité --- */
+  postesGrid: {
+    display: "grid",
+    gridTemplateColumns: "repeat(auto-fill, minmax(180px, 1fr))",
+    gap: 8,
+    marginTop: 12,
+  },
+  posteChip: {
+    display: "flex",
+    alignItems: "center",
+    justifyContent: "space-between",
+    gap: 8,
+    padding: "8px 10px",
+    borderRadius: 9,
+    border: "1px solid #EDE7DA",
+    background: "#FFFEFB",
+  },
+  posteChipActif: {
+    borderColor: "#D4A24C",
+    background: "#FBF9F4",
+  },
+  posteChipLabel: {
+    fontSize: 12,
+    color: "#3A3628",
+    lineHeight: 1.3,
+  },
+  posteChipMontant: {
+    fontSize: 11.5,
+    fontWeight: 600,
+    color: "#A9A497",
+    whiteSpace: "nowrap",
+  },
+  posteChipMontantActif: { color: "#16213E" },
+  postesRapides: {
+    display: "flex",
+    flexWrap: "wrap",
+    gap: 6,
+  },
+  posteRapideBtn: {
+    padding: "6px 10px",
+    borderRadius: 20,
+    border: "1px solid #E4DDD0",
+    background: "#FFFEFB",
+    color: "#5C5748",
+    fontSize: 12,
+    fontWeight: 500,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+  },
+  posteRapideBtnActif: {
+    borderColor: "#D4A24C",
+    background: "#FBF3E2",
+    color: "#8A6420",
+    fontWeight: 700,
+  },
+  postesNote: {
+    margin: "12px 0 0",
+    fontSize: 11.5,
+    color: "#8A8578",
+    lineHeight: 1.5,
+  },
   barTrack: { height: 8, borderRadius: 999, overflow: "hidden" },
   barFill: { height: "100%", borderRadius: 999, transition: "width 0.3s ease" },
   ratioBadge: {

@@ -5,8 +5,7 @@ import {
   identifiantVersTelephone,
 } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-
-const SECTEURS_IDS = ["restauration", "quincaillerie", "boutique", "pharmacie"];
+import { SECTEURS_IDS } from "./secteurs.js";
 
 export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [mode, setMode] = useState("connexion"); // connexion | inscription | rejoindre
@@ -15,7 +14,7 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [identifiant, setIdentifiant] = useState("");
   const [motDePasse, setMotDePasse] = useState("");
   const [nomEtablissement, setNomEtablissement] = useState("");
-  const [secteur, setSecteur] = useState("restauration");
+  const [secteur, setSecteur] = useState("restaurant");
   const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
@@ -228,11 +227,18 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           {mode === "inscription" && (
             <label style={styles.field}>
               <span style={styles.label}>{t("auth_secteur")}</span>
-              <select value={secteur} onChange={(e) => setSecteur(e.target.value)} style={styles.input}>
+              <select
+                value={secteur}
+                onChange={(e) => setSecteur(e.target.value)}
+                style={{ ...styles.input, cursor: "pointer" }}
+              >
                 {SECTEURS_IDS.map((id) => (
                   <option key={id} value={id}>{t(`secteur_${id}`)}</option>
                 ))}
               </select>
+              <span style={styles.aideSecteur}>
+                {t("auth_secteur_aide", { nb: 20 })}
+              </span>
             </label>
           )}
 
@@ -372,6 +378,7 @@ const styles = {
   },
   toggleActive: { background: "#16213E", borderColor: "#16213E", color: "#F3D9A0" },
   field: { display: "flex", flexDirection: "column", gap: 6 },
+  aideSecteur: { fontSize: 11, color: "#8A8578", lineHeight: 1.45 },
   label: { fontSize: 12.5, fontWeight: 600, color: "#5C5748" },
   input: {
     padding: "10px 12px", borderRadius: 9, border: "1px solid #E4DDD0", fontSize: 14,

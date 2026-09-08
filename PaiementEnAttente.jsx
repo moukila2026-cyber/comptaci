@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { supabase } from "./supabaseClient.js";
 import LanguageSelector from "./LanguageSelector.jsx";
-import PaiementWave from "./PaiementWave.jsx";
+import PaiementWave, { JOURS_ESSAI, PRIX_FONDATEUR } from "./PaiementWave.jsx";
 
 const fmt = (n) => new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
@@ -66,12 +66,15 @@ export default function PaiementEnAttente({ etablissement, essaiTermine, onDecon
 
         <div style={styles.title}>
           {essaiTermine
-            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || 7 })
+            ? t("paiement_titre_expire", { jours: etablissement?.essai_jours || JOURS_ESSAI })
             : t("paiement_titre_actif")}
         </div>
         {etablissement?.est_fondateur && (
           <div style={styles.fondateurBadge}>
-            ★ {t("paiement_fondateur_badge", { tarif: fmt(etablissement.tarif_verrouille || 7000) })}
+            ★ {t("paiement_fondateur_badge", {
+              tarif: fmt(etablissement.tarif_verrouille || PRIX_FONDATEUR),
+              duree: etablissement?.essai_jours || JOURS_ESSAI,
+            })}
           </div>
         )}
         <p style={styles.text}>

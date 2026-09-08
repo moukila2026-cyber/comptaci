@@ -30,9 +30,9 @@ Le script est 100% idempotent : on peut le relancer sans risque, il ne crée
 que ce qui manque et ne touche pas aux données existantes.
 
 Après exécution :
-- tout nouvel établissement démarre avec le plan Starter gratuit pendant
-  **7 jours**, avec 1 gérant invitable ;
-- au bout de 7 jours, l'accès est bloqué automatiquement et les 3 plans
+- tout nouvel établissement démarre avec le plan Starter à **0 FCFA pendant
+  14 jours**, avec 1 gérant invitable ;
+- au bout de 14 jours, l'accès est bloqué automatiquement et les 3 plans
   (Starter / Pro / Entreprise) sont présentés avec leurs détails ;
 - l'ajout de produits en stock, la saisie de mouvements, les fournisseurs,
   la caisse ET toutes les actions des gérants fonctionnent.
@@ -57,7 +57,8 @@ expliquant la manipulation, au lieu de rester sans réaction.
   le reste de l'app continue de fonctionner au lieu de tout bloquer, et un
   message précis s'affiche pour te dire quoi vérifier.
 - Messages d'erreur plus explicites sur l'ajout de produit / fournisseur.
-- Essai gratuit passé à 7 jours partout côté interface (au lieu de 3).
+- Essai gratuit passé à **14 jours à 0 FCFA** partout côté interface
+  (au lieu de 3 puis 7 jours).
 - Page de blocage après essai : le 3ᵉ plan "Entreprise" a été ajouté avec
   son descriptif, à côté de Starter et Pro.
 
@@ -130,24 +131,31 @@ L'écran de blocage interroge l'établissement toutes les 15 s : dès que
 
 | Formule | Prix | Pour qui |
 |---|---|---|
+| **Essai gratuit** | **0 FCFA pendant 14 jours** | Tout nouvel établissement |
 | Starter | **7 000 FCFA/mois** | Tout le monde |
 | Pro | **10 000 FCFA/mois** | Tout le monde |
 | Entreprise | **20 000 FCFA/mois** | Tout le monde |
 
+**L'essai passe de 7 à 14 jours et coûte 0 FCFA** (`JOURS_ESSAI = 14`,
+`etablissements.essai_jours = 14`). Le message affiché partout est désormais :
+
+> 0 FCFA pendant 14 jours d'essai — ensuite, choix libre entre le plan Starter, Pro ou Entreprise
+
 **Offre Fondateurs = les 100 premiers établissements.**
 
 ```
-J0 ──────── 7 jours d'offre fondateurs ──────── J7 ───────────────▶
-  STARTER seul actif (7 000 FCFA verrouillés)      choix libre :
-  Pro + Entreprise affichés mais cadenassés        Starter · Pro · Entreprise
+J0 ──────── 14 jours d'essai gratuit (0 FCFA) ──────── J14 ───────────────▶
+  accès équivalent au plan STARTER                      choix libre :
+  Pro + Entreprise affichés mais cadenassés            Starter · Pro · Entreprise
 ```
 
-- **Pendant les 7 jours** : un fondateur (`est_fondateur = true`) utilise **uniquement le plan
-  Starter à 7 000 FCFA/mois** (`tarif_verrouille = 7000`). Les forfaits Pro et Entreprise
+- **Pendant les 14 jours** : l'établissement paie **0 FCFA**. Un fondateur
+  (`est_fondateur = true`) dispose de l'accès équivalent au plan Starter
+  (`tarif_verrouille = 7000` après l'essai). Les forfaits Pro et Entreprise
   restent **affichés** (prix, note, 6 caractéristiques) mais **cadenassés** :
   `aria-disabled="true"`, un clic affiche l'explication au lieu de changer de plan, et un
   compte à rebours indique « Pro et Entreprise se débloquent dans X j Y h ».
-- **À la fin des 7 jours** : le fondateur choisit librement Starter (7 000), **Pro (10 000)**
+- **À la fin des 14 jours** : choix libre entre Starter (7 000), **Pro (10 000)**
   ou **Entreprise (20 000)**, au tarif normal. Les cartes Pro / Entreprise portent alors le
   badge « Disponible — upgrade fondateur ».
 - Un minuteur interne (30 s) débloque les boutons **sans rechargement de page**.
@@ -158,13 +166,16 @@ J0 ──────── 7 jours d'offre fondateurs ──────── 
 Front (`PaiementWave.jsx` — `fondateurVerrouille()`) et SQL partagent la même règle :
 
 ```sql
-now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+now() < date_creation + make_interval(days => coalesce(essai_jours, 14))
 ```
+
+Migration à exécuter une fois : **`supabase-types-etablissements.sql`**
+(passe les essais en cours de 7 à 14 jours sans jamais les raccourcir).
 
 ### Où la règle est appliquée
 
 1. **`PaiementWave.jsx`** — constantes `PRIX_PLANS`, `PRIX_FONDATEUR = 7000`,
-   `LIMITE_FONDATEURS = 100`, `JOURS_FONDATEUR = 7`, `AVANTAGES_PLANS` (6 clés
+   `LIMITE_FONDATEURS = 100`, `JOURS_FONDATEUR = 14` (= `JOURS_ESSAI`), `AVANTAGES_PLANS` (6 clés
    `abo_feat_*` par forfait) ; fonctions exportées `estFondateur()`, `finEssai()`,
    `fondateurVerrouille()`, `tarifFondateurActif()`, `resteAvantDeblocage()`,
    `plansDisponibles()`, `planEffectifFondateur()`, `montantDuPlan()`.
@@ -176,7 +187,7 @@ now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
    - `appliquer_offre_fondateur()` force `plan = 'starter'` pour les 100 premiers
      établissements (verrou `pg_advisory_xact_lock` contre les inscriptions simultanées) ;
    - `empecher_sortie_plan_fondateur()` (trigger `BEFORE UPDATE`) **n'agit que pendant
-     l'offre** : après les 7 jours, un fondateur peut passer en Pro ou Entreprise ;
+     l'offre** : après les 14 jours, un fondateur peut passer en Pro ou Entreprise ;
    - `forcer_plan_fondateur_demande()` (trigger sur `demandes_paiement`, SETUP-FINAL)
      ramène la demande à `starter` / 7 000 FCFA **pendant l'offre seulement** ; après,
      le montant réel (10 000 / 20 000) est conservé ;
@@ -192,7 +203,7 @@ fondateurs encore en offre se fait tout seul au passage.
 -- 1. doit renvoyer 0 ligne : aucun fondateur EN offre hors STARTER
 select id, nom, plan from etablissements
  where est_fondateur = true
-   and now() < date_creation + make_interval(days => coalesce(essai_jours, 7))
+   and now() < date_creation + make_interval(days => coalesce(essai_jours, 14))
    and plan <> 'starter';
 
 -- 2. fondateurs éligibles à l'upgrade (offre terminée)
@@ -203,3 +214,100 @@ select id, nom, plan, date_creation from etablissements
 -- 3. places restantes
 select public.places_fondateurs_restantes();
 ```
+
+---
+
+## NOUVEAU — Types d'établissement, SasPay, Score de crédit, FNE (2026)
+
+### 1. Types d'établissement (`secteurs.js`)
+
+Le menu déroulant « Créer un établissement » propose désormais **10 types** :
+
+| Identifiant | Libellé | Postes de dépense |
+|---|---|---|
+| `restaurant` | Restaurant | 22 |
+| `bar` | Bar | 21 |
+| `maquis` | Maquis | 21 |
+| `hotel` | Hôtel | 21 |
+| `quincaillerie` | Quincaillerie | 22 |
+| `boutique` | Boutique (épicerie / supérette) | 27 |
+| `salon_beaute` | Salon de coiffure et beauté | 25 |
+| `accessoires_telephone` | Boutique d'accessoires de téléphone | 21 |
+| `vetements` | Boutique de vêtements | 21 |
+| `pharmacie` | Pharmacie | 21 |
+
+Chaque type porte **au moins 20 postes de dépense réels** : biscuits, eau de
+javel, savon, bonbons, yaourt, bouteille d'eau 5 L… pour une boutique ; faux
+ongles, faux cils, vernis, perruques… pour un salon. La section
+« Dépenses réelles de votre activité » du tableau de bord n'affiche **que** les
+postes du type choisi à l'inscription.
+
+> « La boutique de Diallo » est un **nom** d'établissement, pas un type : c'est
+> une boutique (épicerie / supérette), elle hérite donc de la liste ci-dessus.
+
+Le rattachement d'une dépense à son poste se fait :
+1. par la colonne `transactions.poste_id` si elle est renseignée,
+2. sinon par analyse de la désignation saisie (libellé exact, puis mot-clé).
+
+Migration : **`supabase-types-etablissements.sql`** (élargit la contrainte
+`secteur`, requalifie `restauration` → `restaurant`, ajoute `poste_id`).
+
+### 2. SasPay remplace le QR code
+
+L'ancien QR code Wave est **supprimé** (`WaveQR.js`, `wave-qr.png`). Le
+paiement passe par un **lien SasPay** (Mobile Money + carte) :
+
+```
+VITE_SASPAY_PAYMENT_URL=https://…   # lien créé sur app.saspay.me
+VITE_SASPAY_MARCHAND=ComptaCi
+VITE_SASPAY_MODE=live               # "test" pour essayer
+```
+
+Sans `VITE_SASPAY_PAYMENT_URL`, l'app affiche « paiement en cours de
+configuration » + le bouton WhatsApp (jamais de lien cassé). Voir
+`saspay.js` pour les paramètres ajoutés au lien (`amount`, `reference`…).
+
+### 3. Score de crédit (`creditScoring.js` + `ScoreCredit.jsx`)
+
+Score sur 100 calculé côté client, présentable à une banque :
+
+| Critère | Poids |
+|---|---|
+| Régularité des ventes | 25 |
+| Tendance du chiffre d'affaires | 25 |
+| Ratio dépenses / ventes | 20 |
+| Ancienneté d'utilisation | 15 |
+| Ponctualité de l'abonnement | 15 |
+
+Paliers : **Bronze** (0-50), **Argent** (51-75), **Or** (76-100). La page
+affiche aussi 6 objectifs de gestion et une **attestation** imprimable /
+partageable. Calculé à partir des 90 derniers jours, avec comparaison de deux
+fenêtres glissantes de 30 jours pour la tendance (pas de biais « mois en
+cours »).
+
+⚠️ Ce score aide à la décision, il n'est pas une décision de crédit : sa valeur
+réelle suppose qu'un partenaire bancaire le reconnaisse.
+
+### 4. Facture normalisée FNE (`fne.js` + `FacturationFNE.jsx`)
+
+Réservée aux plans **Pro / Entreprise** (enjeu fiscal réel).
+
+- **Prérequis administratif** : l'établissement doit être enrôlé sur la
+  plateforme FNE de la DGI (numéro de contribuable + RCCM). ComptaCi ne peut
+  pas s'y substituer — le module guide la démarche.
+- **Mode brouillon** (sans clé API) : facture générée et archivée avec un
+  numéro provisoire clairement marqué. Aucune donnée n'est envoyée.
+- **Mode certifié** (clé API saisie) : transmission à l'API DGI, récupération
+  du numéro normé, du cachet fiscal et du QR de vérification.
+- **Archivage légal 10 ans** dans la table `factures_fne` (aucune politique
+  `UPDATE` / `DELETE` : une facture est une pièce comptable).
+
+Avant d'aller plus loin, il faut se procurer la documentation technique
+officielle de l'API DGI et ajuster `chargeUtileFne()` dans `fne.js`.
+
+Migration : **`supabase-fne.sql`**.
+
+### 5. Aperçu local
+
+`npm run dev` puis `/.scratch/preview.html` : rendu des nouveaux écrans avec
+des données fictives (dossier non déployé, voir `.gitignore`).
