@@ -11,7 +11,7 @@ import ReactDOM from "react-dom/client";
 import ScoreCredit from "../ScoreCredit.jsx";
 import FacturationFNE from "../FacturationFNE.jsx";
 import { traducteur } from "../i18n.js";
-import { Abonnement } from "../App.jsx";
+import { Abonnement, Stock } from "../App.jsx";
 import { SECTEURS_IDS, postesDuSecteur, posteDeDesignation } from "../secteurs.js";
 
 const t = traducteur("fr");
@@ -70,6 +70,13 @@ const ETABLISSEMENT = {
   fne_rccm: "CI-ABJ-2021-B-04521",
   fne_cle_api: null,
 };
+
+/** Quelques références déjà en stock, pour illustrer l'alerte de seuil. */
+const PRODUITS_DEMO = [
+  { id: "p1", designation: "Biscuits", quantite_stock: 3, prix_unitaire: 250, seuil_alerte: 5 },
+  { id: "p2", designation: "Savon", quantite_stock: 48, prix_unitaire: 350, seuil_alerte: 5 },
+  { id: "p3", designation: "Eau de Javel", quantite_stock: 2, prix_unitaire: 500, seuil_alerte: 5 },
+];
 
 /* --------------------------------------------------------- écran : secteurs */
 
@@ -184,6 +191,7 @@ const VUES = [
   { id: "fne", label: "Facturation FNE" },
   { id: "secteurs", label: "Types d'établissement" },
   { id: "abonnement", label: "Abonnement / type" },
+  { id: "stock", label: "Stock / import des postes" },
 ];
 
 function Application() {
@@ -222,6 +230,18 @@ function Application() {
         />
       )}
       {vue === "secteurs" && <ApercuSecteurs />}
+      {vue === "stock" && (
+        <Stock
+          produits={PRODUITS_DEMO}
+          secteur="boutique"
+          t={t}
+          onAdd={async () => true}
+          onAjuster={async () => true}
+          onSupprimer={async () => true}
+          onSeuil={async () => true}
+          onImporterPostes={async () => ({ ok: true, ajoutes: 27 })}
+        />
+      )}
       {vue === "abonnement" && (
         <Abonnement
           etablissement={ETABLISSEMENT}

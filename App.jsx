@@ -495,6 +495,43 @@ function ComptaCiApp({ langue, setLangue, t }) {
     }
   };
 
+  /**
+   * Importe les postes de dépense de l'activité dans le stock.
+   * Un nouvel établissement démarre sinon avec un stock vide : importer les
+   * 20+ postes de son métier (biscuits, eau de javel… pour une boutique) lui
+   * donne une liste prête à l'emploi, à compléter avec les quantités réelles.
+   * Les postes déjà présents ne sont jamais dupliqués.
+   */
+  const importerPostesStock = async () => {
+    if (!etablissement?.id) return { ok: false, ajoutes: 0 };
+    const secteurActif = secteurNormalise(etablissement?.secteur);
+    const existants = new Set(
+      produits.map((p) => String(p.designation || "").trim().toLowerCase())
+    );
+    const aCreer = postesDuSecteur(secteurActif)
+      .filter((p) => !existants.has(p.label.toLowerCase()))
+      .map((p) => ({
+        etablissement_id: etablissement.id,
+        designation: p.label,
+        quantite_stock: 0,
+        prix_unitaire: null,
+        seuil_alerte: 5,
+      }));
+
+    if (aCreer.length === 0) return { ok: true, ajoutes: 0 };
+
+    const { data, error } = await supabase
+      .from("produits")
+      .insert(aCreer)
+      .select();
+    if (error) {
+      console.error("Erreur import postes dans le stock:", error);
+      return { ok: false, ajoutes: 0 };
+    }
+    setProduits((liste) => [...liste, ...(data || [])]);
+    return { ok: true, ajoutes: (data || []).length };
+  };
+
   const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
     const { data, error } = await supabase
       .from("produits")
@@ -753,10 +790,12 @@ function ComptaCiApp({ langue, setLangue, t }) {
         ) : vue === "stock" ? (
           <Stock
             produits={produits}
+            secteur={etablissement?.secteur}
             onAdd={addProduit}
             onAjuster={ajusterQuantiteManuelle}
             onSupprimer={supprimerProduit}
             onSeuil={modifierSeuil}
+            onImporterPostes={importerPostesStock}
             t={t}
           />
         ) : vue === "caisse" ? (
@@ -2039,8 +2078,34 @@ function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir, onFer
   );
 }
 
-function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
+export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeuil, onImporterPostes, t }) {
   const [designation, setDesignation] = useState("");
+  const [importEnCours, setImportEnCours] = useState(false);
+  const [importMsg, setImportMsg] = useState(null);
+
+  const secteurActif = secteurNormalise(secteur);
+  const postes = postesDuSecteur(secteurActif);
+  const existants = new Set(
+    produits.map((p) => String(p.designation || "").trim().toLowerCase())
+  );
+  const postesManquants = postes.filter((p) => !existants.has(p.label.toLowerCase())).length;
+
+  const importerPostes = async () => {
+    if (!onImporterPostes) return;
+    setImportEnCours(true);
+    setImportMsg(null);
+    const res = await onImporterPostes();
+    setImportEnCours(false);
+    setImportMsg({
+      type: res?.ok ? "ok" : "ko",
+      texte:
+        res?.ok && res.ajoutes > 0
+          ? t("stock_import_ok", { nb: res.ajoutes })
+          : res?.ok
+          ? t("stock_import_rien")
+          : t("stock_import_ko"),
+    });
+  };
   const [quantite, setQuantite] = useState("");
   const [prixUnitaire, setPrixUnitaire] = useState("");
   const [seuilAlerte, setSeuilAlerte] = useState("5");
@@ -2126,10 +2191,35 @@ function Stock({ produits, onAdd, onAjuster, onSupprimer, onSeuil, t }) {
               {produits.length} — {t("stock_sous")}
             </div>
           </div>
-          <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
-            {ouvert ? t("stock_annuler") : t("stock_ajouter")}
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+            <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
+              {ouvert ? t("stock_annuler") : t("stock_ajouter")}
+            </button>
+          </div>
+        </div>
+
+        {/* Import en un clic des postes de dépense de l'activité */}
+        <div style={styles.importPostes}>
+          <div style={{ flex: "1 1 260px" }}>
+            <div style={styles.importTitre}>{t("stock_import_titre")}</div>
+            <div style={styles.importSous}>
+              {t("stock_import_sous", { nb: postesManquants, secteur: t(`secteur_${secteurActif}`) })}
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={importerPostes}
+            disabled={importEnCours || postesManquants === 0}
+            style={styles.importBtn}
+          >
+            {importEnCours ? t("stock_import_encours") : t("stock_import_btn")}
           </button>
         </div>
+        {importMsg && (
+          <div style={{ ...styles.importMsg, ...(importMsg.type === "ko" ? styles.erreurLocale : {}) }}>
+            {importMsg.texte}
+          </div>
+        )}
 
         {ouvert && (
           <div style={styles.stockForm}>
@@ -3357,6 +3447,32 @@ const styles = {
     whiteSpace: "nowrap",
   },
   posteChipMontantActif: { color: "#16213E" },
+  importPostes: {
+    display: "flex",
+    alignItems: "center",
+    gap: 12,
+    flexWrap: "wrap",
+    marginTop: 12,
+    padding: "12px 14px",
+    background: "#FBF9F4",
+    border: "1px dashed #D4A24C",
+    borderRadius: 12,
+  },
+  importTitre: { fontSize: 13, fontWeight: 700, color: "#16213E" },
+  importSous: { fontSize: 11.5, color: "#8A8578", marginTop: 3, lineHeight: 1.45 },
+  importBtn: {
+    padding: "9px 14px",
+    borderRadius: 9,
+    border: "none",
+    background: "#16213E",
+    color: "#F3D9A0",
+    fontSize: 12.5,
+    fontWeight: 600,
+    cursor: "pointer",
+    fontFamily: "'Inter', sans-serif",
+    whiteSpace: "nowrap",
+  },
+  importMsg: { marginTop: 8, fontSize: 12, color: "#186B4E", fontWeight: 600 },
   postesRapides: {
     display: "flex",
     flexWrap: "wrap",

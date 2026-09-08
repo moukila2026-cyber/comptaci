@@ -326,3 +326,42 @@ réellement un bar, un maquis ou un hôtel peut corriger son type depuis
 **Abonnement → « Type de votre établissement »** : la répartition des dépenses
 et les suggestions de saisie basculent immédiatement sur les postes du nouveau
 métier.
+
+---
+
+## NOUVEAU (suite) — Stock pré-rempli et landing page à jour
+
+### 7. Import des postes de l'activité dans le stock
+
+Un nouvel établissement démarrait avec un stock vide : il fallait tout saisir à
+la main avant de pouvoir suivre quoi que ce soit.
+
+**Stock → « Importer les postes de votre activité »** crée en un clic les
+postes manquants du type d'établissement (quantité 0, seuil d'alerte 5). Pour
+un salon de coiffure, on obtient immédiatement les 25 postes (faux ongles,
+vernis, perruques…) ; il ne reste qu'à saisir les quantités réelles.
+
+- les postes déjà présents ne sont **jamais** dupliqués (comparaison sur la
+  désignation, insensible à la casse) ;
+- le bandeau affiche le nombre de postes manquants et disparaît quand tout est
+  importé.
+
+### 8. Landing page (`index.html`)
+
+- **Bandeau des 10 types d'établissement** : restaurant, bar, maquis, hôtel,
+  quincaillerie, boutique, salon de coiffure et beauté, accessoires téléphone,
+  vêtements, pharmacie.
+- **3 nouvelles cartes** : 20 dépenses types par métier · Score de crédit ·
+  Facture normalisée (FNE).
+- **Bloc « Vos chiffres peuvent vous ouvrir un crédit »** : les 4 familles de
+  critères et leurs points (25 / 25 / 20 / 30).
+- **4 questions FAQ ajoutées** : fin des 14 jours, type d'établissement absent,
+  portée réelle du score de crédit, prise en charge de la FNE.
+- Textes traduits en FR / EN / AR (`landing.js`).
+
+### 9. Vérification automatisée
+
+Un script de contrôle croise les clés `styles.*` utilisées dans `App.jsx` avec
+celles définies dans l'objet `styles` : **215 utilisées, 0 manquante**. Les
+composants sont également rendus en jsdom (Score de crédit, FNE, Stock,
+Abonnement) : **0 erreur console**.
