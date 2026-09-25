@@ -12,20 +12,26 @@ import {
   urlQrVerification,
   FNE_DUREE_ARCHIVAGE_ANS,
 } from "./fne.js";
+import { droitFne, PRIX_FNE_ANNUEL } from "./fneOption.js";
 
 const fmt = (n) =>
   new Intl.NumberFormat("fr-FR", { maximumFractionDigits: 0 }).format(Math.round(n || 0));
 
-/** Plans donnant accès à la facturation normalisée. */
-const PLANS_FNE = ["pro", "entreprise"];
-
 /**
- * Facturation FNE (facture normalisée électronique DGI).
- * Fonctionnalité réservée aux plans Pro et Entreprise : l'enjeu fiscal pour le
- * client est réel, et l'intégration suppose un enrôlement DGI abouti.
+ * Facturation FNE (facture normalisée électronique) — via KOMPTO.
+ *
+ * ⚠️ CHANGEMENT DE RÈGLE COMMERCIALE : l'accès n'est plus réservé aux plans
+ * Pro et Entreprise. La FNE est une OPTION PAYANTE SÉPARÉE (100 000 FCFA/an
+ * par établissement), disponible sur TOUS les forfaits, Starter et Fondateur
+ * compris. Le forfait n'entre donc plus dans le calcul de l'accès : seule
+ * l'option souscrite compte (voir `droitFne` dans `fneOption.js`).
+ *
+ * Les tarifs des forfaits (7 000 / 10 000 / 20 000 FCFA) restent inchangés.
  */
 export default function FacturationFNE({ etablissement, transactions, planEffectif, enEssai, t, onRafraichirEtablissement }) {
-  const aAcces = PLANS_FNE.includes(planEffectif) || enEssai;
+  const droit = droitFne(etablissement);
+  // L'accès dépend de l'option FNE, jamais du forfait.
+  const aAcces = droit.peutCertifier;
   const etat = etatEnrolement(etablissement);
 
   const [onglet, setOnglet] = useState("enrolement");
@@ -161,13 +167,57 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
   /* ------------------------------------------------------------------ accès */
   if (!aAcces) {
+    // Le message dépend de la raison du blocage : un établissement qui a payé
+    // mais n'a pas fini sa configuration ne doit pas lire « réservé au Pro »
+    // (message désormais faux : la FNE est ouverte à tous les forfaits).
+    const messages = {
+      choix_absent: {
+        titre: t("fne_config_requise"),
+        texte: t("fne_config_requise_texte"),
+      },
+      sans_fne: {
+        titre: t("fne_desactivee"),
+        texte: t("fne_desactivee_texte"),
+      },
+      methode_externe: {
+        titre: t("fne_methode_externe"),
+        texte: t("fne_methode_externe_texte"),
+      },
+      option_non_payee: {
+        titre: t("fne_option_requise"),
+        texte: t("fne_option_requise_texte"),
+      },
+      option_expiree: {
+        titre: t("fne_option_expiree"),
+        texte: t("fne_option_expiree_texte"),
+      },
+      parcours_en_cours: {
+        titre: t("fne_parcours_en_cours"),
+        texte: t("fne_parcours_en_cours_texte"),
+      },
+      identifiants_manquants: {
+        titre: t("fne_identifiants_manquants"),
+        texte: t("fne_identifiants_manquants_texte"),
+      },
+    };
+    const m = messages[droit.raison] || {
+      titre: t("fne_config_requise"),
+      texte: t("fne_config_requise_texte"),
+    };
     return (
       <div className="cc-page cc-page-fne" style={S.page}>
         <div style={S.verrouCard} className="cc-card">
           <Lock size={22} color="var(--cc-or)" />
           <div>
-            <div style={S.verrouTitre}>{t("fne_reserve_pro")}</div>
-            <p style={S.verrouTexte}>{t("fne_reserve_pro_texte")}</p>
+            <div style={S.verrouTitre}>{m.titre}</div>
+            <p style={S.verrouTexte}>{m.texte}</p>
+            {(droit.raison === "option_non_payee" || droit.raison === "option_expiree") && (
+              <p style={S.verrouTexte}>
+                {t("fne_tarif_option")} :{" "}
+                <strong>{new Intl.NumberFormat("fr-FR").format(PRIX_FNE_ANNUEL)} FCFA</strong>{" "}
+                / {t("fne_par_an_etablissement")}
+              </p>
+            )}
           </div>
         </div>
       </div>
