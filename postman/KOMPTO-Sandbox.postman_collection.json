@@ -1,0 +1,741 @@
+{
+  "info": {
+    "_postman_id": "8f3a1c40-6d2e-4b7a-9c11-5e0d2a7b3f10",
+    "name": "KOMPTO API — Sandbox",
+    "description": "# KOMPTO API — Sandbox collection\n\nRequests for the public KOMPTO invoicing API (FNE — *Facture Normalisée Électronique*, Côte d'Ivoire), organised in the order a new integration normally follows.\n\nBuilt from the official integration guide **KOMPTO API GUIDE EN v5.2**.\n\n---\n\n## 1. Before you start\n\nOpen the collection's **Variables** tab and fill in:\n\n| Variable | What to put |\n|---|---|\n| `apiKey` | The sandbox API key KOMPTO gave you. **It ships empty on purpose.** |\n| `baseUrl` | Already set to the sandbox host `https://qa.kompto.com`. Leave it. |\n| `establishment` / `pointOfSale` | Already set to the shared sandbox issuer (`PROGICI SARL` / `SIEGE`). Leave them as they are unless KOMPTO told you otherwise. |\n\n> **If `POST /confirm` fails on `establishment` or `pointOfSale`**, your key is registered against a different sandbox account. These two values must belong to the account your API key was issued for — ask KOMPTO which establishment and point of sale to use, and put them in these variables. Everything else in the collection stays the same. `POST /verify` does not check them, so this only shows up at the confirmation step.\n| `clientName`, `clientNCC`, `clientTelephone`, `clientEmail` | Your own test client. The defaults are the fictitious client used in the guide. |\n\nEvery request authenticates with `Authorization: Bearer {{apiKey}}`, inherited from the collection. You never have to paste the key into a request.\n\n## 2. Sandbox vs production\n\nThe sandbox at `https://qa.kompto.com` is a **shared** test environment. Paths, headers and bodies are identical to production — only the host, the API key and the issuer change. Invoices issued here are real test FNEs with **no tax value**.\n\nIn the sandbox, invoices are always issued in the name of **PROGICI SARL** (the shared test issuer), not in your own company's name. That is expected. In production you switch `baseUrl` to the production host KOMPTO gives you, use your production key, and pass your own `establishment` / `pointOfSale`.\n\n## 3. The two integration paths\n\n**Path A — verify, then confirm (recommended while you build).**\n`POST /verify` calculates and stores a draft, and returns a `komptoEntryId`. Nothing reaches the tax authority (DGI) yet. You show the amounts to the user, then `POST /confirm` to certify — or `DELETE /delete` to throw the draft away.\n\n**Path B — create directly.**\n`POST /create` does both in one call. Use it only once you are confident your amounts are always right: if the DGI rejects, the error body carries no `komptoEntryId`, so the pending entry left behind is hard to find.\n\nConfirmation is **irreversible**. To correct a certified invoice you issue a credit note (`POST /createCreditNote`).\n\n## 4. Variable chaining\n\nRequests that return an identifier save it automatically into a collection variable, so you can run the folders top to bottom without copying anything by hand:\n\n- `POST /verify` → `komptoEntryId`, `komptoItemId`\n- `POST /confirm` and `POST /create` → `confirmedEntryId`, `creditNoteItemId`, `numberFNE`, `linkFNE`\n\n## 5. Things that catch integrators out\n\n- **Amounts you send are JSON numbers; amounts you get back are strings.** `\"itemUnitPrice\": 50000` goes out, `\"itemUnitPrice\": \"50000\"` comes back.\n- **Decimal separators differ by direction.** Use a **dot** in requests (`655.957`). Responses use a **comma** (`\"655,9570\"`), French locale.\n- **Percentages in responses carry a `%`** (`\"18%\"`, `\"2,50%\"`). Strip it before converting. In requests they are plain numbers (`10`).\n- **Unused optional taxes must be `null` or omitted — never `0`.** `entryTaxTTC1Name` and `entryTaxTTC1Percent` travel as a pair: send both or neither.\n- **`establishment` and `pointOfSale` are matched character for character by the DGI.** `\"PDV1\"` ≠ `\"pdv1\"` ≠ `\"PDV 1\"`. KOMPTO cannot pre-check them; a mismatch comes back as a DGI rejection.\n- **Not every error is a 4xx.** Some failures return HTTP 200 with `\"isSuccessful\": false`. Check both.\n- **Error bodies do not all have the same shape.** Some are a per-field `errors` object, some a `{ isSuccessful, message }` envelope, and the 404 on the getters is a bare JSON string (`\"La commande n'existe pas.\"`) with no fields at all. Check the status code first, then the shape.\n- **Error messages are in French, written for end users.** Display them rather than replacing them with a generic message.\n- **`dateTimeFNE` uses the format `YYYY-MM-DD HH:mm`**, for example `\"2026-09-16 09:40\"` — space-separated, no seconds, no timezone suffix, Côte d'Ivoire local time. Parse it with that explicit pattern.\n- **`getVerify` wraps its payload in `value`; the other endpoints are flat.** See folder 05.\n- **Store `komptoItemId` for every line.** You cannot issue a credit note later without it.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{apiKey}}",
+        "type": "string"
+      }
+    ]
+  },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "if (!pm.collectionVariables.get('apiKey')) {",
+          "    console.warn('KOMPTO: collection variable \"apiKey\" is empty — every request will return HTTP 401. Set it in the collection Variables tab.');",
+          "}"
+        ]
+      }
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "https://qa.kompto.com",
+      "type": "string"
+    },
+    {
+      "key": "apiKey",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "establishment",
+      "value": "PROGICI SARL",
+      "type": "string"
+    },
+    {
+      "key": "pointOfSale",
+      "value": "SIEGE",
+      "type": "string"
+    },
+    {
+      "key": "paymentMethod",
+      "value": "transfer",
+      "type": "string"
+    },
+    {
+      "key": "clientName",
+      "value": "KOUAME ET FRERES SARL",
+      "type": "string"
+    },
+    {
+      "key": "clientNCC",
+      "value": "8200001A",
+      "type": "string"
+    },
+    {
+      "key": "clientTelephone",
+      "value": "2721212121",
+      "type": "string"
+    },
+    {
+      "key": "clientEmail",
+      "value": "contact@kouame-freres.ci",
+      "type": "string"
+    },
+    {
+      "key": "komptoEntryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "komptoItemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "confirmedEntryId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "creditNoteItemId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "numberFNE",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "linkFNE",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "exampleEntryId",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 · Authentication",
+      "description": "There is no dedicated login endpoint. Authentication is a header on every call...",
+      "item": [
+        {
+          "name": "Check API key",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/getVerify?komptoEntryId=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "getVerify"
+              ],
+              "query": [
+                {
+                  "key": "komptoEntryId",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "Smoke test for your API key. 401 = invalid, 404 bare string = OK."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 401) { console.error('KOMPTO: the key in {{apiKey}} is missing or invalid.'); } else { console.log('KOMPTO: key accepted (HTTP ' + pm.response.code + ' — the id simply does not exist).'); }",
+                  "pm.test('API key is accepted (anything but 401)', function () { pm.expect(pm.response.code, 'HTTP 401 means the key is missing or invalid').to.not.eql(401); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "02 · Invoice creation — Path A, step 1",
+      "description": "POST /verify validates, calculates, stores pending...",
+      "item": [
+        {
+          "name": "POST /api/invoice/verify — B2B, 2 items",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "Validates and calculates without sending to DGI.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2B\",\n  \"clientName\": \"{{clientName}}\",\n  \"clientNCC\": \"{{clientNCC}}\",\n  \"clientTelephone\": \"{{clientTelephone}}\",\n  \"clientEmail\": \"{{clientEmail}}\",\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Consulting service\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 2,\n      \"itemUnitPrice\": 50000,\n      \"itemDiscountPercent\": 10,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    },\n    {\n      \"itemName\": \"Equipment supply\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 5,\n      \"itemUnitPrice\": 8000,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) { var body = pm.response.json(); var invoice = body && body.value ? body.value : body; if (invoice && invoice.komptoEntryId) { pm.collectionVariables.set('komptoEntryId', invoice.komptoEntryId); } if (invoice && Array.isArray(invoice.items) && invoice.items.length > 0) { pm.collectionVariables.set('komptoItemId', invoice.items[0].komptoItemId); } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "03 · Confirmation — Path A, step 2",
+      "description": "POST /confirm submits draft to DGI...",
+      "item": [
+        {
+          "name": "POST /api/invoice/confirm",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/confirm",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "confirm"
+              ]
+            },
+            "description": "Submits pending draft to DGI.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"komptoEntryId\": \"{{komptoEntryId}}\",\n  \"establishment\": \"{{establishment}}\",\n  \"pointOfSale\": \"{{pointOfSale}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"isRNE\": false,\n  \"numberRNE\": null,\n  \"otherInfo\": null,\n  \"footer\": null\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) { var body = pm.response.json(); pm.test('Business result is successful', function () { pm.expect(body.isSuccessful, body.message || '').to.not.eql(false); }); var invoice = body && body.value ? body.value : body; if (invoice && invoice.numberFNE) { pm.collectionVariables.set('confirmedEntryId', invoice.komptoEntryId); pm.collectionVariables.set('numberFNE', invoice.numberFNE); pm.collectionVariables.set('linkFNE', invoice.linkFNE); if (Array.isArray(invoice.items) && invoice.items.length > 0) { pm.collectionVariables.set('creditNoteItemId', invoice.items[0].komptoItemId); } pm.collectionVariables.set('komptoEntryId', ''); pm.collectionVariables.set('komptoItemId', ''); } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "04 · One-shot creation — Path B",
+      "description": "POST /create merges verify+confirm...",
+      "item": [
+        {
+          "name": "POST /api/invoice/create",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/create",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "create"
+              ]
+            },
+            "description": "Validates, calculates and certifies in one call.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2B\",\n  \"clientName\": \"{{clientName}}\",\n  \"clientNCC\": \"{{clientNCC}}\",\n  \"clientTelephone\": \"{{clientTelephone}}\",\n  \"clientEmail\": \"{{clientEmail}}\",\n  \"paymentMethod\": \"{{paymentMethod}}\",\n  \"establishment\": \"{{establishment}}\",\n  \"pointOfSale\": \"{{pointOfSale}}\",\n  \"isRNE\": false,\n  \"numberRNE\": null,\n  \"otherInfo\": null,\n  \"footer\": null,\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Consulting service\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 1,\n      \"itemUnitPrice\": 200000,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) { var body = pm.response.json(); pm.test('Business result is successful', function () { pm.expect(body.isSuccessful, body.message || '').to.not.eql(false); }); var invoice = body && body.value ? body.value : body; if (invoice && invoice.numberFNE) { pm.collectionVariables.set('confirmedEntryId', invoice.komptoEntryId); pm.collectionVariables.set('numberFNE', invoice.numberFNE); pm.collectionVariables.set('linkFNE', invoice.linkFNE); if (Array.isArray(invoice.items) && invoice.items.length > 0) { pm.collectionVariables.set('creditNoteItemId', invoice.items[0].komptoItemId); } } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "05 · Retrieval and status",
+      "description": "Two read endpoints: getVerify (pending) and getElectronicInvoice (certified)...",
+      "item": [
+        {
+          "name": "GET /api/invoice/getVerify — read a pending draft",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/getVerify?komptoEntryId={{komptoEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "getVerify"
+              ],
+              "query": [
+                {
+                  "key": "komptoEntryId",
+                  "value": "{{komptoEntryId}}"
+                }
+              ]
+            },
+            "description": "Reads back pending draft. Wrapped in value."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('komptoEntryId')) { throw new Error('komptoEntryId is empty. Run POST /verify first.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 404) { console.warn('KOMPTO 404:', pm.response.text()); } else if (pm.response.code === 200) { var body = pm.response.json(); var invoice = body && body.value ? body.value : body; console.log('draft', invoice.komptoEntryId, '— total due', invoice.entryTotalDue); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "GET /api/invoice/getElectronicInvoice — read a certified invoice",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/getElectronicInvoice?komptoEntryId={{confirmedEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "getElectronicInvoice"
+              ],
+              "query": [
+                {
+                  "key": "komptoEntryId",
+                  "value": "{{confirmedEntryId}}"
+                }
+              ]
+            },
+            "description": "Reads back certified invoice."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 404) { console.warn('KOMPTO 404:', pm.response.text()); } else if (pm.response.code === 200) { var body = pm.response.json(); var invoice = body && body.value ? body.value : body; console.log('numberFNE =', invoice.numberFNE); }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "06 · Credit notes",
+      "description": "A certified FNE cannot be cancelled. Credit note reduces quantity...",
+      "item": [
+        {
+          "name": "POST /api/invoice/createCreditNote",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/createCreditNote",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "createCreditNote"
+              ]
+            },
+            "description": "Issues credit note.",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"komptoEntryId\": \"{{confirmedEntryId}}\",\n  \"items\": [\n    {\n      \"komptoItemId\": \"{{creditNoteItemId}}\",\n      \"itemQuantity\": 1\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) { var body = pm.response.json(); pm.test('Business result is successful', function () { pm.expect(body.isSuccessful, body.message || '').to.not.eql(false); }); var note = body && body.value ? body.value : body; if (note && note.numberFNE) { console.log('credit note numberFNE =', note.numberFNE); } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "07 · Delete a pending draft",
+      "description": "DELETE /delete discards pending draft...",
+      "item": [
+        {
+          "name": "DELETE /api/invoice/delete",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/delete?komptoEntryId={{komptoEntryId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "delete"
+              ],
+              "query": [
+                {
+                  "key": "komptoEntryId",
+                  "value": "{{komptoEntryId}}"
+                }
+              ]
+            },
+            "description": "Permanently deletes pending draft."
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (!pm.collectionVariables.get('komptoEntryId')) { throw new Error('komptoEntryId is empty. Run POST /verify first.'); }"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200 || pm.response.code === 404) { var body = pm.response.json(); pm.test('Draft was actually deleted', function () { pm.expect(body.isSuccessful, body.message || '').to.be.true; }); if (body.isSuccessful === true) { pm.collectionVariables.set('komptoEntryId', ''); pm.collectionVariables.set('komptoItemId', ''); } }"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "08 · Payload examples by client type",
+      "description": "Variants of POST /verify covering client types...",
+      "item": [
+        {
+          "name": "verify — B2C (individual)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "B2C",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2C\",\n  \"clientName\": \"AMANI KOFFI\",\n  \"clientNCC\": null,\n  \"clientTelephone\": \"0707070707\",\n  \"clientEmail\": \"amani.koffi@example.ci\",\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Retail sale\",\n      \"itemReference\": \"REF-001\",\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 3,\n      \"itemUnitPrice\": 12500,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });",
+                  "if (pm.response.code === 200) { var b = pm.response.json(); var inv = b && b.value ? b.value : b; pm.collectionVariables.set('exampleEntryId', inv.komptoEntryId); }"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "verify — B2G (public administration)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "B2G+discount",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2G\",\n  \"clientName\": \"MINISTERE DE L'EDUCATION NATIONALE\",\n  \"clientNCC\": null,\n  \"clientTelephone\": \"2720000000\",\n  \"clientEmail\": \"contact@example-admin.ci\",\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Office supplies\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Box\",\n      \"itemQuantity\": 40,\n      \"itemUnitPrice\": 7500,\n      \"itemDiscountPercent\": 5,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "verify — B2F (foreign client, currency + rate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "B2F",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2F\",\n  \"clientName\": \"MARTIN DUPONT\",\n  \"clientNCC\": null,\n  \"clientTelephone\": \"+33612345678\",\n  \"clientEmail\": \"martin.dupont@example.fr\",\n  \"foreignCurrencyName\": \"EUR\",\n  \"exchangeRateCFAtoFX\": 655.957,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Export service\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 1,\n      \"itemUnitPrice\": 555896,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "verify — reduced TVA, discount and additional taxes",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "Three TVA rates",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2B\",\n  \"clientName\": \"{{clientName}}\",\n  \"clientNCC\": \"{{clientNCC}}\",\n  \"clientTelephone\": \"{{clientTelephone}}\",\n  \"clientEmail\": \"{{clientEmail}}\",\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": \"TSP\",\n  \"entryTaxTTC1Percent\": 2.5,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Standard rate line\",\n      \"itemReference\": \"STD-18\",\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 2,\n      \"itemUnitPrice\": 50000,\n      \"itemDiscountPercent\": 10,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    },\n    {\n      \"itemName\": \"Reduced rate line\",\n      \"itemReference\": \"RED-09\",\n      \"itemUnitOfMeasure\": \"Kg\",\n      \"itemQuantity\": 1.5,\n      \"itemUnitPrice\": 20000,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVAB\",\n      \"itemTaxTTC1Name\": \"TX\",\n      \"itemTaxTTC1Percent\": 1,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    },\n    {\n      \"itemName\": \"Exempt line\",\n      \"itemReference\": \"EXO-00\",\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 1,\n      \"itemUnitPrice\": 15000,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVAC\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 200', function () { pm.response.to.have.status(200); });"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "verify — error case: invalid NCC",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json; charset=utf-8"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/invoice/verify",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "invoice",
+                "verify"
+              ]
+            },
+            "description": "Deliberate failure",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"clientType\": \"B2B\",\n  \"clientName\": \"BAD NCC TEST\",\n  \"clientNCC\": \"123\",\n  \"clientTelephone\": \"2721212121\",\n  \"clientEmail\": \"bad.ncc@example.ci\",\n  \"foreignCurrencyName\": null,\n  \"exchangeRateCFAtoFX\": null,\n  \"entryTaxTTC1Name\": null,\n  \"entryTaxTTC1Percent\": null,\n  \"entryTaxTTC2Name\": null,\n  \"entryTaxTTC2Percent\": null,\n  \"items\": [\n    {\n      \"itemName\": \"Consulting service\",\n      \"itemReference\": null,\n      \"itemUnitOfMeasure\": \"Unit\",\n      \"itemQuantity\": 1,\n      \"itemUnitPrice\": 10000,\n      \"itemDiscountPercent\": null,\n      \"itemTVAName\": \"TVA\",\n      \"itemTaxTTC1Name\": null,\n      \"itemTaxTTC1Percent\": null,\n      \"itemTaxTTC2Name\": null,\n      \"itemTaxTTC2Percent\": null\n    }\n  ]\n}"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status is 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

@@ -31,7 +31,17 @@ export const LIENS_PAIEMENT = {
     import.meta.env?.VITE_SASPAY_URL_ENTREPRISE ||
     "https://link.saspay.me/zszja0kudmy"
   ).trim(),
+  /** Option FNE : 100 000 FCFA/an/établissement (coût KOMPTO 80k, marge 20k) */
+  fne: (
+    import.meta.env?.VITE_SASPAY_URL_FNE || "https://link.saspay.me/ikoziclmohm"
+  ).trim(),
 };
+
+/** Constantes dédiées à l'option FNE (pour lisibilité). */
+export const FNE_PRIX = 100_000;
+export const FNE_COUT_KOMPTO = 80_000;
+export const FNE_DEVISE = "XOF";
+export const FNE_LIEN = LIENS_PAIEMENT.fne;
 
 /** Lien générique de secours (si un forfait n'a pas de lien dédié). */
 export const SASPAY_LIEN_GENERIQUE = (
@@ -61,6 +71,11 @@ export const SASPAY_MOYENS = [
   "Carte bancaire",
 ];
 
+/** Libellés FNE pour l'UI. */
+export const FNE_LABEL = "Option FNE — Facture Normalisée Électronique";
+export const FNE_DESCRIPTION =
+  "100 000 FCFA/an par établissement · certification DGI via KOMPTO · facturable d'avance";
+
 /** Numéro WhatsApp du support ComptaCi (secours si le lien échoue). */
 export const WHATSAPP_SUPPORT = "2250501303343";
 
@@ -72,6 +87,14 @@ export function lienDuPlan(plan) {
 /** Le forfait dispose-t-il d'un lien de paiement ? */
 export function lienPlanConfigure(plan) {
   return lienDuPlan(plan).length > 0;
+}
+
+/** Lien de l'option FNE (alias lisible). */
+export function lienFne() {
+  return LIENS_PAIEMENT.fne || "";
+}
+export function lienFneConfigure() {
+  return lienFne().length > 0;
 }
 
 /**
@@ -144,11 +167,26 @@ export function refPaiement(etablissement, plan) {
   return `CCI-${id}-${periode}-${plan || "abo"}`;
 }
 
-/** Relit le forfait porté par une référence « CCI-XXXXXX-AAAAMM-pro ». */
+/** Relit le forfait porté par une référence « CCI-XXXXXX-AAAAMM-pro » (inclut fne). */
 export function planDeReference(reference) {
   const parties = String(reference || "").split("-");
   const dernier = (parties[parties.length - 1] || "").toLowerCase();
-  return ["starter", "pro", "entreprise"].includes(dernier) ? dernier : null;
+  return ["starter", "pro", "entreprise", "fne"].includes(dernier) ? dernier : null;
+}
+
+/** Vrai si la référence porte l'option FNE. */
+export function estReferenceFne(reference) {
+  return planDeReference(reference) === "fne" || /-fne(\b|_)/i.test(String(reference || ""));
+}
+
+/** Détection FNE côté webhook/edge (même heuristique que traiter_paiement_saspay). */
+export function estProduitFne({ plan, reference, montant, payload } = {}) {
+  if (String(plan || "").toLowerCase() === "fne") return true;
+  if (estReferenceFne(reference)) return true;
+  const pp = String(payload?.plan || payload?.produit || payload?.product || "").toLowerCase();
+  if (["fne", "fne_option_100k", "fne_option"].includes(pp)) return true;
+  if (Number(montant) === FNE_PRIX && estReferenceFne(reference)) return true;
+  return false;
 }
 
 /**
