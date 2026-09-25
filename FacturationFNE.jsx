@@ -834,15 +834,15 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
             <CheckCircle size={22} color="var(--cc-or)" />
             <div>
               <div style={S.verrouTitre}>Paiement FNE reçu — en attente de connexion KOMPTO</div>
-              <p style={S.verrouTexte}>Votre option est payée (statut <strong>en_cours</strong>, échéance {fneExpiration ? new Date(fneExpiration).toLocaleDateString("fr-FR") : "—"}). Renseignez maintenant votre clé API KOMPTO, establishment, pointOfSale et NCC dans l'onglet Enrôlement pour passer en <em>active</em>.</p>
+              <p style={S.verrouTexte}>Votre option est payée (statut <strong>en_cours</strong>, échéance {fneExpiration ? new Date(fneExpiration).toLocaleDateString("fr-FR") : "—"}). Renseignez maintenant votre clé API KOMPTO, establishment, pointOfSale et NCC dans <strong>Abonnement → Option FNE</strong> (ou ci-dessous en rechargeant) pour passer en <em>active</em>.</p>
             </div>
           </div>
           <div style={S.card} className="cc-card">
             <div style={S.cardTitle}>Que faire ?</div>
             <ol style={S.etapes}>
-              <li>Allez dans <strong>Enrôlement KOMPTO / DGI</strong> ci-dessous (ou rechargez cette page après avoir payé).</li>
-              <li>Collez la clé API KOMPTO (UUID) liée à votre NCC, puis votre establishment / pointOfSale exacts (sensibles à la casse).</li>
-              <li>Cliquez “Tester la clé” puis “Enregistrer” — la page vous passera automatiquement en <em>active</em>.</li>
+              <li>Ouvrez <strong>Abonnement → Option FNE</strong> (ou rechargez cette page après paiement).</li>
+              <li>Collez la clé API KOMPTO (UUID) liée à votre NCC, puis votre establishment / pointOfSale exacts (sensibles à la casse, ex: PROGICI SARL / SIEGE en sandbox).</li>
+              <li>« Tester la clé » puis « Enregistrer » — vous passez automatiquement en <em>active</em>.</li>
             </ol>
             <button type="button" onClick={() => onRafraichirEtablissement?.()} style={S.btnSecondaire}>Recharger l'établissement</button>
           </div>
