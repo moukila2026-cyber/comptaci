@@ -148,16 +148,36 @@ function paiementReussi(payload: Payload): boolean {
   return false;
 }
 
-/** Forfait annoncé, ou relu dans la référence « CCI-XXXXXX-AAAAMM-pro ». */
+/** Forfait annoncé, ou relu dans la référence « CCI-XXXXXX-AAAAMM-pro » (inclut fne). */
 function planDuPayload(payload: Payload, reference: string): string | null {
-  const brut = chercher(payload, "plan", "forfait", "item", "product", "offer").toLowerCase();
-  if (["starter", "pro", "entreprise", "enterprise"].includes(brut)) {
-    return brut === "enterprise" ? "entreprise" : brut;
+  const brut = chercher(
+    payload,
+    "plan",
+    "forfait",
+    "item",
+    "product",
+    "offer",
+    "produit",
+    "produit_reference",
+    "reference_produit"
+  ).toLowerCase();
+  if (["starter", "pro", "entreprise", "enterprise", "fne", "fne_option", "fne_option_100k"].includes(brut)) {
+    if (brut === "enterprise") return "entreprise";
+    if (brut.startsWith("fne")) return "fne";
+    return brut;
   }
+  if (reference.toLowerCase().includes("-fne") || reference.toLowerCase().includes("fne_option")) return "fne";
   const morceaux = reference.split("-");
   const dernier = (morceaux[morceaux.length - 1] || "").toLowerCase();
-  if (["starter", "pro", "entreprise"].includes(dernier)) return dernier;
+  if (["starter", "pro", "entreprise", "fne"].includes(dernier)) return dernier;
+  const produit = chercher(payload, "product_id", "produit_id", "link", "url").toLowerCase();
+  if (produit.includes("ikoziclmohm") || produit.includes("fne")) return "fne";
   return null;
+}
+
+/** Vrai si le paiement porte l'option FNE 100k/an (lien https://link.saspay.me/ikoziclmohm). */
+function estFne(payload: Payload, reference: string, montant: number | null): boolean {
+  return planDuPayload(payload, reference) === "fne" || (montant === 100000 && reference.toLowerCase().includes("fne"));
 }
 
 /* --------------------------------------------------------------- service */

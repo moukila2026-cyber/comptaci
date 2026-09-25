@@ -19,6 +19,13 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
   const [codeInvitation, setCodeInvitation] = useState("");
   const [erreur, setErreur] = useState("");
   const [chargement, setChargement] = useState(false);
+  // FNE onboarding — Partie 1 : « Avez-vous déjà un compte FNE ? »
+  const [fneDeja, setFneDeja] = useState(""); // "" | "oui" | "non"
+  const [fneChoixNon, setFneChoixNon] = useState(""); // "" | "creer" | "ne_pas_creer"
+  const [fneChoixOui, setFneChoixOui] = useState(""); // "" | "connecter" | "garder"
+  const [fneEtab, setFneEtab] = useState("PROGICI SARL");
+  const [fnePdv, setFnePdv] = useState("SIEGE");
+  const [fneNcc, setFneNcc] = useState("");
 
   // Mot de passe oublié
   const [mdpOublieOuvert, setMdpOublieOuvert] = useState(false);
@@ -87,6 +94,18 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
       }
     }
 
+    // FNE onboarding validation (inscription)
+    if (mode === "inscription" && fneDeja === "oui" && fneChoixOui === "connecter") {
+      if (!fneEtab.trim() || !fnePdv.trim() || !fneNcc.trim()) {
+        setErreur("Pour connecter votre FNE, renseignez establishment, pointOfSale et NCC.");
+        return;
+      }
+      if (!/^[0-9]{7}[A-Z]$/.test(fneNcc.trim())) {
+        setErreur("NCC invalide — 7 chiffres + 1 lettre majuscule (ex : 0827331A).");
+        return;
+      }
+    }
+
     setChargement(true);
     // Email réel OU téléphone (→ email interne pour les anciens comptes)
     const emailUtilise = mode === "inscription"
@@ -123,6 +142,21 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
           });
           if (errRpc) throw errRpc;
           nouvelEtab = etabData;
+          // FNE Partie 1 : si "Connecter via KOMPTO" choisi à l'inscription, on pré-remplit
+          if (nouvelEtab?.id && fneDeja === "oui" && fneChoixOui === "connecter") {
+            try {
+              await supabase.from("etablissements").update({
+                kompto_etablissement: fneEtab.trim(),
+                kompto_point_de_vente: fnePdv.trim(),
+                fne_ncc: fneNcc.trim(),
+                fne_numero_contribuable: fneNcc.trim(),
+              }).eq("id", nouvelEtab.id);
+            } catch (e) {
+              console.warn("FNE pré-remplissage échoué :", e.message);
+            }
+          }
+          // Les choix "Créer une FNE" / "Connecter" nécessitent l'option payante 100k/an ;
+          // on laisse l'utilisateur la régler depuis Abonnement · Option FNE après login.
         }
         if (onAuthenticated) onAuthenticated(nouvelEtab?.id);
       } else if (mode === "rejoindre") {
@@ -241,6 +275,59 @@ export default function AuthScreen({ onAuthenticated, langue, setLangue, t }) {
                 {t("auth_secteur_aide", { nb: 20 })}
               </span>
             </label>
+          )}
+
+          {mode === "inscription" && (
+            <div style={styles.fneBox}>
+              <div style={styles.fneTitre}>Facture Normalisée Électronique (FNE — DGI) · Option 100 000 FCFA/an</div>
+              <div style={styles.fneQuestion}>Avez-vous déjà un compte FNE actif auprès de la DGI ?</div>
+              <div style={styles.fneRadios}>
+                <label style={{ ...styles.fneRadio, ...(fneDeja === "oui" ? styles.fneRadioActif : {}) }}>
+                  <input type="radio" name="fne-deja" checked={fneDeja === "oui"} onChange={() => setFneDeja("oui")} /> Oui
+                </label>
+                <label style={{ ...styles.fneRadio, ...(fneDeja === "non" ? styles.fneRadioActif : {}) }}>
+                  <input type="radio" name="fne-deja" checked={fneDeja === "non"} onChange={() => setFneDeja("non")} /> Non
+                </label>
+              </div>
+
+              {fneDeja === "non" && (
+                <div style={styles.fneSous}>
+                  <label style={{ ...styles.fneRadioLarge, ...(fneChoixNon === "creer" ? styles.fneRadioActif : {}) }}>
+                    <input type="radio" name="fne-non" checked={fneChoixNon === "creer"} onChange={() => setFneChoixNon("creer")} />
+                    <span><strong>Créer une FNE</strong> — parcours KOMPTO (établissement + PdV), payable via SasPay 100k/an.</span>
+                  </label>
+                  <label style={{ ...styles.fneRadioLarge, ...(fneChoixNon === "ne_pas_creer" ? styles.fneRadioActif : {}) }}>
+                    <input type="radio" name="fne-non" checked={fneChoixNon === "ne_pas_creer"} onChange={() => setFneChoixNon("ne_pas_creer")} />
+                    <span><strong>Ne pas créer de FNE</strong> — compta normale, 0 FCFA supplémentaire.</span>
+                  </label>
+                  {fneChoixNon === "creer" && (
+                    <div style={styles.fneHint}>Après création, vous réglerez l'option FNE (lien SasPay https://link.saspay.me/ikoziclmohm) puis renseignerez la clé KOMPTO dans Abonnement · Option FNE.</div>
+                  )}
+                </div>
+              )}
+
+              {fneDeja === "oui" && (
+                <div style={styles.fneSous}>
+                  <label style={{ ...styles.fneRadioLarge, ...(fneChoixOui === "connecter" ? styles.fneRadioActif : {}) }}>
+                    <input type="radio" name="fne-oui" checked={fneChoixOui === "connecter"} onChange={() => setFneChoixOui("connecter")} />
+                    <span><strong>Connecter cette FNE via KOMPTO</strong> — saisir establishment / pointOfSale / NCC existants.</span>
+                  </label>
+                  <label style={{ ...styles.fneRadioLarge, ...(fneChoixOui === "garder" ? styles.fneRadioActif : {}) }}>
+                    <input type="radio" name="fne-oui" checked={fneChoixOui === "garder"} onChange={() => setFneChoixOui("garder")} />
+                    <span><strong>Garder sa méthode actuelle</strong> — compta interne sans lien FNE.</span>
+                  </label>
+                  {fneChoixOui === "connecter" && (
+                    <div style={{ display: "flex", flexDirection: "column", gap: 8, marginTop: 8 }}>
+                      <input type="text" value={fneEtab} onChange={(e) => setFneEtab(e.target.value)} placeholder="establishment — ex: PROGICI SARL" style={styles.input} />
+                      <input type="text" value={fnePdv} onChange={(e) => setFnePdv(e.target.value)} placeholder="pointOfSale — ex: SIEGE" style={styles.input} />
+                      <input type="text" value={fneNcc} onChange={(e) => setFneNcc(e.target.value)} placeholder="NCC — 7 chiffres + majuscule, ex: 0827331A" style={styles.input} maxLength={8} />
+                      <div style={styles.fneHint}>Après création, réglez l'option FNE (100k/an) via SasPay puis la connexion sera activée.</div>
+                    </div>
+                  )}
+                </div>
+              )}
+              <div style={styles.fneNote}>Tarifs plans inchangés : Fondateur 7 000 (verrouillé /100), Pro 10 000, Entreprise 20 000. FNE en supplément uniquement si vous choisissez « Créer » ou « Connecter ».</div>
+            </div>
           )}
 
           {mode === "rejoindre" && (
@@ -406,4 +493,16 @@ const styles = {
     padding: "10px 0", borderRadius: 8, border: "none", background: "var(--cc-accent)", color: "var(--cc-or-clair)",
     fontSize: 13, fontWeight: 600, cursor: "pointer", fontFamily: "'Inter', sans-serif",
   },
+  fneBox: {
+    background: "rgba(255,255,255,0.06)", border: "1px solid rgba(232,182,90,0.25)", borderRadius: 12, padding: 14, display: "flex", flexDirection: "column", gap: 10,
+  },
+  fneTitre: { fontSize: 11.5, fontWeight: 700, color: "var(--cc-or)", letterSpacing: "0.02em" },
+  fneQuestion: { fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte)" },
+  fneRadios: { display: "flex", gap: 8, flexWrap: "wrap" },
+  fneRadio: { display: "flex", alignItems: "center", gap: 6, padding: "7px 12px", borderRadius: 20, border: "1px solid var(--cc-bord)", background: "rgba(255,255,255,0.06)", fontSize: 12.5, fontWeight: 600, color: "var(--cc-texte-doux)", cursor: "pointer" },
+  fneRadioActif: { borderColor: "var(--cc-or)", background: "rgba(232,182,90,0.18)", color: "var(--cc-or-clair)" },
+  fneSous: { display: "flex", flexDirection: "column", gap: 8, marginTop: 4 },
+  fneRadioLarge: { display: "flex", alignItems: "flex-start", gap: 8, padding: "9px 11px", borderRadius: 10, border: "1px solid var(--cc-bord)", background: "rgba(255,255,255,0.06)", fontSize: 12, lineHeight: 1.45, color: "var(--cc-texte-corps)", cursor: "pointer" },
+  fneHint: { fontSize: 11.5, color: "var(--cc-texte-doux)", lineHeight: 1.45, background: "rgba(232,182,90,0.12)", borderRadius: 8, padding: "8px 10px" },
+  fneNote: { fontSize: 11, color: "var(--cc-texte-doux)", lineHeight: 1.45 },
 };

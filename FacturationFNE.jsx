@@ -19,6 +19,7 @@ import {
   Eye,
 } from "lucide-react";
 import { supabase } from "./supabaseClient.js";
+import PaiementFNE from "./PaiementFNE.jsx";
 import {
   etatEnrolement,
   etatKompto,
@@ -86,7 +87,27 @@ const TVA_LABELS = {
 };
 
 export default function FacturationFNE({ etablissement, transactions, planEffectif, enEssai, t, onRafraichirEtablissement }) {
-  const aAcces = PLANS_FNE.includes(planEffectif) || enEssai;
+  // ----- FNE option gating (100k/an/établissement, disponible sur tous les plans) -----
+  const fneStatutBrut = etablissement?.fne_statut ?? null;
+  const fneExpiration = etablissement?.fne_expiration_date || null;
+  const hasFneCol = etablissement && Object.prototype.hasOwnProperty.call(etablissement, "fne_statut");
+  const fneStatutEffectif = (() => {
+    if (!hasFneCol) {
+      // migration pas encore appliquée → fallback legacy (Pro/Entreprise ou essai)
+      return PLANS_FNE.includes(planEffectif) || enEssai ? "active" : "aucune";
+    }
+    const brut = fneStatutBrut || "aucune";
+    if ((brut === "active" || brut === "en_cours") && fneExpiration) {
+      const exp = new Date(fneExpiration);
+      exp.setHours(23, 59, 59, 999);
+      if (exp < new Date()) return "expiree";
+    }
+    return brut;
+  })();
+  const aAcces = fneStatutEffectif === "active";
+  const estEnCours = fneStatutEffectif === "en_cours";
+  const estExpiree = fneStatutEffectif === "expiree";
+  const estSansFne = fneStatutEffectif === "aucune";
   const legacyEtat = etatEnrolement(etablissement);
   const komptoEtat = etatKompto(etablissement);
   // on privilégie l'état KOMPTO s'il est renseigné, sinon fallback legacy
@@ -306,6 +327,18 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
   // ---------- Verify ----------
   const handleVerify = async () => {
     if (!etablissement?.id) return;
+    if (hasFneCol && fneStatutEffectif !== "active") {
+      setMessage({
+        type: "ko",
+        texte:
+          fneStatutEffectif === "expiree"
+            ? "Option FNE expirée — renouvelez l’option (100 000 FCFA/an) avant de certifier. La certification est coupée."
+            : estEnCours
+              ? "Option FNE en_cours — finalisez la connexion KOMPTO dans l’onglet Enrôlement (clé + establishment/pointOfSale/NCC) pour débloquer la certification."
+              : "Option FNE non active (aucune) — réglez l’option 100 000 FCFA/an par établissement pour certifier vos factures DGI.",
+      });
+      return;
+    }
     const cfgLocal = {
       baseUrl: formulaire.kompto_base_url.trim() || cfg.baseUrl,
       apiKey: formulaire.kompto_api_key.trim() || cfg.apiKey,
@@ -361,6 +394,16 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
   // ---------- Confirm ----------
   const handleConfirm = async () => {
+    if (hasFneCol && fneStatutEffectif !== "active") {
+      setMessage({
+        type: "ko",
+        texte:
+          fneStatutEffectif === "expiree"
+            ? "Option FNE expirée — renouvellement requis avant toute certification."
+            : "Option FNE non active — la confirmation certifiée (/confirm) est bloquée.",
+      });
+      return;
+    }
     const cfgLocal = {
       baseUrl: formulaire.kompto_base_url.trim() || cfg.baseUrl,
       apiKey: formulaire.kompto_api_key.trim() || cfg.apiKey,
@@ -438,6 +481,10 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
 
   // ---------- Create (Path B) ----------
   const handleCreate = async () => {
+    if (hasFneCol && fneStatutEffectif !== "active") {
+      setMessage({ type: "ko", texte: "Option FNE non active — la création certifiée (/create) est bloquée. Activez l’option ou renouvelez." });
+      return;
+    }
     const cfgLocal = {
       baseUrl: formulaire.kompto_base_url.trim() || cfg.baseUrl,
       apiKey: formulaire.kompto_api_key.trim() || cfg.apiKey,
@@ -756,6 +803,67 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
   };
 
   if (!aAcces) {
+    // FNE option gates (prioritaire) ; fallback legacy si migration absente → ancien message Pro
+    if (hasFneCol && estSansFne) {
+      return (
+        <div className="cc-page cc-page-fne" style={S.page}>
+          <div style={S.cadreCard} className="cc-card">
+            <ShieldCheck size={18} color="var(--cc-or)" />
+            <div>
+              <div style={S.cadreTitre}>Option FNE — 100 000 FCFA/an par établissement</div>
+              <p style={S.cadreTexte}>
+                La facture normalisée électronique (DGI) est une option payante séparée, disponible sur tous les plans (Fondateur 7 000, Pro 10 000, Entreprise 20 000 inchangés). Sans cette option, vos factures restent des brouillons non certifiés.
+              </p>
+            </div>
+          </div>
+          <PaiementFNE etablissement={etablissement} t={t} onPaye={onRafraichirEtablissement} />
+          <div style={S.verrouCard} className="cc-card">
+            <Lock size={18} color="var(--cc-texte-doux)" />
+            <div>
+              <div style={S.verrouTitre}>Sans FNE : compta normale</div>
+              <p style={S.verrouTexte}>Vous pouvez continuer à utiliser ComptaCi en compta interne (sans certification). Pour activer la certification DGI via KOMPTO, réglez l'option ci-dessus puis connectez votre établissement dans l'onglet Enrôlement.</p>
+            </div>
+          </div>
+        </div>
+      );
+    }
+    if (hasFneCol && estEnCours) {
+      return (
+        <div className="cc-page cc-page-fne" style={S.page}>
+          <div style={{ ...S.verrouCard, borderColor: "var(--cc-or-pale)", background: "var(--cc-surface-3)" }} className="cc-card">
+            <CheckCircle size={22} color="var(--cc-or)" />
+            <div>
+              <div style={S.verrouTitre}>Paiement FNE reçu — en attente de connexion KOMPTO</div>
+              <p style={S.verrouTexte}>Votre option est payée (statut <strong>en_cours</strong>, échéance {fneExpiration ? new Date(fneExpiration).toLocaleDateString("fr-FR") : "—"}). Renseignez maintenant votre clé API KOMPTO, establishment, pointOfSale et NCC dans l'onglet Enrôlement pour passer en <em>active</em>.</p>
+            </div>
+          </div>
+          <div style={S.card} className="cc-card">
+            <div style={S.cardTitle}>Que faire ?</div>
+            <ol style={S.etapes}>
+              <li>Allez dans <strong>Enrôlement KOMPTO / DGI</strong> ci-dessous (ou rechargez cette page après avoir payé).</li>
+              <li>Collez la clé API KOMPTO (UUID) liée à votre NCC, puis votre establishment / pointOfSale exacts (sensibles à la casse).</li>
+              <li>Cliquez “Tester la clé” puis “Enregistrer” — la page vous passera automatiquement en <em>active</em>.</li>
+            </ol>
+            <button type="button" onClick={() => onRafraichirEtablissement?.()} style={S.btnSecondaire}>Recharger l'établissement</button>
+          </div>
+        </div>
+      );
+    }
+    if (hasFneCol && estExpiree) {
+      return (
+        <div className="cc-page cc-page-fne" style={S.page}>
+          <div style={{ ...S.verrouCard, borderColor: "var(--cc-rouge-bord)", background: "var(--cc-rouge-fond)" }} className="cc-card">
+            <XCircle size={22} color="var(--cc-rouge)" />
+            <div>
+              <div style={S.verrouTitre}>Option FNE expirée — certification coupée</div>
+              <p style={S.verrouTexte}>Échéance dépassée {fneExpiration ? `(${new Date(fneExpiration).toLocaleDateString("fr-FR")})` : ""}. Les factures ne peuvent plus être certifiées tant que l'option n'est pas renouvelée (100 000 FCFA/an).</p>
+            </div>
+          </div>
+          <PaiementFNE etablissement={etablissement} t={t} onPaye={onRafraichirEtablissement} />
+        </div>
+      );
+    }
+    // fallback legacy (migration non appliquée)
     return (
       <div className="cc-page cc-page-fne" style={S.page}>
         <div style={S.verrouCard} className="cc-card">
@@ -774,14 +882,25 @@ export default function FacturationFNE({ etablissement, transactions, planEffect
       <div style={S.cadreCard} className="cc-card">
         <ShieldCheck size={18} color="var(--cc-vert)" />
         <div>
-          <div style={S.cadreTitre}>{t("fne_cadre_titre")}</div>
+          <div style={S.cadreTitre}>{t("fne_cadre_titre")} — {fneStatutEffectif === "active" ? "active" : fneStatutEffectif}</div>
           <p style={S.cadreTexte}>{t("fne_cadre_texte")}</p>
           <p style={{ ...S.cadreTexte, marginTop: 6, fontSize: 11.5, opacity: 0.85 }}>
             KOMPTO sandbox : <code style={S.codeInline}>https://qa.kompto.com</code> — factures émises au nom de <strong>PROGICI SARL / SIEGE</strong> sans valeur fiscale. Collection Postman :{" "}
             <code style={S.codeInline}>postman/KOMPTO-Sandbox.postman_collection.json</code>
+            {hasFneCol && fneExpiration ? ` · Échéance FNE : ${new Date(fneExpiration).toLocaleDateString("fr-FR")} · statut : ${fneStatutEffectif}` : ""}
           </p>
         </div>
       </div>
+      {hasFneCol && fneExpiration && fneStatutEffectif === "active" && (() => {
+        const jours = Math.ceil((new Date(fneExpiration) - new Date()) / 86400000);
+        if (jours < 0) return null;
+        if (jours <= 30) return (
+          <div style={{ ...S.message, ...(jours <= 7 ? S.messageKo : S.messageInfo) }}>
+            {jours <= 7 ? "⚠️" : "ℹ️"} Option FNE — échéance dans {jours} jour{jours > 1 ? "s" : ""} ({new Date(fneExpiration).toLocaleDateString("fr-FR")}). Renouvellement : 100 000 FCFA/an via le lien SasPay FNE.
+          </div>
+        );
+        return null;
+      })()}
 
       <div style={S.onglets}>
         <button type="button" onClick={() => setOnglet("enrolement")} style={{ ...S.onglet, ...(onglet === "enrolement" ? S.ongletActif : {}) }}>

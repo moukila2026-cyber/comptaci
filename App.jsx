@@ -10,6 +10,7 @@ import PaiementEnAttente from "./PaiementEnAttente.jsx";
 import LanguageSelector from "./LanguageSelector.jsx";
 import { traducteur, getLangueInitiale, sauvegarderLangue, RTL_LANGUES } from "./i18n.js";
 import PaiementSasPay, { PRIX_PLANS, JOURS_ESSAI } from "./PaiementSasPay.jsx";
+import FNEConfig from "./FNEConfig.jsx";
 import { wallpaperStyle } from "./wallpaper.js";
 import {
   SECTEURS_IDS,
@@ -833,6 +834,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onSupprimerCompte={supprimerMonCompte}
             onChangerSecteur={changerSecteur}
             t={t}
+            onRafraichir={() => chargerEtablissements(etablissement?.id)}
           />
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={planEffectif} secteur={etablissement?.secteur} t={t} />
@@ -2441,7 +2443,7 @@ function ComparatifForfaits({ t }) {
   );
 }
 
-export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, onChangerSecteur, t }) {
+export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCompte, onChangerSecteur, t, onRafraichir }) {
   const nomPlan = (p) =>
     p === "pro" ? t("paiement_plan_pro") : p === "entreprise" ? t("paiement_plan_entreprise") : t("paiement_plan_starter");
 
@@ -2536,6 +2538,11 @@ export function Abonnement({ etablissement, planEffectif, enEssai, onSupprimerCo
 
         {/* Les 3 forfaits en détail : 9 caractéristiques × 3 colonnes */}
         <ComparatifForfaits t={t} />
+      </div>
+
+      {/* Option FNE — 100k/an/établissement, séparée des plans */}
+      <div style={styles.card} className="cc-card">
+        <FNEConfig etablissement={etablissement} t={t} onRafraichir={onRafraichir} />
       </div>
 
       {/* Zone sensible : suppression du compte utilisateur */}
