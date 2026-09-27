@@ -1088,12 +1088,12 @@ function TopBar({ etablissement, onRename, role, codeInvitation, plan, mesEtabli
       <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
         <LanguageSelector langue={langue} onChange={setLangue} />
         {estProprietaire && codeInvitation && peutInviterGerant && (
-          <div style={{ position: "relative" }}>
+          <div className="cc-invite-wrap" style={{ position: "relative" }}>
             <button style={styles.inviteBtn} onClick={() => setInviteOuvert((v) => !v)}>
               {t("nav_invite_gerant")}
             </button>
             {inviteOuvert && (
-              <div style={styles.invitePopover}>
+              <div className="cc-invite-popover" style={styles.invitePopover}>
                 <div style={styles.invitePopoverLabel}>{t("auth_code_invitation")}</div>
                 <div style={styles.inviteCode}>{codeInvitation}</div>
                 <p style={styles.invitePopoverText}>
@@ -3139,6 +3139,11 @@ const styles = {
   topbar: {
     display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: 6,
     padding: "14px 20px", borderBottom: "1px solid var(--cc-bord)", background: "rgba(17,25,41,0.78)",
+    // La barre du haut forme son propre contexte d'empilement (backdrop-filter
+    // dans ui.css) : sans z-index explicite, les blocs qui la suivent (bandeau
+    // d'essai, bandeau photo de page, cartes animées) se peignent PAR-DESSUS
+    // ses menus déroulants et masquaient le code d'invitation gérant.
+    position: "relative", zIndex: 50,
   },
   topbarLeft: { display: "flex", alignItems: "center", gap: 8 },
   topbarNameBtn: {

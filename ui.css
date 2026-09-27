@@ -387,6 +387,20 @@
   border-bottom: 1px solid var(--cc-bord) !important;
 }
 
+/* Fenêtre « Code d'invitation » (gérant) : sur petit écran, le bouton passe à
+   la ligne et la fenêtre (260 px, alignée à droite du bouton) sortait de
+   l'écran par la gauche. On l'ancre alors sur toute la largeur de la barre
+   du haut (qui est en position: relative). */
+@media (max-width: 560px) {
+  .cc-invite-wrap { position: static !important; }
+  .cc-invite-popover {
+    left: 16px !important;
+    right: 16px !important;
+    width: auto !important;
+    top: calc(100% - 6px) !important;
+  }
+}
+
 /* --------------------------------------------------------------------------
    8. Grilles & mise en page (conservées de l'ancien GLOBAL_CSS)
    -------------------------------------------------------------------------- */
