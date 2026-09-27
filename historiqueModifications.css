@@ -1,0 +1,37 @@
+.cc-audit { padding: 28px; color: var(--cc-texte, #E9EEFA); }
+.cc-audit-card { padding: 24px; border: 1px solid #26324C; border-radius: 16px; background: #151E31; }
+.cc-audit-header, .cc-audit-meta, .cc-audit-pagination { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.cc-audit-header { justify-content: space-between; }
+.cc-audit h1 { margin: 0; font-size: 20px; display: flex; align-items: center; gap: 10px; }
+.cc-audit p { color: #B8C2D8; line-height: 1.6; }
+.cc-audit-header p { margin: 8px 0 0; }
+.cc-audit button, .cc-audit select { font: inherit; font-size: 13px; color: #E9EEFA; background: #22304B; border: 1px solid #35435F; border-radius: 8px; padding: 10px 12px; }
+.cc-audit button { cursor: pointer; display: inline-flex; align-items: center; justify-content: center; gap: 8px; }
+.cc-audit button:disabled { opacity: .45; cursor: not-allowed; }
+.cc-audit :is(button, select, summary):focus-visible { outline: 2px solid #E8B65A; outline-offset: 3px; }
+.cc-audit-notice { padding: 12px 16px; background: rgba(232,182,90,.08); border-inline-start: 3px solid #E8B65A; font-size: 13px; }
+.cc-audit-filtres { display: flex; flex-wrap: wrap; gap: 16px; margin: 22px 0; }
+.cc-audit-filtres label { display: flex; flex-direction: column; gap: 8px; font-size: 13px; flex: 1 1 200px; max-width: 320px; }
+.cc-audit-liste { padding: 0; margin: 0; list-style: none; }
+.cc-audit-evenement { border-top: 1px solid #26324C; padding: 22px 0; overflow-wrap: anywhere; }
+.cc-audit-meta { font-size: 12px; color: #94A0BC; }
+.cc-audit-meta time { margin-inline-start: auto; }
+.cc-audit-badge { padding: 4px 9px; background: #22304B; border-radius: 6px; font-weight: 700; }
+.cc-audit h2 { font-size: 15px; margin: 12px 0 4px; white-space: pre-wrap; }
+.cc-audit-auteur { font-size: 13px; margin: 4px 0 12px; }
+.cc-audit summary { font-size: 13px; color: #E8B65A; cursor: pointer; width: fit-content; }
+.cc-audit-reference { font-size: 11px; }
+.cc-audit-table-scroll { overflow-x: auto; }
+.cc-audit table { width: 100%; border-collapse: collapse; font-size: 13px; table-layout: fixed; min-width: 340px; }
+.cc-audit th, .cc-audit td { padding: 10px; text-align: start; vertical-align: top; border: 1px solid #26324C; white-space: pre-wrap; }
+.cc-audit th { color: #94A0BC; font-weight: 500; }
+.cc-audit thead { background: #1A2438; }
+.cc-audit-pagination { justify-content: space-between; margin-top: 20px; font-size: 13px; }
+.cc-audit-message { padding: 30px 0; text-align: center; }
+@media (max-width: 779px) {
+  .cc-audit { padding: 14px; }
+  .cc-audit-card { padding: 16px; }
+  .cc-audit h1 { font-size: 18px; }
+  .cc-audit-meta time { margin-inline-start: 0; width: 100%; }
+  .cc-audit-filtres label { max-width: none; }
+}
