@@ -1,5 +1,14 @@
 # ComptaCi — Corrections & améliorations (à lire avant déploiement)
 
+## Historique des modifications — réservé au propriétaire
+
+- Nouvelle rubrique **Historique des modifications**, distincte de l'historique des mouvements, visible uniquement par le propriétaire de l'établissement actif.
+- Actions des propriétaires et gérants sur les mouvements, le stock, les fournisseurs, la caisse et les principaux paramètres de l'établissement : auteur, date et valeurs avant/après.
+- Lecture seule protégée par RLS ; aucune lecture du journal pour les gérants, aucune écriture directe pour les utilisateurs.
+- **Migration supplémentaire obligatoire** : exécuter `supabase-historique-modifications.sql` dans Supabase → SQL Editor, après l'initialisation de la base. Le script de setup ci-dessous ne l'inclut pas.
+- L'enregistrement commence à l'activation : les modifications plus anciennes ne sont pas récupérables.
+- Installation, périmètre et vérifications : [docs/HISTORIQUE-MODIFICATIONS.md](docs/HISTORIQUE-MODIFICATIONS.md).
+
 ## Correctif dépenses par activité — 20 suggestions, séparées du stock
 
 - **200 suggestions** : exactement 20 frais de fonctionnement pour chacun des

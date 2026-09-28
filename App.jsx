@@ -31,6 +31,7 @@ import { calculerScoreCredit } from "./creditScoring.js";
 import { C, COULEURS_GRAPH } from "./theme.js";
 import ScoreCredit from "./ScoreCredit.jsx";
 import FacturationFNE from "./FacturationFNE.jsx";
+import HistoriqueModifications from "./HistoriqueModifications.jsx";
 
 /** Montants usuels proposés en un clic à l'ouverture de la caisse. */
 const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
@@ -745,11 +746,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
   // Pendant l'essai gratuit, accès complet au niveau Starter (pas Pro) pour
   // permettre de tester l'outil avant de choisir un forfait.
   const planEffectif = enEssai ? "starter" : etablissement?.plan;
+  // Résolu depuis la sélection courante (le state role est actualisé par un effet).
+  const roleActif = mesEtablissements.find(m => m.etablissement_id === etablissementActifId)?.role;
+  const vueAffichee = vue === "modifications" && roleActif !== "proprietaire" ? "dashboard" : vue;
 
   return (
     <div className="cc-app" style={{ ...styles.app, flexDirection: isMobile ? "column" : "row" }}>
       <style>{GLOBAL_CSS}</style>
-      <Sidebar vue={vue} setVue={setVue} isMobile={isMobile} onLogout={seDeconnecter} t={t} />
+      <Sidebar vue={vueAffichee} setVue={setVue} role={roleActif} isMobile={isMobile} onLogout={seDeconnecter} t={t} />
       <div className="cc-main" style={styles.main}>
         <TopBar
           etablissement={etablissement?.nom || "Mon établissement"}
@@ -768,10 +772,10 @@ function ComptaCiApp({ langue, setLangue, t }) {
         />
         {enEssai && <EssaiBanner msRestant={msRestantEssai} estFondateur={etablissement?.est_fondateur} essaiJours={dureeEssai(etablissement)} t={t} />}
         {erreur && <div style={styles.errorBanner}>{erreur}</div>}
-        {!chargement && <PageBanner vue={vue} t={t} />}
+        {!chargement && <PageBanner vue={vueAffichee} t={t} />}
         {chargement ? (
           <div className="cc-ecran" style={styles.loading}>{t("chargement")}</div>
-        ) : vue === "dashboard" ? (
+        ) : vueAffichee === "dashboard" ? (
           <Dashboard
             transactions={transactions}
             isMobile={isMobile}
@@ -780,9 +784,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
             demandes={demandesPaiement}
             t={t}
           />
-        ) : vue === "saisie" ? (
+        ) : vueAffichee === "saisie" ? (
           <Saisie key={`${etablissement?.id}:${etablissement?.secteur}`} onAdd={addTransaction} secteur={etablissement?.secteur} etablissement={etablissement} t={t} />
-        ) : vue === "stock" ? (
+        ) : vueAffichee === "stock" ? (
           <Stock
             produits={produits}
             secteur={etablissement?.secteur}
@@ -793,7 +797,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onImporterPostes={importerPostesStock}
             t={t}
           />
-        ) : vue === "caisse" ? (
+        ) : vueAffichee === "caisse" ? (
           <Caisse
             sessionCaisse={sessionCaisse}
             historiqueCaisse={historiqueCaisse}
@@ -802,14 +806,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onFermer={fermerCaisse}
             t={t}
           />
-        ) : vue === "fournisseurs" ? (
+        ) : vueAffichee === "fournisseurs" ? (
           <Fournisseurs
             fournisseurs={fournisseurs}
             onAdd={ajouterFournisseur}
             onSupprimer={supprimerFournisseur}
             t={t}
           />
-        ) : vue === "score" ? (
+        ) : vueAffichee === "score" ? (
           <ScoreCredit
             transactions={transactions}
             etablissement={etablissement}
@@ -817,7 +821,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             langue={langue}
             t={t}
           />
-        ) : vue === "fne" ? (
+        ) : vueAffichee === "fne" ? (
           <FacturationFNE
             etablissement={etablissement}
             transactions={transactions}
@@ -826,7 +830,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             t={t}
             onRafraichirEtablissement={chargerEtablissements}
           />
-        ) : vue === "abonnement" ? (
+        ) : vueAffichee === "abonnement" ? (
           <Abonnement
             etablissement={etablissement}
             planEffectif={planEffectif}
@@ -835,6 +839,14 @@ function ComptaCiApp({ langue, setLangue, t }) {
             onChangerSecteur={changerSecteur}
             t={t}
             onRafraichir={() => chargerEtablissements(etablissement?.id)}
+          />
+        ) : vueAffichee === "modifications" && roleActif === "proprietaire" ? (
+          <HistoriqueModifications
+            key={`${session.user.id}:${etablissementActifId}`}
+            role={roleActif}
+            etablissementId={etablissementActifId}
+            langue={langue}
+            t={t}
           />
         ) : (
           <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={planEffectif} secteur={etablissement?.secteur} t={t} />
@@ -877,13 +889,14 @@ function PageBanner({ vue, t }) {
   );
 }
 
-function Sidebar({ vue, setVue, isMobile, onLogout, t }) {
+export function Sidebar({ vue, setVue, role, isMobile, onLogout, t }) {
   const items = [
     { id: "dashboard", label: t("nav_dashboard"), icon: LayoutDashboard },
     { id: "saisie", label: t("nav_saisie"), icon: PenLine },
     { id: "caisse", label: t("nav_caisse"), icon: Lock },
     { id: "stock", label: t("nav_stock"), icon: Package },
     { id: "historique", label: t("nav_historique"), icon: History },
+    ...(role === "proprietaire" ? [{ id: "modifications", label: t("nav_modifications"), icon: History }] : []),
     { id: "score", label: t("nav_score"), icon: Award },
     { id: "fne", label: t("nav_fne"), icon: FileText },
     { id: "fournisseurs", label: t("nav_fournisseurs"), icon: Phone },
