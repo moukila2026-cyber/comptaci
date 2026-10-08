@@ -247,6 +247,7 @@ function Application() {
             transactions={TRANSACTIONS.slice(0, 40)}
             onDelete={async () => true}
             onUpdate={async () => true}
+            peutSupprimer
             plan="pro"
             secteur={ETABLISSEMENT.secteur}
             t={t}
@@ -278,6 +279,7 @@ function Application() {
         <Stock
           produits={PRODUITS_DEMO}
           secteur="boutique"
+          peutGerer
           t={t}
           onAdd={async () => true}
           onAjuster={async () => true}

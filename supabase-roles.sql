@@ -1,3 +1,10 @@
+-- ============================================================
+-- ATTENTION — ANCIEN SCRIPT, NE PAS RELANCER.
+-- Il recrée des politiques qui permettent aux gérants d'écrire dans le stock,
+-- les mouvements ou les fournisseurs. Utiliser supabase-SETUP-FINAL.sql.
+-- Si ce script a déjà été relancé, exécuter ensuite
+-- supabase-stock-proprietaire.sql (voir LISEZ-MOI-CORRECTIONS.md).
+-- ============================================================
 -- Code d'invitation unique par établissement, pour que le propriétaire
 -- puisse inviter un gérant sans exposer d'informations sensibles.
 alter table etablissements add column if not exists code_invitation text unique;
