@@ -32,6 +32,8 @@ import { C, COULEURS_GRAPH } from "./theme.js";
 import ScoreCredit from "./ScoreCredit.jsx";
 import FacturationFNE from "./FacturationFNE.jsx";
 import HistoriqueModifications from "./HistoriqueModifications.jsx";
+import { estProprietaire } from "./droits.js";
+import { appliquerMouvementStock, fusionnerProduit } from "./stock.js";
 
 /** Montants usuels proposés en un clic à l'ouverture de la caisse. */
 const MONTANTS_RAPIDES_CAISSE = [5000, 10000, 20000, 50000, 100000];
@@ -150,6 +152,9 @@ function ComptaCiApp({ langue, setLangue, t }) {
   const [etablissementActifId, setEtablissementActifId] = useState(null);
   const [chargement, setChargement] = useState(true);
   const [erreur, setErreur] = useState(null);
+  // Rôle dans l'établissement sélectionné : il pilote les droits d'affichage
+  // et les garde-fous (le propriétaire seul gère le stock et supprime).
+  const roleActif = mesEtablissements.find((m) => m.etablissement_id === etablissementActifId)?.role;
 
   useEffect(() => {
     supabase.auth.getSession().then(({ data }) => {
@@ -455,44 +460,25 @@ function ComptaCiApp({ langue, setLangue, t }) {
     return true;
   };
 
+  /**
+   * Une vente ou une dépense ajuste le stock via `appliquer_mouvement_stock`.
+   * Cette fonction côté base fonctionne pour le propriétaire comme pour un
+   * gérant : un gérant ajuste les produits existants, sans jamais créer de
+   * ligne de stock ni fixer une quantité. Une erreur reste visible : la vente
+   * est enregistrée, mais le stock n'a pas été mis à jour.
+   */
   const ajusterStock = async (designation, quantite, type, prixUnitaire = 0) => {
-    const existant = produits.find(
-      (p) => p.designation.toLowerCase() === designation.toLowerCase()
+    const { ok, produit, erreur: erreurStock } = await appliquerMouvementStock(
+      supabase,
+      etablissement.id,
+      { designation, quantite, type, prixUnitaire }
     );
-    const variation = type === "vente" ? -quantite : quantite;
-
-    if (existant) {
-      const nouvelleQuantite = (parseFloat(existant.quantite_stock) || 0) + variation;
-      const miseAJour = { quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() };
-      // Valorisation : si le produit n'a pas encore de prix unitaire et que la
-      // vente (ou l'achat) en indique un, on l'enregistre : la valeur en FCFA
-      // de la ligne de stock peut alors être calculée immédiatement.
-      const prixActuel = parseFloat(existant.prix_unitaire) || 0;
-      if (!prixActuel && prixUnitaire > 0) miseAJour.prix_unitaire = prixUnitaire;
-
-      const { data, error } = await supabase
-        .from("produits")
-        .update(miseAJour)
-        .eq("id", existant.id)
-        .select();
-      if (!error && data?.[0]) {
-        setProduits((liste) => liste.map((p) => (p.id === existant.id ? data[0] : p)));
-      }
-    } else if (type === "depense") {
-      // Une dépense sur un produit inconnu : on le crée automatiquement en stock
-      const { data, error } = await supabase
-        .from("produits")
-        .insert({
-          etablissement_id: etablissement.id,
-          designation,
-          quantite_stock: quantite,
-          prix_unitaire: prixUnitaire > 0 ? prixUnitaire : null,
-        })
-        .select();
-      if (!error && data?.[0]) {
-        setProduits((liste) => [...liste, data[0]]);
-      }
+    if (!ok) {
+      console.error("Erreur mise à jour du stock:", erreurStock);
+      setErreur(`Le stock n'a pas pu être mis à jour : ${erreurStock.message}`);
+      return;
     }
+    if (produit) setProduits((liste) => fusionnerProduit(liste, produit));
   };
 
   /**
@@ -501,7 +487,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
    * Les produits déjà présents ne sont jamais dupliqués.
    */
   const importerPostesStock = async () => {
-    if (!etablissement?.id) return { ok: false, ajoutes: 0 };
+    if (!etablissement?.id || !estProprietaire(roleActif)) return { ok: false, ajoutes: 0 };
     const secteurActif = secteurNormalise(etablissement?.secteur);
     const existants = new Set(
       produits.map((p) => String(p.designation || "").trim().toLowerCase())
@@ -531,6 +517,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const addProduit = async (designation, quantite, prixUnitaire, seuilAlerte) => {
+    if (!estProprietaire(roleActif)) return false;
     const { data, error } = await supabase
       .from("produits")
       .insert({
@@ -551,6 +538,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const ajusterQuantiteManuelle = async (id, nouvelleQuantite) => {
+    if (!estProprietaire(roleActif)) return;
     const { data, error } = await supabase
       .from("produits")
       .update({ quantite_stock: nouvelleQuantite, maj_le: new Date().toISOString() })
@@ -562,6 +550,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const modifierSeuil = async (id, seuil) => {
+    if (!estProprietaire(roleActif)) return;
     const { data, error } = await supabase
       .from("produits")
       .update({ seuil_alerte: seuil, maj_le: new Date().toISOString() })
@@ -573,6 +562,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const supprimerProduit = async (id) => {
+    if (!estProprietaire(roleActif)) return;
     const { error } = await supabase.from("produits").delete().eq("id", id);
     if (!error) setProduits((liste) => liste.filter((p) => p.id !== id));
   };
@@ -592,6 +582,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const supprimerFournisseur = async (id) => {
+    if (!estProprietaire(roleActif)) return;
     const { error } = await supabase.from("fournisseurs").delete().eq("id", id);
     if (!error) setFournisseurs(fournisseurs.filter((f) => f.id !== id));
   };
@@ -651,6 +642,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
   };
 
   const deleteTransaction = async (id) => {
+    if (!estProprietaire(roleActif)) return;
     const { error } = await supabase.from("transactions").delete().eq("id", id);
     if (error) {
       setErreur("La suppression a échoué.");
@@ -746,8 +738,6 @@ function ComptaCiApp({ langue, setLangue, t }) {
   // Pendant l'essai gratuit, accès complet au niveau Starter (pas Pro) pour
   // permettre de tester l'outil avant de choisir un forfait.
   const planEffectif = enEssai ? "starter" : etablissement?.plan;
-  // Résolu depuis la sélection courante (le state role est actualisé par un effet).
-  const roleActif = mesEtablissements.find(m => m.etablissement_id === etablissementActifId)?.role;
   const vueAffichee = vue === "modifications" && roleActif !== "proprietaire" ? "dashboard" : vue;
 
   return (
@@ -790,6 +780,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
           <Stock
             produits={produits}
             secteur={etablissement?.secteur}
+            peutGerer={estProprietaire(roleActif)}
             onAdd={addProduit}
             onAjuster={ajusterQuantiteManuelle}
             onSupprimer={supprimerProduit}
@@ -811,6 +802,7 @@ function ComptaCiApp({ langue, setLangue, t }) {
             fournisseurs={fournisseurs}
             onAdd={ajouterFournisseur}
             onSupprimer={supprimerFournisseur}
+            peutSupprimer={estProprietaire(roleActif)}
             t={t}
           />
         ) : vueAffichee === "score" ? (
@@ -849,7 +841,15 @@ function ComptaCiApp({ langue, setLangue, t }) {
             t={t}
           />
         ) : (
-          <Historique transactions={transactions} onDelete={deleteTransaction} onUpdate={updateTransaction} plan={planEffectif} secteur={etablissement?.secteur} t={t} />
+          <Historique
+            transactions={transactions}
+            onDelete={deleteTransaction}
+            peutSupprimer={estProprietaire(roleActif)}
+            onUpdate={updateTransaction}
+            plan={planEffectif}
+            secteur={etablissement?.secteur}
+            t={t}
+          />
         )}
         <AppFooter />
       </div>
@@ -2114,7 +2114,12 @@ export function Caisse({ sessionCaisse, historiqueCaisse, transactions, onOuvrir
   );
 }
 
-export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeuil, onImporterPostes, t }) {
+/**
+ * Stock. Seul le propriétaire (`peutGerer`) ajoute, modifie ou supprime un
+ * produit. Un gérant consulte le stock ; ses ventes et dépenses continuent de
+ * mettre les quantités à jour via les mouvements (Saisie).
+ */
+export function Stock({ produits, secteur, peutGerer = false, onAdd, onAjuster, onSupprimer, onSeuil, onImporterPostes, t }) {
   const [designation, setDesignation] = useState("");
   const [importEnCours, setImportEnCours] = useState(false);
   const [importMsg, setImportMsg] = useState(null);
@@ -2219,6 +2224,7 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
           {produitsEnAlerte.map((p) => p.designation).join(", ")}
         </div>
       )}
+      {!peutGerer && <div style={styles.avisLectureSeule}>{t("stock_lecture_seule")}</div>}
       <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
@@ -2227,37 +2233,43 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
               {produits.length} — {t("stock_sous")}
             </div>
           </div>
-          <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
-            <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
-              {ouvert ? t("stock_annuler") : t("stock_ajouter")}
-            </button>
-          </div>
+          {peutGerer && (
+            <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+              <button style={styles.inviteBtn} onClick={() => setOuvert((v) => !v)}>
+                {ouvert ? t("stock_annuler") : t("stock_ajouter")}
+              </button>
+            </div>
+          )}
         </div>
 
         {/* Import des produits stockables, séparés des frais de fonctionnement */}
-        <div style={styles.importPostes}>
-          <div style={{ flex: "1 1 260px" }}>
-            <div style={styles.importTitre}>{t("stock_import_titre")}</div>
-            <div style={styles.importSous}>
-              {t("stock_import_sous", { nb: postesManquants, secteur: t(`secteur_${secteurActif}`) })}
+        {peutGerer && (
+          <>
+            <div style={styles.importPostes}>
+              <div style={{ flex: "1 1 260px" }}>
+                <div style={styles.importTitre}>{t("stock_import_titre")}</div>
+                <div style={styles.importSous}>
+                  {t("stock_import_sous", { nb: postesManquants, secteur: t(`secteur_${secteurActif}`) })}
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={importerPostes}
+                disabled={importEnCours || postesManquants === 0}
+                style={styles.importBtn}
+              >
+                {importEnCours ? t("stock_import_encours") : t("stock_import_btn")}
+              </button>
             </div>
-          </div>
-          <button
-            type="button"
-            onClick={importerPostes}
-            disabled={importEnCours || postesManquants === 0}
-            style={styles.importBtn}
-          >
-            {importEnCours ? t("stock_import_encours") : t("stock_import_btn")}
-          </button>
-        </div>
-        {importMsg && (
-          <div style={{ ...styles.importMsg, ...(importMsg.type === "ko" ? styles.erreurLocale : {}) }}>
-            {importMsg.texte}
-          </div>
+            {importMsg && (
+              <div style={{ ...styles.importMsg, ...(importMsg.type === "ko" ? styles.erreurLocale : {}) }}>
+                {importMsg.texte}
+              </div>
+            )}
+          </>
         )}
 
-        {ouvert && (
+        {peutGerer && ouvert && (
           <div style={styles.stockForm}>
             <input
               type="text"
@@ -2346,38 +2358,51 @@ export function Stock({ produits, secteur, onAdd, onAjuster, onSupprimer, onSeui
                   </div>
                 </div>
 
-                <label style={styles.stockSeuilField} title={t("stock_seuil_label")}>
-                  <span style={styles.stockSeuilLabel}>{t("stock_seuil_label")}</span>
-                  <input
-                    type="number"
-                    min="0"
-                    value={p.seuil_alerte ?? 5}
-                    onChange={(e) => onSeuil && onSeuil(p.id, parseFloat(e.target.value) || 0)}
-                    style={styles.stockSeuilInput}
-                    aria-label={t("stock_seuil_label")}
-                  />
-                </label>
+                {peutGerer ? (
+                  <label style={styles.stockSeuilField} title={t("stock_seuil_label")}>
+                    <span style={styles.stockSeuilLabel}>{t("stock_seuil_label")}</span>
+                    <input
+                      type="number"
+                      min="0"
+                      value={p.seuil_alerte ?? 5}
+                      onChange={(e) => onSeuil && onSeuil(p.id, parseFloat(e.target.value) || 0)}
+                      style={styles.stockSeuilInput}
+                      aria-label={t("stock_seuil_label")}
+                    />
+                  </label>
+                ) : (
+                  <div style={styles.stockSeuilField} title={t("stock_seuil_label")}>
+                    <span style={styles.stockSeuilLabel}>{t("stock_seuil_label")}</span>
+                    <span style={styles.stockSeuilValeur}>{p.seuil_alerte ?? 5}</span>
+                  </div>
+                )}
 
-                <button
-                  onClick={() => onAjuster(p.id, quantiteProduit - 1)}
-                  style={styles.stockAdjustBtn}
-                  aria-label="-1"
-                >
-                  <Minus size={13} />
-                </button>
+                {peutGerer && (
+                  <button
+                    onClick={() => onAjuster(p.id, quantiteProduit - 1)}
+                    style={styles.stockAdjustBtn}
+                    aria-label="-1"
+                  >
+                    <Minus size={13} />
+                  </button>
+                )}
                 <div style={{ ...styles.stockQty, ...(enAlerte ? styles.stockQtyLow : {}) }}>
                   {fmt(p.quantite_stock)}
                 </div>
-                <button
-                  onClick={() => onAjuster(p.id, quantiteProduit + 1)}
-                  style={styles.stockAdjustBtn}
-                  aria-label="+1"
-                >
-                  <Plus size={13} />
-                </button>
-                <button onClick={() => onSupprimer(p.id)} style={styles.txDelete} aria-label="Supprimer">
-                  <Trash2 size={14} />
-                </button>
+                {peutGerer && (
+                  <button
+                    onClick={() => onAjuster(p.id, quantiteProduit + 1)}
+                    style={styles.stockAdjustBtn}
+                    aria-label="+1"
+                  >
+                    <Plus size={13} />
+                  </button>
+                )}
+                {peutGerer && (
+                  <button onClick={() => onSupprimer(p.id)} style={styles.txDelete} aria-label="Supprimer">
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
               );
             })}
@@ -2676,7 +2701,7 @@ function RecuperationMotDePasse({ t, onTermine }) {
   );
 }
 
-function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
+export function Fournisseurs({ fournisseurs, onAdd, onSupprimer, peutSupprimer = false, t }) {
   const [nom, setNom] = useState("");
   const [telephone, setTelephone] = useState("");
   const [note, setNote] = useState("");
@@ -2700,6 +2725,7 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
 
   return (
     <div className="cc-page cc-page-fournisseurs" style={styles.page}>
+      {!peutSupprimer && <div style={styles.avisLectureSeule}>{t("suppression_reservee")}</div>}
       <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
@@ -2765,9 +2791,11 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
                 >
                   <MessageCircle size={14} />
                 </a>
-                <button onClick={() => onSupprimer(f.id)} style={styles.txDelete} aria-label="Supprimer">
-                  <Trash2 size={14} />
-                </button>
+                {peutSupprimer && (
+                  <button onClick={() => onSupprimer(f.id)} style={styles.txDelete} aria-label="Supprimer">
+                    <Trash2 size={14} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
@@ -2777,7 +2805,7 @@ function Fournisseurs({ fournisseurs, onAdd, onSupprimer, t }) {
   );
 }
 
-export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t }) {
+export function Historique({ transactions, onDelete, onUpdate, peutSupprimer = false, plan, secteur, t }) {
   const secteurActif = secteurNormalise(secteur);
   const categories = categoriesHistoriquesDuSecteur(secteurActif);
   const limite30j = plan !== "pro";
@@ -2813,6 +2841,7 @@ export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t 
 
   return (
     <div className="cc-page cc-page-historique" style={styles.page}>
+      {!peutSupprimer && <div style={styles.avisLectureSeule}>{t("suppression_reservee")}</div>}
       <div style={styles.card} className="cc-card">
         <div style={styles.cardHeader}>
           <div>
@@ -2883,9 +2912,11 @@ export function Historique({ transactions, onDelete, onUpdate, plan, secteur, t 
                         >
                           {tx.type === "vente" ? "+" : "-"}{fmt(tx.montant)}
                         </button>
-                        <button onClick={() => onDelete(tx.id)} style={styles.txDelete} aria-label="Supprimer">
-                          <Trash2 size={14} />
-                        </button>
+                        {peutSupprimer && (
+                          <button onClick={() => onDelete(tx.id)} style={styles.txDelete} aria-label="Supprimer">
+                            <Trash2 size={14} />
+                          </button>
+                        )}
                       </div>
                     )
                   )}
@@ -3266,6 +3297,10 @@ const styles = {
     fontSize: 12, color: "var(--cc-or)", background: "var(--cc-surface-3)", padding: "10px 12px",
     borderRadius: 9, marginBottom: 16,
   },
+  avisLectureSeule: {
+    fontSize: 12, color: "var(--cc-texte-doux)", background: "var(--cc-surface-2)", padding: "10px 12px",
+    borderRadius: 9, marginBottom: 16, lineHeight: 1.5,
+  },
   stockForm: {
     display: "flex", flexWrap: "wrap", gap: 8, marginBottom: 18,
     padding: 14, background: "var(--cc-surface-2)", borderRadius: 10,
@@ -3342,6 +3377,9 @@ const styles = {
   stockSeuilInput: {
     width: 52, padding: "5px 6px", borderRadius: 7, border: "1px solid var(--cc-bord)",
     fontSize: 12, fontFamily: "'Inter', sans-serif", color: "var(--cc-texte-corps)", outline: "none", textAlign: "center",
+  },
+  stockSeuilValeur: {
+    minWidth: 52, fontSize: 12, fontWeight: 600, color: "var(--cc-texte-corps)", textAlign: "center", padding: "5px 6px",
   },
   stockApercu: {
     flex: "1 1 100%", background: "var(--cc-surface-3)", borderRadius: 9, padding: "10px 14px",

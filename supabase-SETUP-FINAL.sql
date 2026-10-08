@@ -17,6 +17,13 @@
 -- Désormais la création passe par une fonction SECURITY DEFINER qui insère
 -- l'établissement ET la ligne « membres » du propriétaire dans une seule
 -- transaction, en contournant la RLS. C'est l'unique source de vérité.
+--
+-- Droits du stock : un gérant lit le stock et ajuste les quantités via ses
+-- ventes et dépenses (fonction appliquer_mouvement_stock), mais ne peut ni
+-- ajouter, ni modifier, ni supprimer un produit, un mouvement ou un
+-- fournisseur : seul le propriétaire le fait (sections 10 à 12).
+-- Base déjà installée avec une ancienne version : exécuter aussi
+-- supabase-stock-proprietaire.sql (mêmes règles, idempotent).
 -- ============================================================
 
 -- ------------------------------------------------------------
@@ -320,16 +327,65 @@ create table if not exists transactions (
 );
 alter table transactions enable row level security;
 
-drop policy if exists "acces_transactions_etablissement" on transactions;
-drop policy if exists "membres_voient_transactions" on transactions;
-drop policy if exists "membres_ecrivent_transactions" on transactions;
+-- ------------------------------------------------------------
+-- Retrait de TOUTES les politiques existantes sur ces trois tables, anciens
+-- noms et politiques créées à la main compris. Les politiques permissives
+-- s'additionnent : une seule ancienne politique suffirait à rouvrir l'écriture
+-- aux gérants. Les politiques définies ci-dessous sont donc les seules.
+-- ------------------------------------------------------------
+do $$
+declare
+  p record;
+begin
+  for p in
+    select tablename, policyname
+      from pg_policies
+     where schemaname = 'public'
+       and tablename in ('produits', 'transactions', 'fournisseurs')
+  loop
+    execute format('drop policy if exists %I on public.%I', p.policyname, p.tablename);
+  end loop;
+end
+$$;
 
+-- Membres (propriétaire et gérants) : lecture, saisie et correction.
+-- Suppression : propriétaire seul.
 create policy "membres_voient_transactions" on transactions
   for select using (public.est_membre_de(etablissement_id));
 
-create policy "membres_ecrivent_transactions" on transactions
-  for all using (public.peut_ecrire_dans(etablissement_id))
+create policy "membres_ajoutent_transactions" on transactions
+  for insert with check (public.peut_ecrire_dans(etablissement_id));
+
+create policy "membres_modifient_transactions" on transactions
+  for update using (public.peut_ecrire_dans(etablissement_id))
   with check (public.peut_ecrire_dans(etablissement_id));
+
+create policy "proprietaire_supprime_transactions" on transactions
+  for delete using (public.est_proprietaire_de(etablissement_id));
+
+-- Un gérant ne corrige que le montant et la note d'un mouvement, comme le
+-- propose l'application : type, date, catégorie, etc. restent figés pour lui.
+-- Le propriétaire n'est pas concerné. Comparaison sur toute la ligne (hors
+-- montant et note), donc sans liste de colonnes à maintenir.
+create or replace function public.gerant_corrige_montant_note()
+returns trigger
+language plpgsql
+set search_path = public
+as $$
+begin
+  if not public.est_proprietaire_de(new.etablissement_id)
+     and (to_jsonb(new) - array['montant', 'note'])
+         is distinct from (to_jsonb(old) - array['montant', 'note']) then
+    raise exception 'Un gérant peut seulement corriger le montant et la note d''un mouvement.';
+  end if;
+  return new;
+end;
+$$;
+
+drop trigger if exists gerant_corrige_montant_note on transactions;
+create trigger gerant_corrige_montant_note
+  before update on transactions
+  for each row execute function public.gerant_corrige_montant_note();
 
 -- ------------------------------------------------------------
 -- 11) Table produits (stock) + policies
@@ -346,16 +402,94 @@ create table if not exists produits (
 alter table produits add column if not exists seuil_alerte numeric not null default 5;
 alter table produits enable row level security;
 
-drop policy if exists "acces_produits_etablissement" on produits;
-drop policy if exists "membres_voient_produits" on produits;
-drop policy if exists "membres_ecrivent_produits" on produits;
-
+-- Stock : tous les membres lisent ; seul le propriétaire ajoute, modifie
+-- ou supprime un produit. Les gérants ajustent les quantités via la
+-- fonction appliquer_mouvement_stock() ci-dessous, jamais directement.
 create policy "membres_voient_produits" on produits
   for select using (public.est_membre_de(etablissement_id));
 
-create policy "membres_ecrivent_produits" on produits
-  for all using (public.peut_ecrire_dans(etablissement_id))
-  with check (public.peut_ecrire_dans(etablissement_id));
+create policy "proprietaire_gere_produits" on produits
+  for all using (public.est_proprietaire_de(etablissement_id))
+  with check (public.est_proprietaire_de(etablissement_id));
+
+-- Mouvement → stock (vente = sortie, dépense = entrée sur un produit suivi).
+-- Un gérant ne crée jamais de ligne de stock ; seul le propriétaire le peut.
+drop function if exists public.appliquer_mouvement_stock(uuid, text, numeric, text, numeric);
+create or replace function public.appliquer_mouvement_stock(
+  p_etablissement_id uuid,
+  p_designation text,
+  p_quantite numeric,
+  p_type text,
+  p_prix_unitaire numeric default null
+)
+returns setof produits
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_nom text := nullif(btrim(p_designation), '');
+  v_variation numeric;
+  v_produit produits;
+begin
+  if auth.uid() is null then
+    raise exception 'Authentification requise.';
+  end if;
+  if not public.peut_ecrire_dans(p_etablissement_id) then
+    raise exception 'Accès refusé à cet établissement.';
+  end if;
+  if p_type not in ('vente', 'depense') then
+    raise exception 'Type de mouvement inconnu : %', p_type;
+  end if;
+  if v_nom is null or coalesce(p_quantite, 0) <= 0 then
+    return;
+  end if;
+
+  v_variation := case when p_type = 'vente' then -p_quantite else p_quantite end;
+
+  -- 1) Produit déjà suivi : ajustement atomique de la quantité.
+  update produits pr
+     set quantite_stock = pr.quantite_stock + v_variation,
+         prix_unitaire = case
+           when coalesce(pr.prix_unitaire, 0) = 0 and coalesce(p_prix_unitaire, 0) > 0
+             then p_prix_unitaire
+           else pr.prix_unitaire
+         end,
+         maj_le = now()
+   where pr.id = (
+     select x.id
+       from produits x
+      where x.etablissement_id = p_etablissement_id
+        and lower(x.designation) = lower(v_nom)
+      order by x.designation
+      limit 1
+   )
+  returning * into v_produit;
+  if found then
+    return next v_produit;
+    return;
+  end if;
+
+  -- 2) Produit inconnu : seul le propriétaire crée une ligne de stock.
+  if p_type = 'depense' and public.est_proprietaire_de(p_etablissement_id) then
+    insert into produits (etablissement_id, designation, quantite_stock, prix_unitaire)
+    values (
+      p_etablissement_id,
+      v_nom,
+      p_quantite,
+      case when coalesce(p_prix_unitaire, 0) > 0 then p_prix_unitaire end
+    )
+    returning * into v_produit;
+    return next v_produit;
+    return;
+  end if;
+
+  return;
+end;
+$$;
+
+revoke all on function public.appliquer_mouvement_stock(uuid, text, numeric, text, numeric) from public, anon;
+grant execute on function public.appliquer_mouvement_stock(uuid, text, numeric, text, numeric) to authenticated;
 
 -- ------------------------------------------------------------
 -- 12) Table fournisseurs + policies
@@ -370,16 +504,18 @@ create table if not exists fournisseurs (
 );
 alter table fournisseurs enable row level security;
 
-drop policy if exists "acces_fournisseurs_etablissement" on fournisseurs;
-drop policy if exists "membres_voient_fournisseurs" on fournisseurs;
-drop policy if exists "membres_ecrivent_fournisseurs" on fournisseurs;
-
 create policy "membres_voient_fournisseurs" on fournisseurs
   for select using (public.est_membre_de(etablissement_id));
 
-create policy "membres_ecrivent_fournisseurs" on fournisseurs
-  for all using (public.peut_ecrire_dans(etablissement_id))
+create policy "membres_ajoutent_fournisseurs" on fournisseurs
+  for insert with check (public.peut_ecrire_dans(etablissement_id));
+
+create policy "membres_modifient_fournisseurs" on fournisseurs
+  for update using (public.peut_ecrire_dans(etablissement_id))
   with check (public.peut_ecrire_dans(etablissement_id));
+
+create policy "proprietaire_supprime_fournisseurs" on fournisseurs
+  for delete using (public.est_proprietaire_de(etablissement_id));
 
 -- ------------------------------------------------------------
 -- 13) Table sessions_caisse + policies

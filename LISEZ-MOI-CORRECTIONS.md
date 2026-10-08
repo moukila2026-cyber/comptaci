@@ -1,5 +1,49 @@
 # ComptaCi — Corrections & améliorations (à lire avant déploiement)
 
+## ÉTAPE OBLIGATOIRE — stock et suppressions réservés au propriétaire
+
+Les gérants invités par code ne peuvent plus modifier le stock ni supprimer quoi que ce soit. Ces règles sont appliquées par la base (RLS), pas seulement par l'interface.
+
+**Va dans Supabase → SQL Editor → colle et exécute `supabase-stock-proprietaire.sql`** (une seule fois ; le script peut être relancé sans risque). Une base créée avec la nouvelle version de `supabase-SETUP-FINAL.sql` contient déjà ces règles : relancer ce script est alors sans effet.
+
+| Action | Propriétaire | Gérant |
+| --- | --- | --- |
+| Voir le stock | oui | oui |
+| Ajouter, modifier (quantité, seuil, prix) ou supprimer un produit | oui | non |
+| Enregistrer une vente ou une dépense | oui | oui |
+| Ajuster la quantité d'un produit existant par une vente (baisse) ou une dépense (hausse) | oui | oui |
+| Créer une ligne de stock avec une dépense sur un nom inconnu | oui | non (le mouvement est enregistré, sans ligne de stock) |
+| Corriger le montant ou la note d'un mouvement | oui | oui |
+| Changer le type, la date ou la catégorie d'un mouvement | oui | non |
+| Supprimer un mouvement | oui | non |
+| Ajouter un fournisseur | oui | oui |
+| Supprimer un fournisseur | oui | non |
+
+Changements dans l'application :
+
+- **Stock** (gérant) : bandeau « consultation seule » ; boutons d'ajout, d'import, +1/-1 et de suppression masqués ; le seuil d'alerte est affiché sans être modifiable.
+- **Historique des mouvements** et **Fournisseurs** (gérant) : bouton Supprimer masqué, avec un bandeau explicatif.
+- Si la mise à jour du stock échoue, un message d'erreur s'affiche : le mouvement reste enregistré.
+- Chaque ajustement de stock fait par un gérant est journalisé dans l'Historique des modifications, avec ce gérant comme auteur.
+
+**Ne plus relancer les anciens scripts.** `supabase-MASTER.sql`, `supabase-MASTER-COMPLET.sql`, `supabase-fix-rls-actions.sql`, `supabase-stock.sql`, `supabase-roles.sql` et `supabase-fournisseurs.sql` recréent des politiques qui rouvrent l'écriture aux gérants. Ils portent désormais un avertissement. Si l'un d'eux a été relancé, exécute ensuite `supabase-stock-proprietaire.sql`.
+
+Vérification après exécution (Supabase → SQL Editor) :
+
+```sql
+select tablename, policyname, cmd
+  from pg_policies
+ where schemaname = 'public'
+   and tablename in ('produits', 'transactions', 'fournisseurs')
+ order by tablename, policyname;
+```
+
+Dix lignes attendues : 2 pour `produits`, 4 pour `transactions`, 4 pour `fournisseurs`. Aucune ligne « membres_ecrivent_… ». Le test réel se fait ensuite avec un compte gérant dans l'application.
+
+Hors périmètre de ce correctif : la caisse (sessions de caisse) garde ses droits actuels. L'application ne propose aucune suppression de session.
+
+Vérifications : `npm test` (dont les tests SQL exécutés sur PGlite : politiques, fonction de mouvement, migration sur une base existante, journal) et `npm run build`. Ces tests n'ont pas accès à ton projet Supabase : la migration doit être exécutée et vérifiée sur la base réelle.
+
 ## Historique des modifications — réservé au propriétaire
 
 - Nouvelle rubrique **Historique des modifications**, distincte de l'historique des mouvements, visible uniquement par le propriétaire de l'établissement actif.
@@ -63,10 +107,13 @@ définitif qui remplace tous les anciens fichiers (`supabase-MASTER-COMPLET.sql`
 manque :
 
 1. toutes les tables, colonnes et politiques de base ;
-2. les autorisations d'écriture : les **gérants** peuvent désormais saisir
-   ventes/dépenses, gérer le stock, les fournisseurs et la caisse (avant,
+2. les autorisations d'écriture : les **gérants** peuvent saisir
+   ventes/dépenses, gérer les fournisseurs et la caisse (avant,
    les politiques RLS bloquaient leurs écritures → les boutons semblaient
-   morts) ;
+   morts). *Depuis la section « stock et suppressions réservés au
+   propriétaire » en tête de ce fichier, les gérants ne gèrent plus le stock
+   et ne suppriment plus rien ;* ils ajustent seulement les quantités via
+   leurs ventes et dépenses ;
 3. **la fonction RPC `creer_etablissement`** (correctif définitif) : la
    création d'un établissement insère désormais l'établissement **et** la
    ligne « membres » du propriétaire dans une seule transaction, en

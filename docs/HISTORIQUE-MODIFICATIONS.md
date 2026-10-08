@@ -20,7 +20,7 @@ Le script est transactionnel et peut être réexécuté. Il n'altère aucun mouv
 | Caisse | Ouverture, fermeture, fonds, écart, statut |
 | Établissement | Nom, téléphone, secteur, forfait, abonnement actif |
 
-Les ajouts, modifications et suppressions des quatre premiers domaines sont enregistrés automatiquement par des triggers PostgreSQL. Les ajouts et modifications d'établissement sont également suivis. Une vente qui ajuste le stock peut donc produire deux événements distincts : mouvement et stock.
+Les ajouts, modifications et suppressions des quatre premiers domaines sont enregistrés automatiquement par des triggers PostgreSQL. Les ajouts et modifications d'établissement sont également suivis. Une vente qui ajuste le stock peut donc produire deux événements distincts : mouvement et stock. Un ajustement de stock fait par un gérant (vente ou dépense) passe par la fonction `appliquer_mouvement_stock` et reste journalisé avec ce gérant comme auteur.
 
 Les valeurs avant/après sont conservées ; pour une modification, l'interface n'affiche que les champs réellement changés. Les mises à jour sans changement métier (par exemple `maj_le` seul) sont ignorées. Les factures FNE, les paiements détaillés, les invitations/membres et les changements du compte d'authentification ne font pas partie de ce journal.
 
@@ -52,7 +52,7 @@ Les tests SQL utilisent PostgreSQL embarqué via PGlite, sans connexion à une b
 Les tests React couvrent le menu mobile/ordinateur, l'absence de requête pour un gérant, les valeurs avant/après, filtres, pagination, états vide/chargement/erreur, reprise et réponses tardives lors d'un changement d'établissement.
 
 Après déploiement, vérifier aussi sur Supabase :
-1. Un gérant ajoute puis corrige un mouvement et ajuste un stock.
+1. Un gérant corrige le montant ou la note d'un mouvement et enregistre une vente qui baisse la quantité d'un produit existant. Il ne voit aucun bouton d'ajout, de modification ou de suppression du stock, ni de suppression de mouvement ou de fournisseur. Dans le journal, l'ajustement de stock apparaît avec ce gérant comme auteur.
 2. Le propriétaire actualise le journal : les événements, l'auteur et les valeurs sont visibles.
 3. Le gérant ne voit pas le menu ; une lecture directe de `historique_modifications` avec son JWT retourne une liste vide.
 4. Un propriétaire d'un autre établissement ne voit pas ces événements.

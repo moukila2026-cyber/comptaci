@@ -422,6 +422,8 @@ const dict = {
     stock_prix_manquant: "Prix unitaire non renseigné : valeur indisponible",
     stock_valeur_indispo: "—",
     stock_maj_auto: "Diminue automatiquement à chaque vente",
+    stock_lecture_seule: "Consultation seule : seul le propriétaire ajoute, modifie ou supprime les produits. Vos ventes et dépenses continuent de mettre les quantités à jour.",
+    suppression_reservee: "La suppression est réservée au propriétaire de l'établissement.",
 
     // Caisse
     caisse_titre: "Caisse",
@@ -992,6 +994,8 @@ const dict = {
     stock_prix_manquant: "No unit price set: value unavailable",
     stock_valeur_indispo: "—",
     stock_maj_auto: "Decreases automatically with every sale",
+    stock_lecture_seule: "View only: only the owner adds, edits or deletes stock items. Your sales and expenses still update the quantities.",
+    suppression_reservee: "Only the owner of the business can delete records.",
 
     caisse_titre: "Cash register",
     caisse_ouverte: "Cash register currently open",
@@ -1543,6 +1547,8 @@ const dict = {
     stock_prix_manquant: "سعر الوحدة غير محدد: القيمة غير متوفرة",
     stock_valeur_indispo: "—",
     stock_maj_auto: "تنقص تلقائياً مع كل عملية بيع",
+    stock_lecture_seule: "عرض فقط: المالك وحده يضيف المنتجات أو يعدّلها أو يحذفها. مبيعاتكم ومصاريفكم ما زالت تحدّث الكميات.",
+    suppression_reservee: "الحذف متاح لمالك النشاط وحده.",
 
     caisse_titre: "الصندوق",
     caisse_ouverte: "الصندوق مفتوح حالياً",
